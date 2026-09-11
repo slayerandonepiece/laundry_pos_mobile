@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:myshop/core/constants/api_endpoints.dart';
+import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
@@ -9,9 +10,17 @@ import 'package:myshop/core/utils/idempotency.dart';
 
 import 'models/order_model.dart';
 
+const _tag = 'ORDERS_SYNC';
+
 class OrdersRepository {
   final ApiClient _apiClient;
   final LocalCacheService _localCache;
+
+  // A queue with many offline actions can take the server longer than the
+  // client's 30s request timeout (see ApiClient._requestTimeout) to process
+  // in one call. Sending small, sequential batches instead keeps each
+  // request comfortably under that timeout.
+  static const int _bulkSyncBatchSize = 5;
 
   OrdersRepository({ApiClient? apiClient, LocalCacheService? localCache})
     : _apiClient = apiClient ?? ApiClient(),
@@ -390,127 +399,171 @@ class OrdersRepository {
       await _localCache.setPendingSyncQueue([...dueNow, ...otherStore]);
     }
 
-    SyncManager.instance.startSync(
-      'Syncing ${dueNow.length} offline changes...',
+    final cached = _localCache.getCachedOrders() ?? [];
+    final completedIds = <String>{};
+    final lastErrorById = <String, String>{};
+    final failCountById = <String, int>{};
+    final createdPlaceholders = <String, String>{};
+    var allBatchesOk = true;
+
+    // Send the queue as small, sequential batches rather than one request
+    // for everything — a large offline queue can otherwise take the server
+    // longer than the client's 30s timeout to process in a single call.
+    // Sequential (not concurrent) so batches don't all hit the timeout
+    // window at once on a already-struggling connection.
+    for (var start = 0; start < dueNow.length; start += _bulkSyncBatchSize) {
+      final end = (start + _bulkSyncBatchSize < dueNow.length)
+          ? start + _bulkSyncBatchSize
+          : dueNow.length;
+      final batch = dueNow.sublist(start, end);
+      final actions = batch.map(_toBulkSyncAction).toList();
+
+      SyncManager.instance.startSync(
+        'Syncing $end of ${dueNow.length} offline changes...',
+      );
+      AppLogger.log(
+        _tag,
+        'processPendingSyncQueue(): sending batch ${(start ~/ _bulkSyncBatchSize) + 1} '
+        '(${batch.length} action(s), $start-${end - 1} of ${dueNow.length})',
+      );
+
+      try {
+        final response = await _apiClient.post(
+          ApiEndpoints.ordersBulkSync,
+          body: {'actions': actions},
+        );
+
+        final rawResults = (response is Map ? response['results'] : null);
+        final resultsById = <String, Map<String, dynamic>>{
+          for (final r in (rawResults is List ? rawResults : <dynamic>[]))
+            if (r is Map && r['clientActionId'] != null)
+              r['clientActionId'].toString(): Map<String, dynamic>.from(r),
+        };
+
+        for (final action in batch) {
+          final clientActionId = action['clientActionId']?.toString();
+          final result = clientActionId != null
+              ? resultsById[clientActionId]
+              : null;
+
+          if (result == null || result['status'] != 'success') {
+            if (clientActionId != null) {
+              final currentFailCount =
+                  (action['failCount'] as num?)?.toInt() ?? 0;
+              failCountById[clientActionId] = currentFailCount + 1;
+              if (result != null && result['error'] != null) {
+                lastErrorById[clientActionId] = result['error'].toString();
+              }
+            }
+            continue;
+          }
+          if (clientActionId != null) completedIds.add(clientActionId);
+
+          final orderJson = result['order'];
+          if (orderJson is Map) {
+            final confirmedOrder = Order.fromJson(
+              Map<String, dynamic>.from(orderJson),
+            );
+            final placeholderCode = action['type'] == 'create_order'
+                ? (action['offlineCode'] as String? ?? '')
+                : (action['orderCode'] as String? ?? '');
+            final idx = cached.indexWhere(
+              (c) =>
+                  c['id'] == placeholderCode ||
+                  c['orderCode'] == placeholderCode,
+            );
+            if (idx != -1) {
+              cached[idx] = confirmedOrder.toJson();
+            } else {
+              cached.insert(0, confirmedOrder.toJson());
+            }
+
+            if (action['type'] == 'create_order' &&
+                placeholderCode.isNotEmpty) {
+              createdPlaceholders[placeholderCode] = confirmedOrder.id;
+            }
+          }
+        }
+
+        // A create_order in this batch may have just resolved a placeholder
+        // (e.g. LOCAL-1007) that a later, not-yet-sent action in this same
+        // run still targets (its update_status/record_payment). Before that
+        // action goes into its own batch, rewrite it to the real order id —
+        // each batch is now a separate request, so the server's own
+        // same-request placeholder resolution (which the old single-request
+        // design relied on) no longer reaches across batches.
+        if (createdPlaceholders.isNotEmpty) {
+          for (final futureAction in dueNow) {
+            final type = futureAction['type'];
+            if (type != 'update_status' && type != 'record_payment') continue;
+            final ref = futureAction['orderCode']?.toString();
+            if (ref != null && createdPlaceholders.containsKey(ref)) {
+              futureAction['orderCode'] = createdPlaceholders[ref]!;
+            }
+          }
+        }
+      } catch (e) {
+        // This batch failed outright — stop sending further batches for this
+        // run. Whatever earlier batches already succeeded stays applied
+        // below; this batch's and any later batches' actions simply remain
+        // queued for the next sync attempt, same as a single-request
+        // failure used to leave the whole queue untouched.
+        AppLogger.log(
+          _tag,
+          'processPendingSyncQueue(): batch starting at $start failed',
+          error: e,
+        );
+        final reallyOffline = await ConnectivityService.instance
+            .checkIsOffline();
+        if (reallyOffline) {
+          SyncManager.instance.setOffline(queue.length);
+        } else {
+          SyncManager.instance.setError('Sync failed — tap to retry');
+        }
+        allBatchesOk = false;
+        break;
+      }
+    }
+
+    await _localCache.setCachedOrders(
+      LocalCacheService.dedupeOrdersById(cached),
     );
 
-    final actions = dueNow.map(_toBulkSyncAction).toList();
-
-    try {
-      final response = await _apiClient.post(
-        ApiEndpoints.ordersBulkSync,
-        body: {'actions': actions},
-      );
-
-      final rawResults = (response is Map ? response['results'] : null);
-      final resultsById = <String, Map<String, dynamic>>{
-        for (final r in (rawResults is List ? rawResults : <dynamic>[]))
-          if (r is Map && r['clientActionId'] != null)
-            r['clientActionId'].toString(): Map<String, dynamic>.from(r),
-      };
-
-      final cached = _localCache.getCachedOrders() ?? [];
-      final completedIds = <String>{};
-      final lastErrorById = <String, String>{};
-      final failCountById = <String, int>{};
-      final createdPlaceholders = <String, String>{};
-
-      for (final action in dueNow) {
-        final clientActionId = action['clientActionId']?.toString();
-        final result = clientActionId != null
-            ? resultsById[clientActionId]
-            : null;
-
-        if (result == null || result['status'] != 'success') {
-          if (clientActionId != null) {
-            final currentFailCount =
-                (action['failCount'] as num?)?.toInt() ?? 0;
-            failCountById[clientActionId] = currentFailCount + 1;
-            if (result != null && result['error'] != null) {
-              lastErrorById[clientActionId] = result['error'].toString();
+    // Re-read the queue rather than writing back the `dueNow`/`otherStore`
+    // snapshot taken at the top of this call — another action (e.g. a
+    // second order created while this request was in flight) can have
+    // been enqueued in the meantime, and blindly overwriting with the
+    // stale snapshot would silently discard it.
+    final currentQueue = _localCache.getPendingSyncQueue();
+    final remaining = currentQueue
+        .map((a) {
+          var updated = a;
+          final id = a['clientActionId']?.toString();
+          if (id != null) {
+            if (failCountById.containsKey(id)) {
+              updated = {...updated, 'failCount': failCountById[id]};
+            }
+            if (lastErrorById.containsKey(id)) {
+              updated = {...updated, 'lastError': lastErrorById[id]};
             }
           }
-          continue;
-        }
-        if (clientActionId != null) completedIds.add(clientActionId);
-
-        final orderJson = result['order'];
-        if (orderJson is Map) {
-          final confirmedOrder = Order.fromJson(
-            Map<String, dynamic>.from(orderJson),
-          );
-          final placeholderCode = action['type'] == 'create_order'
-              ? (action['offlineCode'] as String? ?? '')
-              : (action['orderCode'] as String? ?? '');
-          final idx = cached.indexWhere(
-            (c) =>
-                c['id'] == placeholderCode || c['orderCode'] == placeholderCode,
-          );
-          if (idx != -1) {
-            cached[idx] = confirmedOrder.toJson();
-          } else {
-            cached.insert(0, confirmedOrder.toJson());
-          }
-
-          if (action['type'] == 'create_order' && placeholderCode.isNotEmpty) {
-            createdPlaceholders[placeholderCode] = confirmedOrder.id;
-          }
-        }
-      }
-
-      await _localCache.setCachedOrders(
-        LocalCacheService.dedupeOrdersById(cached),
-      );
-
-      // Re-read the queue rather than writing back the `dueNow`/`otherStore`
-      // snapshot taken at the top of this call — another action (e.g. a
-      // second order created while this request was in flight) can have
-      // been enqueued in the meantime, and blindly overwriting with the
-      // stale snapshot would silently discard it.
-      final currentQueue = _localCache.getPendingSyncQueue();
-      final remaining = currentQueue
-          .map((a) {
-            var updated = a;
-            final id = a['clientActionId']?.toString();
-            if (id != null) {
-              if (failCountById.containsKey(id)) {
-                updated = {...updated, 'failCount': failCountById[id]};
-              }
-              if (lastErrorById.containsKey(id)) {
-                updated = {...updated, 'lastError': lastErrorById[id]};
-              }
+          final type = updated['type'];
+          if (type == 'update_status' || type == 'record_payment') {
+            final ref = updated['orderCode']?.toString();
+            if (ref != null && createdPlaceholders.containsKey(ref)) {
+              updated = {...updated, 'orderCode': createdPlaceholders[ref]!};
             }
-            final type = updated['type'];
-            if (type == 'update_status' || type == 'record_payment') {
-              final ref = updated['orderCode']?.toString();
-              if (ref != null && createdPlaceholders.containsKey(ref)) {
-                updated = {...updated, 'orderCode': createdPlaceholders[ref]!};
-              }
-            }
-            return updated;
-          })
-          .where((a) {
-            final id = a['clientActionId']?.toString();
-            return id == null || !completedIds.contains(id);
-          })
-          .toList();
-      await _localCache.setPendingSyncQueue(remaining);
+          }
+          return updated;
+        })
+        .where((a) {
+          final id = a['clientActionId']?.toString();
+          return id == null || !completedIds.contains(id);
+        })
+        .toList();
+    await _localCache.setPendingSyncQueue(remaining);
 
-      return true;
-    } catch (e) {
-      // Whole request failed — leave the queue exactly as it was; nothing
-      // synced, nothing lost. This used to unconditionally report the
-      // banner as "Offline", which was wrong for a genuine online failure
-      // (timeout, 4xx/5xx, bad JSON) — only actual connectivity loss should
-      // say "Offline"; an online failure should surface as an error instead.
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
-        SyncManager.instance.setOffline(queue.length);
-      } else {
-        SyncManager.instance.setError('Sync failed: $e');
-      }
-      return false;
-    }
+    return allBatchesOk;
   }
 
   /// Pulls remote changes since the last successful sync, in pages, and

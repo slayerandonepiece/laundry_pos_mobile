@@ -44,6 +44,9 @@
 -keep class dev.fluttercommunity.plus.share.** { *; }
 -keep class androidx.core.content.FileProvider { *; }
 
+# --- Package Info Plus ---
+-keep class dev.fluttercommunity.plus.packageinfo.** { *; }
+
 # --- URL Launcher ---
 -keep class io.flutter.plugins.urllauncher.** { *; }
 -keep class androidx.browser.customtabs.** { *; }

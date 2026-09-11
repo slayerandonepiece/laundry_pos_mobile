@@ -240,6 +240,26 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (widget.onSyncNow != null)
+                                InkWell(
+                                  onTap: widget.onSyncNow,
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    child: Text(
+                                      'Retry',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.danger,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                             ] else ...[
                               const Icon(
                                 Icons.check_circle_rounded,

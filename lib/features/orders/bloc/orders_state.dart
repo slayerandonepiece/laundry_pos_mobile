@@ -39,7 +39,10 @@ class OrdersState {
       // 2. Status/To collect filter
       switch (activeFilter.toLowerCase().replaceAll(' ', '_')) {
         case 'to_collect':
-          return order.balanceDue > 0;
+          // Keep in sync with toCollectCount in orders_list_screen.dart —
+          // that count excludes delivered orders, so the filter must too or
+          // tapping the chip shows more orders than its own label says.
+          return order.balanceDue > 0 && !order.isDelivered;
         case 'pending':
           return order.isPending;
         case 'in_progress':

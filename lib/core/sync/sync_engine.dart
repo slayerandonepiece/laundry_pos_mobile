@@ -179,8 +179,17 @@ class SyncEngine {
   /// Called after a user-initiated "Sync now" / "Retry" tap — gives the
   /// failure streak a fresh start so a single manual success clears the
   /// paused banner instead of requiring 3 more successes.
-  Future<void> retryNow() {
+  ///
+  /// Also forces a fresh reachability probe first: _runSync() gates on
+  /// ConnectivityService.instance.isOffline, a cached flag that only the OS
+  /// connectivity listener normally refreshes. If that flag went stale —
+  /// e.g. a probe failed once at cold start and the OS never fires another
+  /// change event because the interface itself never dropped — a manual
+  /// retry must not inherit that stale "offline" reading and give up before
+  /// ever touching the network.
+  Future<void> retryNow() async {
     _failureStreak = 0;
+    await ConnectivityService.instance.checkIsOffline();
     return trigger();
   }
 

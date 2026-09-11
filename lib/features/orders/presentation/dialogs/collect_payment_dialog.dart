@@ -35,6 +35,11 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // One constant entry point for taking a ready order to delivered: if
+    // there's a balance, collect it here; if it was already paid upfront,
+    // skip straight to delivery — no separate "hand over" flow/dialog.
+    final isPaid = widget.order.balanceDue == 0;
+
     return BlocConsumer<OrdersBloc, OrdersState>(
       listener: (context, state) {
         if (state.actionSuccessMessage != null) {
@@ -50,7 +55,9 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
         }
       },
       builder: (context, state) {
-        final isCollecting = state.isCollectingPayment;
+        final isBusy = isPaid
+            ? state.isUpdatingStatus
+            : state.isCollectingPayment;
 
         return Dialog(
           backgroundColor: AppColors.surface,
@@ -69,7 +76,7 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
               children: [
                 // Header
                 const Text(
-                  'Collect payment',
+                  'Collect payment & deliver',
                   style: TextStyle(
                     fontFamily: AppTextStyles.fontDisplay,
                     fontSize: 20,
@@ -84,63 +91,110 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
                 ),
                 const SizedBox(height: 18),
 
-                // Amount Due Box
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 16,
-                    horizontal: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.inset,
-                    border: Border.all(color: AppColors.border),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'AMOUNT DUE',
-                        style: TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.mutedText,
-                          letterSpacing: 0.5,
+                if (isPaid) ...[
+                  // Already paid upfront — nothing to collect, just confirm
+                  // delivery.
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 16,
+                      horizontal: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.successBg,
+                      border: Border.all(color: const Color(0xFFB7E4CF)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.check_circle,
+                          size: 22,
+                          color: AppColors.success,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        CurrencyFormatter.format(widget.order.balanceDue),
-                        style: const TextStyle(
-                          fontFamily: AppTextStyles.fontDisplay,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.text,
+                        const SizedBox(height: 8),
+                        const Text(
+                          'ALREADY PAID',
+                          style: TextStyle(
+                            fontFamily: AppTextStyles.fontBody,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.success,
+                            letterSpacing: 0.5,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 6),
+                        Text(
+                          CurrencyFormatter.format(widget.order.totalAmount),
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.fontDisplay,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  // Amount Due Box
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 16,
+                      horizontal: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.inset,
+                      border: Border.all(color: AppColors.border),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'AMOUNT DUE',
+                          style: TextStyle(
+                            fontFamily: AppTextStyles.fontBody,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.mutedText,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          CurrencyFormatter.format(widget.order.balanceDue),
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.fontDisplay,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
-                // Payment Options: Cash & UPI
-                _buildOption(
-                  name: 'Cash',
-                  icon: Icons.payments_outlined,
-                  isSelected: _selectedMethod == 'Cash',
-                  onTap: isCollecting
-                      ? () {}
-                      : () => setState(() => _selectedMethod = 'Cash'),
-                ),
-                const SizedBox(height: 10),
-                _buildOption(
-                  name: 'UPI',
-                  icon: Icons.qr_code_scanner_outlined,
-                  isSelected: _selectedMethod == 'UPI',
-                  onTap: isCollecting
-                      ? () {}
-                      : () => setState(() => _selectedMethod = 'UPI'),
-                ),
-                const SizedBox(height: 16),
+                  // Payment Options: Cash & UPI
+                  _buildOption(
+                    name: 'Cash',
+                    icon: Icons.payments_outlined,
+                    isSelected: _selectedMethod == 'Cash',
+                    onTap: isBusy
+                        ? () {}
+                        : () => setState(() => _selectedMethod = 'Cash'),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildOption(
+                    name: 'UPI',
+                    icon: Icons.qr_code_scanner_outlined,
+                    isSelected: _selectedMethod == 'UPI',
+                    onTap: isBusy
+                        ? () {}
+                        : () => setState(() => _selectedMethod = 'UPI'),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 // Information note
                 Container(
@@ -196,26 +250,30 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
                     Expanded(
                       child: SecondaryButton(
                         label: 'Cancel',
-                        onPressed: isCollecting
-                            ? null
-                            : () => Navigator.pop(context),
+                        onPressed: isBusy ? null : () => Navigator.pop(context),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: PrimaryButton(
-                        label: 'Done',
-                        isLoading: isCollecting,
-                        onPressed: isCollecting
+                        label: isPaid ? 'Deliver order' : 'Collect & deliver',
+                        isLoading: isBusy,
+                        onPressed: isBusy
                             ? null
                             : () {
-                                context.read<OrdersBloc>().add(
-                                  CollectPaymentEvent(
-                                    orderCode: widget.order.orderCode,
-                                    amount: widget.order.balanceDue,
-                                    method: _selectedMethod,
-                                  ),
-                                );
+                                if (isPaid) {
+                                  context.read<OrdersBloc>().add(
+                                    HandoverOrderEvent(widget.order.orderCode),
+                                  );
+                                } else {
+                                  context.read<OrdersBloc>().add(
+                                    CollectPaymentEvent(
+                                      orderCode: widget.order.orderCode,
+                                      amount: widget.order.balanceDue,
+                                      method: _selectedMethod,
+                                    ),
+                                  );
+                                }
                               },
                       ),
                     ),

@@ -12,7 +12,6 @@ import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/presentation/dialogs/collect_payment_dialog.dart';
-import 'package:myshop/features/orders/presentation/dialogs/handover_dialog.dart';
 import 'package:myshop/features/orders/presentation/order_detail_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
@@ -524,7 +523,6 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
 
   Widget _buildOrderCard(BuildContext context, Order order) {
     final hasBalance = order.balanceDue > 0;
-    final isPrepaid = order.balanceDue == 0 && order.totalAmount > 0;
     final isReady = order.status.toLowerCase() == 'ready';
 
     return AppCard(
@@ -632,8 +630,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
             ],
           ),
 
-          // Quick Action Button: Collect Payment or Hand Over Order
-          if (hasBalance && (isReady || order.isDelivered)) ...[
+          // Quick action: one constant "Collect payment & deliver" button
+          // once the order is ready — the dialog itself branches on whether
+          // a balance is due, instead of this card choosing between two
+          // different dialogs.
+          if (isReady && !order.isDelivered) ...[
             const SizedBox(height: 13),
             InkWell(
               onTap: () {
@@ -656,47 +657,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Collect ${CurrencyFormatter.format(order.balanceDue)}',
+                      hasBalance
+                          ? 'Collect ${CurrencyFormatter.format(order.balanceDue)} & deliver'
+                          : 'Collect payment & deliver',
                       style: const TextStyle(
                         fontFamily: AppTextStyles.fontBody,
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
                         color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ] else if (isPrepaid && isReady) ...[
-            const SizedBox(height: 13),
-            InkWell(
-              onTap: () {
-                HandoverDialog.show(context, order: order);
-              },
-              borderRadius: BorderRadius.circular(9),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 46),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.check_circle_outline,
-                      size: 17,
-                      color: Colors.white,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Hand over order',
-                      style: TextStyle(
-                        fontFamily: AppTextStyles.fontBody,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
                       ),
                     ),
                   ],

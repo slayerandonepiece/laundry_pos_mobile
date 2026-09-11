@@ -11,7 +11,6 @@ import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/presentation/dialogs/collect_payment_dialog.dart';
-import 'package:myshop/features/orders/presentation/dialogs/handover_dialog.dart';
 import 'package:myshop/features/orders/presentation/dialogs/ready_bill_actions_sheet.dart';
 import 'package:myshop/features/orders/presentation/dialogs/status_dialog.dart';
 import 'package:myshop/features/orders/presentation/invoice_actions_sheet.dart';
@@ -153,11 +152,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           );
           if (state.actionSuccessMessage == 'Status updated to Ready' &&
               state.selectedOrder != null) {
-            _promptNotifyCustomerReady(
-              context,
-              state.selectedOrder!,
-              storeName,
-            );
+            // StatusDialog listens on this same bloc and pops itself on this
+            // same state change. Its listener runs after this one, so
+            // pushing the notify dialog synchronously here would land it on
+            // top of StatusDialog before StatusDialog's own pop runs —
+            // making that pop close the notify dialog instead of
+            // StatusDialog. Deferring to the next frame guarantees
+            // StatusDialog has already closed first.
+            final order = state.selectedOrder!;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) {
+                _promptNotifyCustomerReady(context, order, storeName);
+              }
+            });
           }
         }
         if (state.error != null) {
@@ -171,7 +178,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         }
       },
       builder: (context, state) {
-        final order = state.selectedOrder ?? _order;
+        // state.selectedOrder is shared bloc-wide state, set by whichever
+        // order any screen last acted on (status update, payment, refresh —
+        // see orders_bloc.dart). It's only this screen's order if the codes
+        // match; otherwise it's a stale value left over from a different
+        // order and must not override this screen's own _order.
+        final order =
+            (state.selectedOrder?.orderCode == widget.initialOrder.orderCode
+                ? state.selectedOrder
+                : null) ??
+            _order;
         final isDelivered = order.isDelivered;
         final hasBalanceDue = order.balanceDue > 0;
         final isReady = order.status.toLowerCase() == 'ready';
@@ -474,10 +490,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
                 // 5. Actions / Invoice Section
                 if (!isDelivered) ...[
-                  // Pre-settlement flow
-                  if (hasBalanceDue) ...[
+                  // Pre-settlement flow. "Collect payment & deliver" is one
+                  // constant action once the order is ready — the dialog
+                  // itself branches on whether a balance is due, instead of
+                  // this screen choosing between two different dialogs.
+                  if (isReady) ...[
                     PrimaryButton(
-                      label: 'Collect payment',
+                      label: 'Collect payment & deliver',
                       icon: const Icon(
                         Icons.payments_outlined,
                         size: 19,
@@ -498,26 +517,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             CollectPaymentDialog.show(context, order: order);
                           },
                         );
-                      },
-                    ),
-                  ] else if (isReady) ...[
-                    // Option B: Prepaid handover confirmation
-                    PrimaryButton(
-                      label: 'Hand over order',
-                      icon: const Icon(
-                        Icons.check_circle_outline,
-                        size: 19,
-                        color: Colors.white,
-                      ),
-                      onPressed: () {
-                        HandoverDialog.show(context, order: order);
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    SecondaryButton(
-                      label: 'Update status',
-                      onPressed: () {
-                        StatusDialog.show(context, order: order);
                       },
                     ),
                   ] else ...[
