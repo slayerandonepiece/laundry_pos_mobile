@@ -11,10 +11,16 @@ class AppEnvironmentConfig {
 
   /// Reads compile-time environment from `--dart-define=ENV=<dev|stage|prod>`.
   /// Defaults to `dev` if not specified.
-  static const String _rawEnv = String.fromEnvironment('ENV', defaultValue: 'dev');
+  static const String _rawEnv = String.fromEnvironment(
+    'ENV',
+    defaultValue: 'dev',
+  );
 
   /// Optional base URL override from `--dart-define=BASE_URL=<url>`.
-  static const String _baseUrlOverride = String.fromEnvironment('BASE_URL', defaultValue: '');
+  static const String _baseUrlOverride = String.fromEnvironment(
+    'BASE_URL',
+    defaultValue: '',
+  );
 
   /// Active environment enum
   static AppEnvironment get current {

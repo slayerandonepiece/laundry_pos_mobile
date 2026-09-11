@@ -35,8 +35,15 @@ void main() async {
   final localCache = LocalCacheService();
   final secureStorage = SecureStorageService();
 
-  final authRepository = AuthRepository(apiClient: apiClient, localCache: localCache, secureStorage: secureStorage);
-  final posRepository = PosRepository(apiClient: apiClient, localCache: localCache);
+  final authRepository = AuthRepository(
+    apiClient: apiClient,
+    localCache: localCache,
+    secureStorage: secureStorage,
+  );
+  final posRepository = PosRepository(
+    apiClient: apiClient,
+    localCache: localCache,
+  );
   final ordersRepository = OrdersRepository(apiClient: apiClient);
   final ownerRepository = OwnerRepository(apiClient: apiClient);
 
@@ -85,8 +92,10 @@ class _MyShopAppState extends State<MyShopApp> {
     super.initState();
     ConnectivityService.instance.start();
 
-    _authBloc = AuthBloc(authRepository: widget.authRepository, localCache: widget.localCache)
-      ..add(CheckAuthStatusEvent());
+    _authBloc = AuthBloc(
+      authRepository: widget.authRepository,
+      localCache: widget.localCache,
+    )..add(CheckAuthStatusEvent());
 
     _cartBloc = CartBloc(posRepository: widget.posRepository);
 
@@ -104,7 +113,12 @@ class _MyShopAppState extends State<MyShopApp> {
     // Automatic 403 handling: access denial triggers blocked screen live
     widget.apiClient.onForbidden = (reason, paidThroughDate) {
       if (_authBloc.state is AuthenticatedState) {
-        _authBloc.add(AccessForbiddenEvent(reason: reason, paidThroughDate: paidThroughDate));
+        _authBloc.add(
+          AccessForbiddenEvent(
+            reason: reason,
+            paidThroughDate: paidThroughDate,
+          ),
+        );
       }
     };
   }
@@ -125,8 +139,12 @@ class _MyShopAppState extends State<MyShopApp> {
       providers: [
         RepositoryProvider<AuthRepository>.value(value: widget.authRepository),
         RepositoryProvider<PosRepository>.value(value: widget.posRepository),
-        RepositoryProvider<OrdersRepository>.value(value: widget.ordersRepository),
-        RepositoryProvider<OwnerRepository>.value(value: widget.ownerRepository),
+        RepositoryProvider<OrdersRepository>.value(
+          value: widget.ordersRepository,
+        ),
+        RepositoryProvider<OwnerRepository>.value(
+          value: widget.ownerRepository,
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -157,12 +175,14 @@ class _MyShopAppState extends State<MyShopApp> {
               }
             },
             builder: (context, state) {
-              if (state is AuthInitialState || (state is AuthLoadingState && state.isInitialCheck)) {
+              if (state is AuthInitialState ||
+                  (state is AuthLoadingState && state.isInitialCheck)) {
                 return const SplashScreen();
               }
 
               if (state is MustChangePasswordState ||
-                  (state is AuthLoadingState && state.message == 'Updating password...')) {
+                  (state is AuthLoadingState &&
+                      state.message == 'Updating password...')) {
                 return const ResetPasswordScreen();
               }
 

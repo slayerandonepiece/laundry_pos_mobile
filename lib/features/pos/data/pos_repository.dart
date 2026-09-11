@@ -1,6 +1,7 @@
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/core/utils/idempotency.dart';
@@ -26,6 +27,21 @@ class PosRepository {
 
   /// Fetches product catalogue for current active store with local cache
   Future<List<Product>> listProducts() async {
+    final isOffline = await ConnectivityService.instance.checkIsOffline();
+    if (isOffline) {
+      final cached = _localCache.getCachedProducts();
+      if (cached != null && cached.isNotEmpty) {
+        final products = cached.map((p) => Product.fromJson(p)).toList();
+        final pendingCount = _localCache.getPendingSyncQueue().length;
+        SyncManager.instance.setOffline(
+          pendingCount,
+          'Offline · using cached catalogue',
+        );
+        return products;
+      }
+      throw Exception('No network connection and no cached products available');
+    }
+
     try {
       SyncManager.instance.startSync('Syncing products...');
       final response = await _apiClient.get(ApiEndpoints.products);
@@ -39,16 +55,26 @@ class PosRepository {
         SyncManager.instance.completeSync();
         return products;
       }
-    } catch (_) {
-      // Offline fallback: try reading cached products
+    } catch (e) {
+      // Offline fallback: try reading cached products. But only report the
+      // banner as "Offline" if we're actually offline — a bare catch here
+      // used to unconditionally call setOffline() even for a genuine online
+      // failure (timeout, 4xx/5xx, bad JSON), which mislabeled the banner.
+      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
       final cached = _localCache.getCachedProducts();
       if (cached != null && cached.isNotEmpty) {
         final products = cached.map((p) => Product.fromJson(p)).toList();
         final pendingCount = _localCache.getPendingSyncQueue().length;
-        SyncManager.instance.setOffline(
-          pendingCount,
-          'Offline · using cached catalogue',
-        );
+        if (reallyOffline) {
+          SyncManager.instance.setOffline(
+            pendingCount,
+            'Offline · using cached catalogue',
+          );
+        } else {
+          SyncManager.instance.setError(
+            'Could not refresh catalogue — showing cached data ($e)',
+          );
+        }
         return products;
       }
       rethrow;
@@ -58,6 +84,24 @@ class PosRepository {
 
   /// Fetches active store payment choices (e.g. Cash, UPI) with local fallback
   Future<List<StorePaymentMethod>> listPaymentMethods() async {
+    final isOffline = await ConnectivityService.instance.checkIsOffline();
+    if (isOffline) {
+      final raw = _localCache.get('cached_payment_methods');
+      if (raw is List) {
+        return raw
+            .map(
+              (m) => StorePaymentMethod.fromJson(
+                Map<String, dynamic>.from(m as Map),
+              ),
+            )
+            .toList();
+      }
+      return [
+        StorePaymentMethod(id: 'pm_cash', name: 'Cash', active: true),
+        StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+      ];
+    }
+
     try {
       final response = await _apiClient.get(ApiEndpoints.paymentMethods);
       if (response is List) {
@@ -191,7 +235,22 @@ class PosRepository {
     });
 
     final pendingCount = _localCache.getPendingSyncQueue().length;
-    SyncManager.instance.setOffline(pendingCount, 'Saved locally · syncing…');
+    // Local-first write — always saved locally regardless of connectivity.
+    // Only report the banner as "Offline" if we're actually offline; if
+    // we're online this will sync momentarily via the trigger() below, so
+    // reflect that as "pending" instead of the misleading offline label.
+    // Uses the cached, already-known flag (never the probing
+    // checkIsOffline()) so this local-first write never blocks on a network
+    // round trip just to pick which banner label to show.
+    final reallyOffline = ConnectivityService.instance.isOffline;
+    if (reallyOffline) {
+      SyncManager.instance.setOffline(pendingCount, 'Saved locally · syncing…');
+    } else {
+      SyncManager.instance.setPendingOnline(
+        pendingCount,
+        'Saved locally · syncing…',
+      );
+    }
 
     // Fire-and-forget: the caller (already showing the order) doesn't wait
     // on this, and SyncEngine's own mutex means it's safe to call even if a

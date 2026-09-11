@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
+import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
@@ -20,7 +21,16 @@ class MockLocalCache extends LocalCacheService {
   List<Map<String, dynamic>> getPendingSyncQueue() => queue;
 }
 
+// LogoutDialog now always syncs via SyncEngine.instance (so it shares
+// SyncEngine's single-flight guard rather than racing it) instead of
+// calling a repository handed to it directly, so these tests inject the
+// mock by swapping SyncEngine.instance rather than via LogoutDialog's
+// (now vestigial) ordersRepository parameter.
 class MockOrdersRepository extends OrdersRepository {
+  final MockLocalCache localCache;
+
+  MockOrdersRepository(this.localCache);
+
   bool processQueueShouldSucceed = true;
   int processQueueCallCount = 0;
   int syncDeltaCallCount = 0;
@@ -28,6 +38,13 @@ class MockOrdersRepository extends OrdersRepository {
   @override
   Future<bool> processPendingSyncQueue() async {
     processQueueCallCount++;
+    if (processQueueShouldSucceed) {
+      // Real processPendingSyncQueue() removes synced actions from the
+      // queue once the server confirms them — mirror that here since
+      // LogoutDialog now infers success from the queue being empty
+      // afterward, not from this return value directly.
+      localCache.queue = [];
+    }
     return processQueueShouldSucceed;
   }
 
@@ -68,135 +85,157 @@ void main() {
 
     setUp(() {
       mockCache = MockLocalCache();
-      mockOrdersRepo = MockOrdersRepository();
+      mockOrdersRepo = MockOrdersRepository(mockCache);
       fakeAuthBloc = FakeAuthBloc();
+      SyncEngine.instance = SyncEngine.internal(
+        ordersRepository: mockOrdersRepo,
+        localCache: mockCache,
+      );
     });
 
     tearDown(() {
       fakeAuthBloc.close();
+      SyncEngine.instance = SyncEngine.internal();
     });
 
-    testWidgets('No pending orders: renders standard Log out button and logs out', (tester) async {
-      mockCache.queue = [];
+    testWidgets(
+      'No pending orders: renders standard Log out button and logs out',
+      (tester) async {
+        mockCache.queue = [];
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => LogoutDialog.show(
-                context,
-                ordersRepository: mockOrdersRepo,
-                localCache: mockCache,
-                authBloc: fakeAuthBloc,
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => LogoutDialog.show(
+                  context,
+                  ordersRepository: mockOrdersRepo,
+                  localCache: mockCache,
+                  authBloc: fakeAuthBloc,
+                ),
+                child: const Text('Open'),
               ),
-              child: const Text('Open'),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Log out?'), findsOneWidget);
-      expect(find.text('Log out'), findsOneWidget);
-      expect(find.text('Logout & Sync'), findsNothing);
+        expect(find.text('Log out?'), findsOneWidget);
+        expect(find.text('Log out'), findsOneWidget);
+        expect(find.text('Logout & Sync'), findsNothing);
 
-      await tester.tap(find.text('Log out'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Log out'));
+        await tester.pumpAndSettle();
 
-      expect(fakeAuthBloc.logoutEventReceived, isTrue);
-      expect(mockOrdersRepo.processQueueCallCount, 0);
-    });
+        expect(fakeAuthBloc.logoutEventReceived, isTrue);
+        expect(mockOrdersRepo.processQueueCallCount, 0);
+      },
+    );
 
-    testWidgets('Pending orders present: renders Logout & Sync and runs checkpoints', (tester) async {
-      mockCache.queue = [
-        {'type': 'create_order', 'storeId': 'store-test'},
-        {'type': 'record_payment', 'storeId': 'store-test'},
-      ];
+    testWidgets(
+      'Pending orders present: renders Logout & Sync and runs checkpoints',
+      (tester) async {
+        mockCache.queue = [
+          {'type': 'create_order', 'storeId': 'store-test'},
+          {'type': 'record_payment', 'storeId': 'store-test'},
+        ];
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => LogoutDialog.show(
-                context,
-                ordersRepository: mockOrdersRepo,
-                localCache: mockCache,
-                authBloc: fakeAuthBloc,
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => LogoutDialog.show(
+                  context,
+                  ordersRepository: mockOrdersRepo,
+                  localCache: mockCache,
+                  authBloc: fakeAuthBloc,
+                ),
+                child: const Text('Open'),
               ),
-              child: const Text('Open'),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Log out & sync?'), findsOneWidget);
-      expect(find.text('2 unsynced orders/updates pending sync'), findsOneWidget);
-      expect(find.text('Logout & Sync'), findsOneWidget);
+        expect(find.text('Log out & sync?'), findsOneWidget);
+        expect(
+          find.text('2 unsynced orders/updates pending sync'),
+          findsOneWidget,
+        );
+        expect(find.text('Logout & Sync'), findsOneWidget);
 
-      await tester.tap(find.text('Logout & Sync'));
-      await tester.pump();
+        await tester.tap(find.text('Logout & Sync'));
+        await tester.pump();
 
-      // Checkpoints rendered
-      expect(find.text('Syncing pending orders to server'), findsOneWidget);
-      expect(find.text('Pulling latest store data'), findsOneWidget);
-      expect(find.text('Signing out'), findsOneWidget);
+        // Checkpoints rendered
+        expect(find.text('Syncing pending orders to server'), findsOneWidget);
+        expect(find.text('Pulling latest store data'), findsOneWidget);
+        expect(find.text('Signing out'), findsOneWidget);
 
-      // Let async sync complete
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pumpAndSettle();
+        // Let async sync complete
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
 
-      expect(mockOrdersRepo.processQueueCallCount, 1);
-      expect(mockOrdersRepo.syncDeltaCallCount, 1);
-      expect(fakeAuthBloc.logoutEventReceived, isTrue);
-    });
+        expect(mockOrdersRepo.processQueueCallCount, 1);
+        expect(mockOrdersRepo.syncDeltaCallCount, 1);
+        expect(fakeAuthBloc.logoutEventReceived, isTrue);
+      },
+    );
 
-    testWidgets('Sync failure: shows error, Retry Sync and Log out anyway options', (tester) async {
-      mockCache.queue = [
-        {'type': 'create_order', 'storeId': 'store-test'},
-      ];
-      mockOrdersRepo.processQueueShouldSucceed = false;
+    testWidgets(
+      'Sync failure: shows error, Retry Sync and Log out anyway options',
+      (tester) async {
+        mockCache.queue = [
+          {'type': 'create_order', 'storeId': 'store-test'},
+        ];
+        mockOrdersRepo.processQueueShouldSucceed = false;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => LogoutDialog.show(
-                context,
-                ordersRepository: mockOrdersRepo,
-                localCache: mockCache,
-                authBloc: fakeAuthBloc,
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => LogoutDialog.show(
+                  context,
+                  ordersRepository: mockOrdersRepo,
+                  localCache: mockCache,
+                  authBloc: fakeAuthBloc,
+                ),
+                child: const Text('Open'),
               ),
-              child: const Text('Open'),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Logout & Sync'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.text('Logout & Sync'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Unable to reach server. Changes remain saved locally on this device.'), findsOneWidget);
-      expect(find.text('Retry Sync'), findsOneWidget);
-      expect(find.text('Log out anyway'), findsOneWidget);
-      expect(fakeAuthBloc.logoutEventReceived, isFalse);
+        expect(
+          find.text(
+            'Unable to reach server. Changes remain saved locally on this device.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Retry Sync'), findsOneWidget);
+        expect(find.text('Log out anyway'), findsOneWidget);
+        expect(fakeAuthBloc.logoutEventReceived, isFalse);
 
-      // Tap Log out anyway
-      await tester.tap(find.text('Log out anyway'));
-      await tester.pumpAndSettle();
+        // Tap Log out anyway
+        await tester.tap(find.text('Log out anyway'));
+        await tester.pumpAndSettle();
 
-      expect(fakeAuthBloc.logoutEventReceived, isTrue);
-    });
+        expect(fakeAuthBloc.logoutEventReceived, isTrue);
+      },
+    );
 
     testWidgets('Logout pops all pushed screens back to root', (tester) async {
       mockCache.queue = [];

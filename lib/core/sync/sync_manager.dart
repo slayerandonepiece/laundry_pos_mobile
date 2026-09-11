@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 
-enum SyncStatus { synced, syncing, offline, error, syncPaused }
+import '../logging/app_logger.dart';
+
+const _tag = 'BANNER';
+
+enum SyncStatus { synced, syncing, offline, error, syncPaused, pendingOnline }
 
 class SyncState {
   final SyncStatus status;
@@ -20,6 +24,7 @@ class SyncState {
   bool get isSynced => status == SyncStatus.synced;
   bool get hasError => status == SyncStatus.error;
   bool get isSyncPaused => status == SyncStatus.syncPaused;
+  bool get isPendingOnline => status == SyncStatus.pendingOnline;
 
   SyncState copyWith({
     SyncStatus? status,
@@ -41,11 +46,30 @@ class SyncManager extends ValueNotifier<SyncState> {
 
   SyncManager._() : super(SyncState(lastSyncedAt: DateTime.now()));
 
+  void _logTransition(
+    SyncStatus newStatus, {
+    String? message,
+    int? pendingCount,
+  }) {
+    AppLogger.log(
+      _tag,
+      '${value.status} -> $newStatus'
+      '${message != null ? ' | message="$message"' : ''}'
+      '${pendingCount != null ? ' | pendingCount=$pendingCount' : ''}',
+    );
+  }
+
   void startSync([String message = 'Syncing data...']) {
+    _logTransition(SyncStatus.syncing, message: message);
     value = value.copyWith(status: SyncStatus.syncing, message: message);
   }
 
   void completeSync() {
+    _logTransition(
+      SyncStatus.synced,
+      message: 'All data synced',
+      pendingCount: 0,
+    );
     value = value.copyWith(
       status: SyncStatus.synced,
       pendingCount: 0,
@@ -55,18 +79,43 @@ class SyncManager extends ValueNotifier<SyncState> {
   }
 
   void setOffline(int pendingCount, [String? message]) {
+    final resolvedMessage =
+        message ??
+        (pendingCount > 0
+            ? 'Offline · $pendingCount ${pendingCount == 1 ? "change" : "changes"} saved locally'
+            : 'Offline mode');
+    _logTransition(
+      SyncStatus.offline,
+      message: resolvedMessage,
+      pendingCount: pendingCount,
+    );
     value = value.copyWith(
       status: SyncStatus.offline,
       pendingCount: pendingCount,
-      message:
-          message ??
-          (pendingCount > 0
-              ? 'Offline · $pendingCount ${pendingCount == 1 ? "change" : "changes"} saved locally'
-              : 'Offline mode'),
+      message: resolvedMessage,
+    );
+  }
+
+  void setPendingOnline(int pendingCount, [String? message]) {
+    final resolvedMessage =
+        message ??
+        (pendingCount > 0
+            ? '$pendingCount ${pendingCount == 1 ? "change" : "changes"} pending'
+            : 'Changes pending');
+    _logTransition(
+      SyncStatus.pendingOnline,
+      message: resolvedMessage,
+      pendingCount: pendingCount,
+    );
+    value = value.copyWith(
+      status: SyncStatus.pendingOnline,
+      pendingCount: pendingCount,
+      message: resolvedMessage,
     );
   }
 
   void setError(String error) {
+    _logTransition(SyncStatus.error, message: error);
     value = value.copyWith(status: SyncStatus.error, message: error);
   }
 
@@ -76,12 +125,18 @@ class SyncManager extends ValueNotifier<SyncState> {
   /// a flaky connection doesn't retry silently forever without ever telling
   /// anyone changes aren't going through.
   void setSyncPaused(int pendingCount) {
+    final resolvedMessage = pendingCount > 0
+        ? 'Sync paused · $pendingCount ${pendingCount == 1 ? "change" : "changes"} waiting — tap to retry'
+        : 'Sync paused — tap to retry';
+    _logTransition(
+      SyncStatus.syncPaused,
+      message: resolvedMessage,
+      pendingCount: pendingCount,
+    );
     value = value.copyWith(
       status: SyncStatus.syncPaused,
       pendingCount: pendingCount,
-      message: pendingCount > 0
-          ? 'Sync paused · $pendingCount ${pendingCount == 1 ? "change" : "changes"} waiting — tap to retry'
-          : 'Sync paused — tap to retry',
+      message: resolvedMessage,
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
@@ -14,7 +15,12 @@ class LogoutDialog extends StatefulWidget {
   final LocalCacheService? localCache;
   final AuthBloc? authBloc;
 
-  const LogoutDialog({super.key, this.ordersRepository, this.localCache, this.authBloc});
+  const LogoutDialog({
+    super.key,
+    this.ordersRepository,
+    this.localCache,
+    this.authBloc,
+  });
 
   static Future<void> show(
     BuildContext context, {
@@ -25,7 +31,11 @@ class LogoutDialog extends StatefulWidget {
     return showDialog(
       context: context,
       barrierColor: AppColors.scrim.withValues(alpha: 0.42),
-      builder: (_) => LogoutDialog(ordersRepository: ordersRepository, localCache: localCache, authBloc: authBloc),
+      builder: (_) => LogoutDialog(
+        ordersRepository: ordersRepository,
+        localCache: localCache,
+        authBloc: authBloc,
+      ),
     );
   }
 
@@ -34,7 +44,6 @@ class LogoutDialog extends StatefulWidget {
 }
 
 class _LogoutDialogState extends State<LogoutDialog> {
-  late final OrdersRepository _ordersRepository;
   late final LocalCacheService _localCache;
   late final AuthBloc _authBloc;
 
@@ -49,13 +58,20 @@ class _LogoutDialogState extends State<LogoutDialog> {
   @override
   void initState() {
     super.initState();
-    _ordersRepository = widget.ordersRepository ?? context.read<OrdersRepository>();
+    // Sync itself is no longer driven from a repository reference held
+    // here — it always goes through SyncEngine.instance (see
+    // _handleLogoutAndSync) so it shares SyncEngine's single-flight guard
+    // instead of racing any sync already in flight. widget.ordersRepository
+    // is kept only for API compatibility; tests should inject via
+    // SyncEngine.instance instead.
     _localCache = widget.localCache ?? LocalCacheService();
     _authBloc = widget.authBloc ?? context.read<AuthBloc>();
 
     final currentStoreId = _localCache.getActiveStoreId();
     final queue = _localCache.getPendingSyncQueue();
-    _pendingCount = queue.where((a) => a['storeId'] == null || a['storeId'] == currentStoreId).length;
+    _pendingCount = queue
+        .where((a) => a['storeId'] == null || a['storeId'] == currentStoreId)
+        .length;
   }
 
   Future<void> _handleLogoutAndSync() async {
@@ -68,9 +84,22 @@ class _LogoutDialogState extends State<LogoutDialog> {
     });
 
     try {
-      // Checkpoint 1: Push pending orders & updates
-      final pushOk = await _ordersRepository.processPendingSyncQueue();
-      if (!pushOk) {
+      // Checkpoints 1 & 2: push + pull, both via SyncEngine — never call
+      // OrdersRepository.processPendingSyncQueue()/syncOrdersDelta() directly
+      // from UI code. SyncEngine owns the single-flight guard; a sync
+      // already in flight from a recent action (fire-and-forget after any
+      // status/payment update) can otherwise race a direct call here, and
+      // both would independently push the same queued action to the server
+      // — the backend isn't reliably idempotent for that, so it lands twice.
+      await SyncEngine.instance.retryNow();
+
+      final currentStoreId = _localCache.getActiveStoreId();
+      final remaining = _localCache
+          .getPendingSyncQueue()
+          .where((a) => a['storeId'] == null || a['storeId'] == currentStoreId)
+          .length;
+
+      if (remaining > 0) {
         if (!mounted) return;
         setState(() {
           _step1 = CheckpointState.error;
@@ -83,18 +112,6 @@ class _LogoutDialogState extends State<LogoutDialog> {
       if (!mounted) return;
       setState(() {
         _step1 = CheckpointState.done;
-        _step2 = CheckpointState.active;
-      });
-
-      // Checkpoint 2: Pull latest store changes
-      try {
-        await _ordersRepository.syncOrdersDelta();
-      } catch (_) {
-        // Delta pull failure is non-fatal for logout
-      }
-
-      if (!mounted) return;
-      setState(() {
         _step2 = CheckpointState.done;
         _step3 = CheckpointState.active;
       });
@@ -138,14 +155,23 @@ class _LogoutDialogState extends State<LogoutDialog> {
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: Color.fromRGBO(6, 27, 58, 0.28), blurRadius: 44, offset: Offset(0, 18))],
+            boxShadow: const [
+              BoxShadow(
+                color: Color.fromRGBO(6, 27, 58, 0.28),
+                blurRadius: 44,
+                offset: Offset(0, 18),
+              ),
+            ],
           ),
           padding: const EdgeInsets.all(22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(hasPendingOrders ? 'Log out & sync?' : 'Log out?', style: AppTextStyles.h2),
+              Text(
+                hasPendingOrders ? 'Log out & sync?' : 'Log out?',
+                style: AppTextStyles.h2,
+              ),
               const SizedBox(height: 8),
               Text(
                 hasPendingOrders
@@ -158,7 +184,10 @@ class _LogoutDialogState extends State<LogoutDialog> {
               if (hasPendingOrders && !_isSyncing && !_syncFailed) ...[
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.warningBg,
                     borderRadius: BorderRadius.circular(10),
@@ -166,7 +195,11 @@ class _LogoutDialogState extends State<LogoutDialog> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.cloud_upload_outlined, size: 20, color: AppColors.warning),
+                      const Icon(
+                        Icons.cloud_upload_outlined,
+                        size: 20,
+                        color: AppColors.warning,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -188,7 +221,10 @@ class _LogoutDialogState extends State<LogoutDialog> {
               if (_isSyncing || _syncFailed) ...[
                 const SizedBox(height: 18),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.inset,
                     borderRadius: BorderRadius.circular(12),
@@ -196,9 +232,15 @@ class _LogoutDialogState extends State<LogoutDialog> {
                   ),
                   child: Column(
                     children: [
-                      _buildCheckpointRow(title: 'Syncing pending orders to server', state: _step1),
+                      _buildCheckpointRow(
+                        title: 'Syncing pending orders to server',
+                        state: _step1,
+                      ),
                       const SizedBox(height: 10),
-                      _buildCheckpointRow(title: 'Pulling latest store data', state: _step2),
+                      _buildCheckpointRow(
+                        title: 'Pulling latest store data',
+                        state: _step2,
+                      ),
                       const SizedBox(height: 10),
                       _buildCheckpointRow(title: 'Signing out', state: _step3),
                     ],
@@ -208,7 +250,10 @@ class _LogoutDialogState extends State<LogoutDialog> {
                   const SizedBox(height: 10),
                   Text(
                     'Unable to reach server. Changes remain saved locally on this device.',
-                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.danger, fontSize: 12),
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.danger,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ],
@@ -222,9 +267,13 @@ class _LogoutDialogState extends State<LogoutDialog> {
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
                     backgroundColor: AppColors.primary,
-                    disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.65),
+                    disabledBackgroundColor: AppColors.primary.withValues(
+                      alpha: 0.65,
+                    ),
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -232,10 +281,16 @@ class _LogoutDialogState extends State<LogoutDialog> {
                       SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       ),
                       SizedBox(width: 10),
-                      Text('Syncing & Logging out...', style: AppTextStyles.button),
+                      Text(
+                        'Syncing & Logging out...',
+                        style: AppTextStyles.button,
+                      ),
                     ],
                   ),
                 ),
@@ -248,11 +303,15 @@ class _LogoutDialogState extends State<LogoutDialog> {
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(48),
                           side: const BorderSide(color: AppColors.danger),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
                         ),
                         child: Text(
                           'Log out anyway',
-                          style: AppTextStyles.buttonSecondary.copyWith(color: AppColors.danger),
+                          style: AppTextStyles.buttonSecondary.copyWith(
+                            color: AppColors.danger,
+                          ),
                         ),
                       ),
                     ),
@@ -264,9 +323,14 @@ class _LogoutDialogState extends State<LogoutDialog> {
                           minimumSize: const Size.fromHeight(48),
                           backgroundColor: AppColors.primary,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
                         ),
-                        child: const Text('Retry Sync', style: AppTextStyles.button),
+                        child: const Text(
+                          'Retry Sync',
+                          style: AppTextStyles.button,
+                        ),
                       ),
                     ),
                   ],
@@ -279,23 +343,39 @@ class _LogoutDialogState extends State<LogoutDialog> {
                         onPressed: () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(48),
-                          side: const BorderSide(color: AppColors.controlBorder),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                          side: const BorderSide(
+                            color: AppColors.controlBorder,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
                         ),
-                        child: const Text('Cancel', style: AppTextStyles.buttonSecondary),
+                        child: const Text(
+                          'Cancel',
+                          style: AppTextStyles.buttonSecondary,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: hasPendingOrders ? _handleLogoutAndSync : _performDirectLogout,
+                        onPressed: hasPendingOrders
+                            ? _handleLogoutAndSync
+                            : _performDirectLogout,
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size.fromHeight(48),
-                          backgroundColor: hasPendingOrders ? AppColors.primary : AppColors.danger,
+                          backgroundColor: hasPendingOrders
+                              ? AppColors.primary
+                              : AppColors.danger,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
                         ),
-                        child: Text(hasPendingOrders ? 'Logout & Sync' : 'Log out', style: AppTextStyles.button),
+                        child: Text(
+                          hasPendingOrders ? 'Logout & Sync' : 'Log out',
+                          style: AppTextStyles.button,
+                        ),
                       ),
                     ),
                   ],
@@ -308,7 +388,10 @@ class _LogoutDialogState extends State<LogoutDialog> {
     );
   }
 
-  Widget _buildCheckpointRow({required String title, required CheckpointState state}) {
+  Widget _buildCheckpointRow({
+    required String title,
+    required CheckpointState state,
+  }) {
     Widget indicator;
     Color textColor;
 
@@ -328,7 +411,10 @@ class _LogoutDialogState extends State<LogoutDialog> {
         indicator = const SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.primary,
+          ),
         );
         textColor = AppColors.text;
         break;
@@ -336,8 +422,13 @@ class _LogoutDialogState extends State<LogoutDialog> {
         indicator = Container(
           width: 16,
           height: 16,
-          decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.successBg),
-          child: const Center(child: Icon(Icons.check, size: 11, color: AppColors.success)),
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.successBg,
+          ),
+          child: const Center(
+            child: Icon(Icons.check, size: 11, color: AppColors.success),
+          ),
         );
         textColor = AppColors.text;
         break;
@@ -345,8 +436,13 @@ class _LogoutDialogState extends State<LogoutDialog> {
         indicator = Container(
           width: 16,
           height: 16,
-          decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.dangerBg),
-          child: const Center(child: Icon(Icons.close, size: 11, color: AppColors.danger)),
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.dangerBg,
+          ),
+          child: const Center(
+            child: Icon(Icons.close, size: 11, color: AppColors.danger),
+          ),
         );
         textColor = AppColors.danger;
         break;
@@ -362,7 +458,9 @@ class _LogoutDialogState extends State<LogoutDialog> {
             style: TextStyle(
               fontFamily: AppTextStyles.fontBody,
               fontSize: 13,
-              fontWeight: state == CheckpointState.active ? FontWeight.w600 : FontWeight.w500,
+              fontWeight: state == CheckpointState.active
+                  ? FontWeight.w600
+                  : FontWeight.w500,
               color: textColor,
             ),
           ),

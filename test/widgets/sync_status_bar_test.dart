@@ -32,7 +32,33 @@ void main() {
     });
 
     testWidgets(
-      'Renders offline state with pending change count and sync now button',
+      'Renders offline state with disconnected message and no sync now button',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Column(children: [SyncStatusBar(onSyncNow: () {})]),
+            ),
+          ),
+        );
+
+        SyncManager.instance.setOffline(3);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(
+          find.text(
+            'Internet is disconnected. Orders will be punched offline.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Sync now'), findsNothing);
+        expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Renders pendingOnline state with change count and active sync now button',
       (tester) async {
         bool syncNowTapped = false;
 
@@ -52,11 +78,11 @@ void main() {
           ),
         );
 
-        SyncManager.instance.setOffline(3);
+        SyncManager.instance.setPendingOnline(3);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
-        expect(find.text('Offline · 3 changes saved locally'), findsOneWidget);
+        expect(find.text('3 changes pending'), findsOneWidget);
         expect(find.text('Sync now'), findsOneWidget);
         expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
 

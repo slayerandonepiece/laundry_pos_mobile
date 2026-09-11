@@ -15,7 +15,7 @@ class OrdersState {
     this.isLoading = false,
     this.error,
     this.allOrders = const [],
-    this.activeFilter = 'To collect',
+    this.activeFilter = 'all',
     this.searchQuery = '',
     this.selectedOrder,
     this.isUpdatingStatus = false,

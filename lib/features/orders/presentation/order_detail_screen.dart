@@ -12,6 +12,7 @@ import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/presentation/dialogs/collect_payment_dialog.dart';
 import 'package:myshop/features/orders/presentation/dialogs/handover_dialog.dart';
+import 'package:myshop/features/orders/presentation/dialogs/ready_bill_actions_sheet.dart';
 import 'package:myshop/features/orders/presentation/dialogs/status_dialog.dart';
 import 'package:myshop/features/orders/presentation/invoice_actions_sheet.dart';
 import 'package:myshop/features/orders/presentation/invoice_viewer_screen.dart';
@@ -37,10 +38,93 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // Show the cached order (passed in from the list, already loaded from
+    // local cache with no network call) immediately. A network fetch only
+    // ever happens when the user explicitly pulls to refresh below — never
+    // on open, so opening an order detail is always instant regardless of
+    // connectivity.
     _order = widget.initialOrder;
-    context.read<OrdersBloc>().add(
-      LoadOrderDetailEvent(widget.initialOrder.orderCode),
+  }
+
+  Future<void> _promptNotifyCustomerReady(
+    BuildContext context,
+    Order order,
+    String storeName,
+  ) async {
+    final shouldNotify = await showDialog<bool>(
+      context: context,
+      barrierColor: AppColors.scrim.withValues(alpha: 0.42),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Notify customer now?', style: AppTextStyles.h2),
+              const SizedBox(height: 8),
+              const Text(
+                'Order is ready for pickup. Send the customer their bill now?',
+                style: AppTextStyles.hint,
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: AppColors.controlBorder),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                      ),
+                      child: const Text(
+                        'Skip',
+                        style: AppTextStyles.buttonSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        backgroundColor: AppColors.primary,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                      ),
+                      child: const Text(
+                        'Yes, notify',
+                        style: AppTextStyles.button,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+
+    if (shouldNotify == true && context.mounted) {
+      await ReadyBillActionsSheet.show(
+        context,
+        order: order,
+        storeName: storeName,
+      );
+    }
   }
 
   @override
@@ -67,6 +151,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               behavior: SnackBarBehavior.floating,
             ),
           );
+          if (state.actionSuccessMessage == 'Status updated to Ready' &&
+              state.selectedOrder != null) {
+            _promptNotifyCustomerReady(
+              context,
+              state.selectedOrder!,
+              storeName,
+            );
+          }
         }
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(

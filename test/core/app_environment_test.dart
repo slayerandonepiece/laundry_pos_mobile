@@ -20,7 +20,10 @@ void main() {
     });
 
     test('Stage url and prod url defaults', () {
-      expect(AppEnvironmentConfig.stageUrl, anyOf(isEmpty, contains('express-laundry-staging')));
+      expect(
+        AppEnvironmentConfig.stageUrl,
+        anyOf(isEmpty, contains('express-laundry-staging')),
+      );
       expect(AppEnvironmentConfig.prodUrl, isEmpty);
     });
 

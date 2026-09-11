@@ -44,13 +44,18 @@ class MoreScreen extends StatelessWidget {
         elevation: 0,
         titleSpacing: 20,
         title: InkWell(
-          onTap: hasMultipleStores ? () => StoreSwitcherDialog.show(context) : null,
+          onTap: hasMultipleStores
+              ? () => StoreSwitcherDialog.show(context)
+              : null,
           child: Row(
             children: [
               Container(
                 width: 38,
                 height: 38,
-                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
                 child: Center(
                   child: Text(
                     initials,
@@ -80,7 +85,11 @@ class MoreScreen extends StatelessWidget {
                       ),
                       if (hasMultipleStores) ...[
                         const SizedBox(width: 4),
-                        const Icon(Icons.expand_more, size: 16, color: AppColors.mutedText),
+                        const Icon(
+                          Icons.expand_more,
+                          size: 16,
+                          color: AppColors.mutedText,
+                        ),
                       ],
                     ],
                   ),
@@ -127,8 +136,17 @@ class MoreScreen extends StatelessWidget {
                       context,
                       icon: Icons.inventory_2_outlined,
                       title: 'Services',
-                      trailing: const Icon(Icons.chevron_right, color: AppColors.faintText, size: 20),
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen())),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.faintText,
+                        size: 20,
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ServicesScreen(),
+                        ),
+                      ),
                     ),
                     const Divider(color: AppColors.border, height: 1),
                     _buildMenuItem(
@@ -139,39 +157,74 @@ class MoreScreen extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (unpaidExpenses > 0) ...[
-                            StatusPill(label: '$unpaidExpenses unpaid', variant: PillVariant.ready),
+                            StatusPill(
+                              label: '$unpaidExpenses unpaid',
+                              variant: PillVariant.ready,
+                            ),
                             const SizedBox(width: 8),
                           ],
-                          const Icon(Icons.chevron_right, color: AppColors.faintText, size: 20),
+                          const Icon(
+                            Icons.chevron_right,
+                            color: AppColors.faintText,
+                            size: 20,
+                          ),
                         ],
                       ),
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExpensesScreen())),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ExpensesScreen(),
+                        ),
+                      ),
                     ),
                     const Divider(color: AppColors.border, height: 1),
                     _buildMenuItem(
                       context,
                       icon: Icons.people_outline,
                       title: 'Staff',
-                      trailing: const Icon(Icons.chevron_right, color: AppColors.faintText, size: 20),
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StaffScreen())),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.faintText,
+                        size: 20,
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const StaffScreen()),
+                      ),
                     ),
                     const Divider(color: AppColors.border, height: 1),
                     _buildMenuItem(
                       context,
                       icon: Icons.payments_outlined,
                       title: 'Payment methods',
-                      trailing: const Icon(Icons.chevron_right, color: AppColors.faintText, size: 20),
-                      onTap: () =>
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentMethodsScreen())),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.faintText,
+                        size: 20,
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PaymentMethodsScreen(),
+                        ),
+                      ),
                     ),
                     const Divider(color: AppColors.border, height: 1),
                     _buildMenuItem(
                       context,
                       icon: Icons.storefront_outlined,
                       title: 'Store profile',
-                      trailing: const Icon(Icons.chevron_right, color: AppColors.faintText, size: 20),
-                      onTap: () =>
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const StoreProfileScreen())),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.faintText,
+                        size: 20,
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const StoreProfileScreen(),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -190,18 +243,34 @@ class MoreScreen extends StatelessWidget {
                       context,
                       icon: Icons.person_outline,
                       title: 'Your details',
-                      trailing: const Icon(Icons.chevron_right, color: AppColors.faintText, size: 20),
-                      onTap: () =>
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const OwnerProfileScreen())),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.faintText,
+                        size: 20,
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const OwnerProfileScreen(),
+                        ),
+                      ),
                     ),
                     const Divider(color: AppColors.border, height: 1),
                     _buildMenuItem(
                       context,
                       icon: Icons.lock_outline,
                       title: 'Change password',
-                      trailing: const Icon(Icons.chevron_right, color: AppColors.faintText, size: 20),
-                      onTap: () =>
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen())),
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: AppColors.faintText,
+                        size: 20,
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ChangePasswordScreen(),
+                        ),
+                      ),
                     ),
                   ],
                 ),

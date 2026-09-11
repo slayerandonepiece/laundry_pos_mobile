@@ -1,6 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
@@ -9,6 +7,8 @@ import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
+
+import '../helpers/mock_dio.dart';
 
 class MockSecureStorage extends SecureStorageService {
   String? _token;
@@ -44,21 +44,20 @@ void main() {
       () async {
         bool unauthorizedCalled = false;
 
-        final mockClient = MockClient((request) async {
-          if (request.url.path.contains('/api/v1/auth/login')) {
-            return http.Response(
-              '{"error":"Invalid username or password"}',
-              401,
-            );
+        final mockDio = createMockDio((options) async {
+          if (options.uri.path.contains('/api/v1/auth/login')) {
+            return mockJsonResponse({
+              'error': 'Invalid username or password',
+            }, statusCode: 401);
           }
-          return http.Response('{"ok":true}', 200);
+          return mockJsonResponse({'ok': true});
         });
 
         final secureStorage = MockSecureStorage();
         final localCache = MockLocalCache();
 
         final apiClient = ApiClient(
-          client: mockClient,
+          dio: mockDio,
           secureStorage: secureStorage,
           localCache: localCache,
           onUnauthorized: () {
@@ -108,18 +107,20 @@ void main() {
       () async {
         bool unauthorizedCalled = false;
 
-        final mockClient = MockClient((request) async {
-          if (request.url.path.contains('/api/v1/orders')) {
-            return http.Response('{"error":"Session expired"}', 401);
+        final mockDio = createMockDio((options) async {
+          if (options.uri.path.contains('/api/v1/orders')) {
+            return mockJsonResponse({
+              'error': 'Session expired',
+            }, statusCode: 401);
           }
-          return http.Response('{"ok":true}', 200);
+          return mockJsonResponse({'ok': true});
         });
 
         final secureStorage = MockSecureStorage();
         final localCache = MockLocalCache();
 
         final apiClient = ApiClient(
-          client: mockClient,
+          dio: mockDio,
           secureStorage: secureStorage,
           localCache: localCache,
           onUnauthorized: () {
@@ -127,13 +128,11 @@ void main() {
           },
         );
 
-        expect(
-          () => apiClient.get('https://example.com/api/v1/orders'),
+        await expectLater(
+          apiClient.get('https://example.com/api/v1/orders'),
           throwsA(isA<AuthException>()),
         );
 
-        // Allow microtask
-        await Future.delayed(Duration.zero);
         expect(unauthorizedCalled, isTrue);
       },
     );
@@ -141,14 +140,14 @@ void main() {
     test(
       'SessionRevokedEvent is a no-op when already unauthenticated',
       () async {
-        final mockClient = MockClient(
-          (request) async => http.Response('{"ok":true}', 200),
+        final mockDio = createMockDio(
+          (options) async => mockJsonResponse({'ok': true}),
         );
         final secureStorage = MockSecureStorage();
         final localCache = MockLocalCache();
 
         final apiClient = ApiClient(
-          client: mockClient,
+          dio: mockDio,
           secureStorage: secureStorage,
           localCache: localCache,
         );
@@ -178,20 +177,20 @@ void main() {
     test(
       'AuthRepository.changePassword saves updated token on success',
       () async {
-        final mockClient = MockClient((request) async {
-          if (request.url.path.contains('/api/v1/auth/change-password')) {
-            return http.Response(
-              '{"ok":true,"token":"new-session-token-xyz"}',
-              200,
-            );
+        final mockDio = createMockDio((options) async {
+          if (options.uri.path.contains('/api/v1/auth/change-password')) {
+            return mockJsonResponse({
+              'ok': true,
+              'token': 'new-session-token-xyz',
+            }, statusCode: 200);
           }
-          return http.Response('{"error":"Not found"}', 404);
+          return mockJsonResponse({'error': 'Not found'}, statusCode: 404);
         });
         final secureStorage = MockSecureStorage();
         await secureStorage.saveToken('old-token');
         final localCache = MockLocalCache();
         final apiClient = ApiClient(
-          client: mockClient,
+          dio: mockDio,
           secureStorage: secureStorage,
           localCache: localCache,
         );
@@ -207,19 +206,18 @@ void main() {
     );
 
     test('AuthRepository.changePassword propagates error when current password is wrong', () async {
-      final mockClient = MockClient((request) async {
-        if (request.url.path.contains('/api/v1/auth/change-password')) {
-          return http.Response(
-            '{"error":"Current password is incorrect."}',
-            400,
-          );
+      final mockDio = createMockDio((options) async {
+        if (options.uri.path.contains('/api/v1/auth/change-password')) {
+          return mockJsonResponse({
+            'error': 'Current password is incorrect.',
+          }, statusCode: 400);
         }
-        return http.Response('{"error":"Not found"}', 404);
+        return mockJsonResponse({'error': 'Not found'}, statusCode: 404);
       });
       final secureStorage = MockSecureStorage();
       final localCache = MockLocalCache();
       final apiClient = ApiClient(
-        client: mockClient,
+        dio: mockDio,
         secureStorage: secureStorage,
         localCache: localCache,
       );

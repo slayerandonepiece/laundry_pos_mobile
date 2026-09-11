@@ -132,21 +132,13 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         'Delivered',
       );
 
-      // 3: invoice generation genuinely needs the server (invoice numbers
-      // are server-assigned) — it can't be made local-first. If it fails
-      // (e.g. offline), that's fine: the payment and status are already
-      // saved, and the invoice will be created once this order finishes
-      // syncing. Don't let this step fail the whole action.
-      try {
-        await ordersRepository.getOrCreateInvoice(event.orderCode);
-      } catch (_) {
-        // Ignored — invoice generation retried once the order is synced.
-      }
-
       final updatedList = state.allOrders
           .map((o) => o.id == updated.id ? updated : o)
           .toList();
 
+      // Local-first writes (1 & 2) are done — emit success and let the
+      // dialog close immediately, regardless of connectivity. Nothing past
+      // this point may block the emit above.
       emit(
         state.copyWith(
           isCollectingPayment: false,
@@ -155,6 +147,26 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           actionSuccessMessage: 'Payment collected & order marked delivered',
         ),
       );
+
+      // 3: invoice generation genuinely needs the server (invoice numbers
+      // are server-assigned) — it can't be made local-first. Fire-and-forget
+      // (never awaited) so a slow or offline server can't hold up the
+      // dialog-close path above. If it fails, that's fine: the payment and
+      // status are already saved locally, and invoice generation is retried
+      // the next time this order's detail screen is opened.
+      () async {
+        try {
+          await ordersRepository.getOrCreateInvoice(event.orderCode);
+          // getOrCreateInvoice() already merged the invoice into the cache
+          // (see OrdersRepository), but this handler has already emitted
+          // and returned — re-dispatch as a fresh event so the invoice
+          // number shows up on screen now instead of only next reopen.
+          if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
+        } catch (_) {
+          // Ignored — invoice generation retried the next time this
+          // order's detail screen is opened.
+        }
+      }();
 
       SyncEngine.instance.trigger();
     } catch (e) {
@@ -173,24 +185,41 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         'Delivered',
       );
 
-      try {
-        await ordersRepository.getOrCreateInvoice(event.orderCode);
-      } catch (_) {
-        // Ignored — invoice generation retried once the order is synced.
-      }
-
       final updatedList = state.allOrders
           .map((o) => o.id == updated.id ? updated : o)
           .toList();
 
+      // Local-first write is done — emit success and let the dialog close
+      // immediately, regardless of connectivity. Nothing past this point
+      // may block the emit above.
       emit(
         state.copyWith(
           isUpdatingStatus: false,
           selectedOrder: updated,
           allOrders: updatedList,
-          actionSuccessMessage: 'Order marked delivered & invoice generated',
+          actionSuccessMessage: 'Order marked delivered',
         ),
       );
+
+      // Invoice generation genuinely needs the server (invoice numbers are
+      // server-assigned) — it can't be made local-first. Fire-and-forget
+      // (never awaited) so a slow or offline server can't hold up the
+      // dialog-close path above. If it fails, the status/payment are
+      // already saved locally, and invoice generation is retried the next
+      // time this order's detail screen is opened.
+      () async {
+        try {
+          await ordersRepository.getOrCreateInvoice(event.orderCode);
+          // getOrCreateInvoice() already merged the invoice into the cache
+          // (see OrdersRepository), but this handler has already emitted
+          // and returned — re-dispatch as a fresh event so the invoice
+          // number shows up on screen now instead of only next reopen.
+          if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
+        } catch (_) {
+          // Ignored — invoice generation retried the next time this
+          // order's detail screen is opened.
+        }
+      }();
 
       SyncEngine.instance.trigger();
     } catch (e) {

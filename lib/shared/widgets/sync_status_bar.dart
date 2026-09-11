@@ -52,11 +52,13 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
       builder: (context, state, _) {
         final isSyncing = state.isSyncing;
         final isOffline = state.isOffline;
+        final isPendingOnline = state.isPendingOnline;
         final isError = state.hasError;
         final isSyncPaused = state.isSyncPaused;
         final isVisible =
             isSyncing ||
             isOffline ||
+            isPendingOnline ||
             isError ||
             isSyncPaused ||
             _showSyncedBanner;
@@ -70,19 +72,23 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
             color: isSyncing
                 ? AppColors.primaryTint
                 : (isOffline
-                      ? AppColors.warningNoticeBg
-                      : ((isError || isSyncPaused)
-                            ? AppColors.dangerBg
-                            : AppColors.successBg)),
+                      ? AppColors.neutralBg
+                      : (isPendingOnline
+                            ? AppColors.warningNoticeBg
+                            : ((isError || isSyncPaused)
+                                  ? AppColors.dangerBg
+                                  : AppColors.successBg))),
             border: Border(
               bottom: BorderSide(
                 color: isSyncing
                     ? const Color(0xFFC7DCFC)
                     : (isOffline
-                          ? AppColors.warningBorder
-                          : ((isError || isSyncPaused)
-                                ? AppColors.dangerBorder
-                                : const Color(0xFFB7E4CF))),
+                          ? AppColors.controlBorder
+                          : (isPendingOnline
+                                ? AppColors.warningBorder
+                                : ((isError || isSyncPaused)
+                                      ? AppColors.dangerBorder
+                                      : const Color(0xFFB7E4CF)))),
                 width: 1,
               ),
             ),
@@ -123,12 +129,33 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
                               const Icon(
                                 Icons.cloud_off_rounded,
                                 size: 15,
+                                color: AppColors.mutedText,
+                              ),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  'Internet is disconnected. Orders will be punched offline.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.mutedText,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ] else if (isPendingOnline) ...[
+                              const Icon(
+                                Icons.cloud_off_rounded,
+                                size: 15,
                                 color: AppColors.warning,
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  state.message ?? 'Offline mode',
+                                  state.message ??
+                                      (state.pendingCount > 0
+                                          ? '${state.pendingCount} ${state.pendingCount == 1 ? "change" : "changes"} pending'
+                                          : 'Changes pending'),
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,

@@ -1,16 +1,19 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
-import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/presentation/invoice_viewer_screen.dart';
+import 'package:myshop/features/orders/presentation/order_pdf_builder.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+const _tag = 'INVOICE_SHARE';
 
 class InvoiceActionsSheet extends StatelessWidget {
   final Order order;
@@ -122,19 +125,25 @@ class InvoiceActionsSheet extends StatelessWidget {
             icon: Icons.chat_bubble_outline,
             iconColor: AppColors.success,
             title: 'Send on WhatsApp',
-            subtitle: 'Message customer with invoice details',
+            subtitle: 'Share the invoice PDF with customer',
             onTap: () async {
+              final messenger = ScaffoldMessenger.maybeOf(context);
               Navigator.pop(context);
-              final text = Uri.encodeComponent(
-                'Hello ${order.name.isNotEmpty ? order.name : "Customer"},\n'
-                'Your laundry order ${order.orderCode} ($invoiceNo) has been completed and paid in full (${CurrencyFormatter.format(order.totalAmount)}).\n'
-                'Thank you for choosing $storeName!',
+              // A wa.me deep link can only pre-fill text — it cannot carry
+              // an attachment, so there is no way to jump straight into a
+              // WhatsApp chat with the PDF already attached. The OS share
+              // sheet is the only path that can hand WhatsApp an actual
+              // file; the user picks WhatsApp (and the contact) from it.
+              await _sharePdfSafely(
+                messenger: messenger,
+                text:
+                    'Hello ${order.name.isNotEmpty ? order.name : "Customer"}, '
+                    'your laundry order ${order.orderCode} ($invoiceNo) has been '
+                    'completed and paid in full (${CurrencyFormatter.format(order.totalAmount)}). '
+                    'Thank you for choosing $storeName!',
+                subject: 'Invoice $invoiceNo - $storeName',
+                invoiceNo: invoiceNo,
               );
-              final cleanPhone = order.phone.replaceAll(RegExp(r'[^0-9]'), '');
-              final url = Uri.parse('https://wa.me/91$cleanPhone?text=$text');
-              if (await canLaunchUrl(url)) {
-                await launchUrl(url, mode: LaunchMode.externalApplication);
-              }
             },
           ),
           const SizedBox(height: 10),
@@ -143,13 +152,17 @@ class InvoiceActionsSheet extends StatelessWidget {
             icon: Icons.share_outlined,
             iconColor: AppColors.mutedText,
             title: 'Share',
-            subtitle: 'Any app on this phone',
-            onTap: () {
+            subtitle: 'Invoice PDF to any app on this phone',
+            onTap: () async {
+              final messenger = ScaffoldMessenger.maybeOf(context);
               Navigator.pop(context);
-              // ignore: deprecated_member_use
-              Share.share(
-                'Invoice $invoiceNo for order ${order.orderCode}: ${CurrencyFormatter.format(order.totalAmount)} paid in full at $storeName.',
+              await _sharePdfSafely(
+                messenger: messenger,
+                text:
+                    'Invoice $invoiceNo for order ${order.orderCode}: '
+                    '${CurrencyFormatter.format(order.totalAmount)} paid in full at $storeName.',
                 subject: 'Invoice $invoiceNo - $storeName',
+                invoiceNo: invoiceNo,
               );
             },
           ),
@@ -234,156 +247,78 @@ class InvoiceActionsSheet extends StatelessWidget {
     );
   }
 
-  Future<void> _printInvoicePdf() async {
-    final pdf = pw.Document();
-    final invoiceNo = order.invoice?.invoiceNumber ?? 'INV-${order.orderCode}';
-    final dateStr = order.invoice != null
-        ? DateFormatter.formatDate(order.invoice!.issuedAt)
-        : DateFormatter.formatDate(DateTime.now());
+  /// Wraps [_sharePdf] so a failure is visible (SnackBar + log) instead of
+  /// silently doing nothing — a bare unawaited exception from a dialog
+  /// onTap is otherwise swallowed by the zone's error handler, and from the
+  /// user's side the button just looks broken with no feedback at all.
+  Future<void> _sharePdfSafely({
+    required ScaffoldMessengerState? messenger,
+    required String text,
+    required String subject,
+    required String invoiceNo,
+  }) async {
+    try {
+      AppLogger.log(
+        _tag,
+        'starting share for invoice $invoiceNo, order ${order.orderCode}',
+      );
+      final result = await _sharePdf(
+        text: text,
+        subject: subject,
+        invoiceNo: invoiceNo,
+      );
+      AppLogger.log(_tag, 'share sheet result: ${result.status}');
+    } catch (e, st) {
+      AppLogger.log(_tag, 'share failed', error: e);
+      AppLogger.log(_tag, 'share failed stacktrace: $st');
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text('Could not share invoice: $e'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Padding(
-            padding: const pw.EdgeInsets.all(32),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-              children: [
-                pw.Center(
-                  child: pw.Column(
-                    children: [
-                      pw.Text(
-                        storeName,
-                        style: pw.TextStyle(
-                          fontSize: 22,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                      pw.SizedBox(height: 4),
-                      pw.Text(
-                        '$storeAddress · $storePhone',
-                        style: const pw.TextStyle(
-                          fontSize: 10,
-                          color: PdfColors.grey700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                pw.SizedBox(height: 18),
-                pw.Divider(thickness: 2),
-                pw.SizedBox(height: 8),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'Invoice: $invoiceNo',
-                      style: const pw.TextStyle(fontSize: 11),
-                    ),
-                    pw.Text(
-                      'Order: ${order.orderCode}',
-                      style: const pw.TextStyle(fontSize: 11),
-                    ),
-                    pw.Text(
-                      'Date: $dateStr',
-                      style: const pw.TextStyle(fontSize: 11),
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 12),
-                pw.Text(
-                  'Billed to: ${order.name.isNotEmpty ? order.name : "Customer"} (+91 ${order.phone})',
-                  style: const pw.TextStyle(fontSize: 11),
-                ),
-                pw.SizedBox(height: 16),
-                pw.Divider(),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Expanded(
-                      child: pw.Text(
-                        'SERVICE',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    pw.Text(
-                      'QTY',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.SizedBox(width: 30),
-                    pw.Text(
-                      'AMOUNT',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                pw.Divider(),
-                ...order.lines.map(
-                  (line) => pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                    child: pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Expanded(
-                          child: pw.Text(
-                            line.productName,
-                            style: const pw.TextStyle(fontSize: 10),
-                          ),
-                        ),
-                        pw.Text(
-                          line.displayQuantity,
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                        pw.SizedBox(width: 30),
-                        pw.Text(
-                          CurrencyFormatter.formatPdf(line.totalAmount),
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                pw.Divider(),
-                pw.SizedBox(height: 8),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'Total Paid:',
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(
-                      CurrencyFormatter.formatPdf(order.paidAmount),
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
+  /// Shares the invoice as an actual PDF attachment via the OS share sheet
+  /// (WhatsApp, Drive, email, etc. — whatever the user picks there), instead
+  /// of just a text message with no file.
+  Future<ShareResult> _sharePdf({
+    required String text,
+    required String subject,
+    required String invoiceNo,
+  }) async {
+    final bytes = await _buildInvoicePdfBytes();
+    final fileName = '$invoiceNo-${order.orderCode}.pdf';
+    return SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile.fromData(bytes, mimeType: 'application/pdf', name: fileName),
+        ],
+        fileNameOverrides: [fileName],
+        text: text,
+        subject: subject,
       ),
     );
+  }
 
+  Future<void> _printInvoicePdf() async {
+    final bytes = await _buildInvoicePdfBytes();
+    final invoiceNo = order.invoice?.invoiceNumber ?? 'INV-${order.orderCode}';
     await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
+      onLayout: (PdfPageFormat format) async => bytes,
       name: '$invoiceNo-${order.orderCode}',
+    );
+  }
+
+  Future<Uint8List> _buildInvoicePdfBytes() {
+    return buildOrderPdfBytes(
+      order: order,
+      storeName: storeName,
+      storeAddress: storeAddress,
+      storePhone: storePhone,
+      isFinalInvoice: true,
     );
   }
 }

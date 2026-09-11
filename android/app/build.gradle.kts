@@ -27,6 +27,26 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appName"] = "MyShop"
+    }
+
+    flavorDimensions += "default"
+
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "MyShop Dev"
+        }
+        create("stage") {
+            dimension = "default"
+            applicationIdSuffix = ".stage"
+            manifestPlaceholders["appName"] = "MyShop Stage"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "MyShop"
+        }
     }
 
     buildTypes {
@@ -34,6 +54,12 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

@@ -1,64 +1,145 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
 import '../storage/local_cache.dart';
 import '../storage/secure_storage.dart';
 import 'api_exceptions.dart';
+import 'dio_interceptors.dart';
+
+/// Lightweight representation of a raw API response (used for binary downloads like PDFs).
+class RawApiResponse {
+  final int statusCode;
+  final Uint8List bodyBytes;
+  final Map<String, List<String>> headers;
+
+  const RawApiResponse({
+    required this.statusCode,
+    required this.bodyBytes,
+    this.headers = const {},
+  });
+
+  String get body => utf8.decode(bodyBytes, allowMalformed: true);
+}
 
 class ApiClient {
-  final http.Client _client;
+  final Dio _dio;
   final SecureStorageService _secureStorage;
   final LocalCacheService _localCache;
+
   void Function()? onUnauthorized;
   void Function(String? reason, String? paidThroughDate)? onForbidden;
 
-  // Without this, an unreachable/hanging backend leaves a request in flight
-  // for the OS-level TCP timeout (60s+), which — since SyncEngine treats
-  // "a sync is in flight" as a lock — makes the whole sync engine look
-  // frozen for that entire time instead of failing fast and retrying.
-  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const Duration _requestTimeout = Duration(seconds: 30);
 
   ApiClient({
-    http.Client? client,
+    Dio? dio,
     SecureStorageService? secureStorage,
     LocalCacheService? localCache,
     this.onUnauthorized,
-  }) : _client = client ?? http.Client(),
-       _secureStorage = secureStorage ?? SecureStorageService(),
-       _localCache = localCache ?? LocalCacheService();
-
-  Future<Map<String, String>> _buildHeaders({
-    Map<String, String>? extraHeaders,
-  }) async {
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-
-    final token = await _secureStorage.getToken();
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-
-    final storeId = _localCache.getActiveStoreId();
-    if (storeId != null && storeId.isNotEmpty) {
-      headers['X-Store-Id'] = storeId;
-    }
-
-    if (extraHeaders != null) {
-      headers.addAll(extraHeaders);
-    }
-    return headers;
+    this.onForbidden,
+  }) : _secureStorage = secureStorage ?? SecureStorageService(),
+       _localCache = localCache ?? LocalCacheService(),
+       _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: _requestTimeout,
+               receiveTimeout: _requestTimeout,
+               sendTimeout: _requestTimeout,
+               responseType: ResponseType.json,
+               validateStatus: (status) =>
+                   status != null && status >= 200 && status < 300,
+             ),
+           ) {
+    _setupInterceptors();
   }
 
-  Future<dynamic> get(String url, {Map<String, String>? headers}) async {
-    final requestHeaders = await _buildHeaders(extraHeaders: headers);
-    final response = await _client
-        .get(Uri.parse(url), headers: requestHeaders)
-        .timeout(_requestTimeout);
-    return _handleResponse(response, url: url);
+  Dio get dio => _dio;
+
+  void _setupInterceptors() {
+    final hasAuth = _dio.interceptors.any((i) => i is AuthInterceptor);
+    if (!hasAuth) {
+      _dio.interceptors.add(
+        AuthInterceptor(secureStorage: _secureStorage, localCache: _localCache),
+      );
+    }
+
+    final hasLogging = _dio.interceptors.any((i) => i is DioLoggingInterceptor);
+    if (!hasLogging) {
+      _dio.interceptors.add(
+        DioLoggingInterceptor(
+          printHeaders: true,
+          printBody: true,
+          maxBodyLength: 1000,
+        ),
+      );
+    }
+
+    final hasError = _dio.interceptors.any((i) => i is ErrorInterceptor);
+    if (!hasError) {
+      _dio.interceptors.add(
+        ErrorInterceptor(
+          onUnauthorized: () => onUnauthorized?.call(),
+          onForbidden: (reason, date) => onForbidden?.call(reason, date),
+        ),
+      );
+    }
+  }
+
+  dynamic _decodeBody(dynamic data) {
+    if (data == null) return null;
+    if (data is String) {
+      if (data.trim().isEmpty) return null;
+      try {
+        return jsonDecode(data);
+      } catch (_) {
+        return data;
+      }
+    }
+    return data;
+  }
+
+  Never _handleDioException(DioException e) {
+    if (e.error is ApiException) {
+      throw e.error!;
+    }
+    if (e.error is TimeoutException) {
+      throw e.error!;
+    }
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout) {
+      throw TimeoutException(
+        e.message ?? 'Request timed out after ${_requestTimeout.inSeconds}s',
+      );
+    }
+    throw ApiException(
+      e.message ?? 'Network error occurred',
+      statusCode: e.response?.statusCode,
+    );
+  }
+
+  Future<dynamic> get(
+    String url, {
+    Map<String, String>? headers,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final response = await _dio.get(
+        url,
+        queryParameters: queryParameters,
+        options: headers != null ? Options(headers: headers) : null,
+      );
+      return _decodeBody(response.data);
+    } on DioException catch (e) {
+      _handleDioException(e);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      rethrow;
+    }
   }
 
   Future<dynamic> post(
@@ -66,15 +147,19 @@ class ApiClient {
     dynamic body,
     Map<String, String>? headers,
   }) async {
-    final requestHeaders = await _buildHeaders(extraHeaders: headers);
-    final response = await _client
-        .post(
-          Uri.parse(url),
-          headers: requestHeaders,
-          body: body != null ? jsonEncode(body) : null,
-        )
-        .timeout(_requestTimeout);
-    return _handleResponse(response, url: url);
+    try {
+      final response = await _dio.post(
+        url,
+        data: body,
+        options: headers != null ? Options(headers: headers) : null,
+      );
+      return _decodeBody(response.data);
+    } on DioException catch (e) {
+      _handleDioException(e);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      rethrow;
+    }
   }
 
   Future<dynamic> put(
@@ -82,15 +167,19 @@ class ApiClient {
     dynamic body,
     Map<String, String>? headers,
   }) async {
-    final requestHeaders = await _buildHeaders(extraHeaders: headers);
-    final response = await _client
-        .put(
-          Uri.parse(url),
-          headers: requestHeaders,
-          body: body != null ? jsonEncode(body) : null,
-        )
-        .timeout(_requestTimeout);
-    return _handleResponse(response, url: url);
+    try {
+      final response = await _dio.put(
+        url,
+        data: body,
+        options: headers != null ? Options(headers: headers) : null,
+      );
+      return _decodeBody(response.data);
+    } on DioException catch (e) {
+      _handleDioException(e);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      rethrow;
+    }
   }
 
   Future<dynamic> patch(
@@ -98,102 +187,55 @@ class ApiClient {
     dynamic body,
     Map<String, String>? headers,
   }) async {
-    final requestHeaders = await _buildHeaders(extraHeaders: headers);
-    final response = await _client
-        .patch(
-          Uri.parse(url),
-          headers: requestHeaders,
-          body: body != null ? jsonEncode(body) : null,
-        )
-        .timeout(_requestTimeout);
-    return _handleResponse(response, url: url);
+    try {
+      final response = await _dio.patch(
+        url,
+        data: body,
+        options: headers != null ? Options(headers: headers) : null,
+      );
+      return _decodeBody(response.data);
+    } on DioException catch (e) {
+      _handleDioException(e);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      rethrow;
+    }
   }
 
   Future<dynamic> delete(String url, {Map<String, String>? headers}) async {
-    final requestHeaders = await _buildHeaders(extraHeaders: headers);
-    final response = await _client
-        .delete(Uri.parse(url), headers: requestHeaders)
-        .timeout(_requestTimeout);
-    return _handleResponse(response, url: url);
+    try {
+      final response = await _dio.delete(
+        url,
+        options: headers != null ? Options(headers: headers) : null,
+      );
+      return _decodeBody(response.data);
+    } on DioException catch (e) {
+      _handleDioException(e);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      rethrow;
+    }
   }
 
-  Future<http.Response> getRaw(
+  Future<RawApiResponse> getRaw(
     String url, {
     Map<String, String>? headers,
   }) async {
-    final requestHeaders = await _buildHeaders(extraHeaders: headers);
-    return await _client
-        .get(Uri.parse(url), headers: requestHeaders)
-        .timeout(_requestTimeout);
-  }
-
-  bool _isAuthEndpoint(String? url) {
-    if (url == null) return false;
-    return url.contains('/auth/login') ||
-        url.contains('/auth/logout') ||
-        url.contains('/auth/status');
-  }
-
-  dynamic _handleResponse(http.Response response, {String? url}) {
-    dynamic decodedBody;
     try {
-      if (response.body.isNotEmpty) {
-        decodedBody = jsonDecode(response.body);
-      }
-    } catch (_) {
-      decodedBody = null;
-    }
-
-    final statusCode = response.statusCode;
-
-    if (statusCode >= 200 && statusCode < 300) {
-      return decodedBody;
-    }
-
-    final errorMessage = (decodedBody is Map && decodedBody['error'] is String)
-        ? decodedBody['error'] as String
-        : 'Request failed with status $statusCode';
-
-    if (statusCode == 401) {
-      if (!_isAuthEndpoint(url)) {
-        onUnauthorized?.call();
-      }
-      throw AuthException(
-        code: 'UNAUTHENTICATED',
-        message: errorMessage,
-        statusCode: 401,
+      final response = await _dio.get<List<int>>(
+        url,
+        options: Options(headers: headers, responseType: ResponseType.bytes),
       );
-    }
-
-    if (statusCode == 403) {
-      final reason = (decodedBody is Map)
-          ? decodedBody['reason'] as String?
-          : null;
-      final paidThroughDate = (decodedBody is Map)
-          ? decodedBody['paidThroughDate'] as String?
-          : null;
-      onForbidden?.call(reason, paidThroughDate);
-      throw AuthException(
-        code: 'FORBIDDEN',
-        reason: reason,
-        paidThroughDate: paidThroughDate,
-        message: errorMessage,
-        statusCode: 403,
+      final bytes = response.data != null
+          ? Uint8List.fromList(response.data!)
+          : Uint8List(0);
+      return RawApiResponse(
+        statusCode: response.statusCode ?? 200,
+        bodyBytes: bytes,
+        headers: response.headers.map,
       );
+    } on DioException catch (e) {
+      _handleDioException(e);
     }
-
-    if (statusCode == 400) {
-      throw ValidationException(errorMessage);
-    }
-
-    if (statusCode == 404) {
-      throw NotFoundException(errorMessage);
-    }
-
-    if (statusCode == 429) {
-      throw RateLimitException(errorMessage);
-    }
-
-    throw ApiException(errorMessage, statusCode: statusCode);
   }
 }
