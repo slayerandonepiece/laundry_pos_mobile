@@ -1,0 +1,62 @@
+import 'app_environment.dart';
+
+class ApiEndpoints {
+  ApiEndpoints._();
+
+  /// Resolves the default base URL from active AppEnvironmentConfig
+  static String get defaultBaseUrl => AppEnvironmentConfig.baseUrl;
+
+  static String baseUrl = defaultBaseUrl;
+
+  // Auth
+  static String get login => '$baseUrl/api/v1/auth/login';
+  static String get logout => '$baseUrl/api/v1/auth/logout';
+  static String get sessionStatus => '$baseUrl/api/v1/auth/status';
+  static String get changePassword => '$baseUrl/api/v1/auth/change-password';
+  static String get setPassword => '$baseUrl/api/v1/auth/set-password';
+
+  // Memberships
+  static String get memberships => '$baseUrl/api/v1/memberships';
+
+  // Products
+  static String get products => '$baseUrl/api/v1/products';
+
+  // Orders
+  static String get orders => '$baseUrl/api/v1/orders';
+  static String get ordersBulkSync => '$baseUrl/api/v1/orders/bulk-sync';
+  static String get ordersSync => '$baseUrl/api/v1/orders/sync';
+  static String customerLookup(String phone) =>
+      '$baseUrl/api/v1/orders/customer-lookup?phone=${Uri.encodeQueryComponent(phone)}';
+  static String orderDetail(String orderCode) =>
+      '$baseUrl/api/v1/orders/$orderCode';
+  static String orderStatus(String orderCode) =>
+      '$baseUrl/api/v1/orders/$orderCode/status';
+  static String orderPayments(String orderCode) =>
+      '$baseUrl/api/v1/orders/$orderCode/payments';
+  static String orderInvoice(String orderCode) =>
+      '$baseUrl/api/v1/orders/$orderCode/invoice';
+  static String orderInvoicePdf(String orderCode) =>
+      '$baseUrl/api/v1/orders/$orderCode/invoice/pdf';
+
+  // Payment Methods
+  static String get paymentMethods => '$baseUrl/api/v1/payment-methods';
+  static String paymentMethodDetail(String id) =>
+      '$baseUrl/api/v1/payment-methods/$id';
+
+  // Expenses
+  static String get expenses => '$baseUrl/api/v1/expenses';
+  static String markExpensePaid(String id) =>
+      '$baseUrl/api/v1/expenses/$id/pay';
+
+  // Employees
+  static String get employees => '$baseUrl/api/v1/employees';
+  static String employeeDetail(String id) => '$baseUrl/api/v1/employees/$id';
+  static String toggleEmployeeActive(String id) =>
+      '$baseUrl/api/v1/employees/$id/toggle-active';
+
+  // Profile
+  static String get profile => '$baseUrl/api/v1/profile';
+
+  // Dashboard
+  static String get dashboard => '$baseUrl/api/v1/dashboard';
+}

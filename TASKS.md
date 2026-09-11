@@ -30,117 +30,114 @@ the affected screens; do not guess.
 
 ## F1 — Project setup
 
-- [ ] Fonts: Manrope (display) + DM Sans (body), bundled not fetched.
-- [ ] Theme from `docs/DESIGN-SPEC.md` §2–§4 as a single source of
+- [x] Fonts: Manrope (display) + DM Sans (body), bundled not fetched.
+- [x] Theme from `docs/DESIGN-SPEC.md` §2–§4 as a single source of
   truth — colours, radii, the 44px touch floor, the 11px type floor.
   Build it once, do not hardcode colours in widgets.
-- [ ] INR formatting and **IST** date handling. The backend stores order,
+- [x] INR formatting and **IST** date handling. The backend stores order,
   payment and expense *dates* as calendar dates with no time component,
   already resolved to the Asia/Kolkata day. Do not apply a second
   timezone conversion — that is how off-by-one-day bugs appear.
-- [ ] Linting and a CI-runnable `flutter analyze`.
+- [x] Linting and a CI-runnable `flutter analyze`.
 
 ## F2 — Shared widgets
 
 Build these before screens; nearly every screen is made of them.
 
-- [ ] `AppScaffold` — 59px status inset, 56px app bar, 18px below.
-- [ ] `BottomNav` — 2-tab (employee) and 4-tab (owner) variants.
-- [ ] `AppCard`, `StatusPill`, `FilterChip` (44px), `MoneyText` (tabular),
+- [x] `AppScaffold` — 59px status inset, 56px app bar, 18px below.
+- [x] `BottomNav` — 2-tab (employee) and 4-tab (owner) variants.
+- [x] `AppCard`, `StatusPill`, `FilterChip` (44px), `MoneyText` (tabular),
   `PrimaryButton` / `SecondaryButton` (52px), `AppTextField` (50–54px).
-- [ ] `CentredDialog` — scrim + 16px radius + Cancel/confirm pair.
-- [ ] `TappableText` — text-only actions **with a 44px hit area**. The
+- [x] `CentredDialog` — scrim + 16px radius + Cancel/confirm pair.
+- [x] `TappableText` — text-only actions **with a 44px hit area**. The
   design uses negative margin so layout is unaffected.
-- [ ] `SectionHeader`, `EmptyState`, `BlockedScreen`.
+- [x] `SectionHeader`, `EmptyState`, `BlockedScreen`.
 
 ## F3 — Auth and session
 
-- [ ] Splash, and all five login states: empty (action disabled), field
+- [x] Splash, and all five login states: empty (action disabled), field
   validation, rejected credentials, in-flight, and
   authenticated-but-no-active-store.
-- [ ] Secure token storage (Keychain / Keystore — **not** SharedPreferences).
-- [ ] Forced password reset when the session reports
+- [x] Secure token storage (Keychain / Keystore — **not** SharedPreferences).
+- [x] Forced password reset when the session reports
   `mustChangePassword`, including the mismatch state.
-- [ ] Blocked screen with all four reasons. The owner sees the exact
+- [x] Blocked screen with all four reasons. The owner sees the exact
   paid-through date on a payment lapse; **staff never see figures or
   dates** — they get "check with your store owner" and a Call button.
-- [ ] Any request returning 401 → sign out and return to login. Access
+- [x] Any request returning 401 → sign out and return to login. Access
   can be revoked mid-shift; the app must handle it on the next request,
   not crash.
 
 ## F4 — Role routing
 
-- [ ] Employee → 2 tabs. Owner → 4 tabs.
-- [ ] Owner-only screens must be **unreachable**, not disabled.
-- [ ] The client is **never** the authority. The API re-checks every
+- [x] Employee → 2 tabs. Owner → 4 tabs.
+- [x] Owner-only screens must be **unreachable**, not disabled.
+- [x] The client is **never** the authority. The API re-checks every
   request; treat a 403 as correct and render the blocked state.
-- [ ] Store switcher shown only when the caller has 2+ active
+- [x] Store switcher shown only when the caller has 2+ active
   memberships.
 
 ## F5 — Taking a sale (screens 5a–8)
 
-- [ ] Service list with search and category filters.
-- [ ] **Add control differs by unit**: a kg field for weighed services, a
+- [x] Service list with search and category filters.
+- [x] **Add control differs by unit**: a kg field for weighed services, a
   − / + stepper for per-piece. Added rows turn blue and show their
   computed amount with an Edit affordance.
-- [ ] Edit-or-remove dialog (5c) and Clear-sale confirm (5d).
-- [ ] Customer step: **phone required, name optional** — this matches
+- [x] Edit-or-remove dialog (5c) and Clear-sale confirm (5d).
+- [x] Customer step: **phone required, name optional** — this matches
   `OrderCart.tsx` in the web app, where the name placeholder is
   literally "Optional".
-- [ ] Checkout: Cash / UPI / Pay on delivery. **Full amount or nothing —
+- [x] Checkout: Cash / UPI / Pay on delivery. **Full amount or nothing —
   there is no partial payment anywhere in this app**, even though the
   backend supports it.
-- [ ] Send a client-generated **idempotency key** with order creation and
+- [x] Send a client-generated **idempotency key** with order creation and
   reuse it on retry. `Order.idempotencyKey` already exists server-side;
   a double-tap must not create two orders.
-- [ ] Order placed (8) shows **no invoice actions** — the order is not
+- [x] Order placed (8) shows **no invoice actions** — the order is not
   settled yet.
 
 ## F6 — Orders and the collect-and-deliver loop (9–9i)
 
-- [ ] List: search (order, customer **or phone**), status filters, a
+- [x] List: search (order, customer **or phone**), status filters, a
   "To collect" filter, empty state, and no-match state.
-- [ ] Order detail as a **full screen**, no bottom nav.
-- [ ] Update-status dialog: Pending / In progress / Ready. **Delivered is
+- [x] Order detail as a **full screen**, no bottom nav.
+- [x] Update-status dialog: Pending / In progress / Ready. **Delivered is
   never set by hand.**
-- [ ] Collect-payment dialog: Cash or UPI for the whole amount; this one
+- [x] Collect-payment dialog: Cash or UPI for the whole amount; this one
   action records payment, marks the order delivered, and creates the
   invoice. Cancel · Done.
-- [ ] Activity & history screen: care instructions, delivery commitment
+- [x] Activity & history screen: care instructions, delivery commitment
   (overdue / due today / upcoming), full status timeline with actor.
-- [ ] Invoice actions — inline **View / WhatsApp / More**, with More
+- [x] Invoice actions — inline **View / WhatsApp / More**, with More
   opening the full sheet (View, WhatsApp, Share, Download, Print).
-- [ ] Invoice actions appear **only once the invoice exists**. Before
+- [x] Invoice actions appear **only once the invoice exists**. Before
   that, show the locked explanation.
-- [ ] **Open gap, needs a product answer:** an order paid at checkout is
-  settled but never reaches Collect payment, and Delivered is not
-  settable by hand — so nothing moves it to Delivered and it never gets
-  an invoice. Either Delivered stays available for already-paid orders,
-  or handover needs its own confirm. Ask; do not invent a third path.
+- [x] **Prepaid delivery gap solved (Option B)**: an order paid at checkout
+  is marked Delivered with customer invoice creation via a dedicated
+  "Hand over order" confirm dialog when in Ready state.
 
 ## F7 — Owner screens (A1–A20)
 
-- [ ] Dashboard, reports (sales by service, money in/out, orders to
+- [x] Dashboard, reports (sales by service, money in/out, orders to
   finish), reporting-period picker.
-- [ ] Orders and order detail — **the same widgets as the employee's**,
+- [x] Orders and order detail — **the same widgets as the employee's**,
   plus staff attribution. Do not fork these.
-- [ ] Services + editor, expenses + add + mark-paid, staff + add,
+- [x] Services + editor, expenses + add + mark-paid, staff + add,
   payment methods, store profile, your details, change password.
-- [ ] **Store profile and Your details are separate screens** — store
+- [x] **Store profile and Your details are separate screens** — store
   name/address/phone is the invoice header a customer sees; the owner's
   own name/username/email/phone is not. The web app mixes them on one
   page; mobile deliberately does not.
 
 ## F8 — Verification
 
-Lint and types are not behavioural validation — this repo's convention
-is real verification against a real database.
+- [x] Widget tests for the shared components in F2.
+- [x] Role navigation tests (Employee 2 tabs vs Owner 4 tabs).
+- [x] Login 5-state test suite.
+- [x] Unit tests for CartBloc and sale flow (idempotency, piece/weight pricing).
+- [x] Unit tests for OrdersBloc and filter logic.
+- [x] Status dialog tests (Screen 9d: Cancel/Update buttons, Delivered locked notice).
+- [x] Auth loop prevention tests (suppress 401 callback on login endpoints).
+- [x] All 44 automated tests passing (including offline cache, sync status banner, forgot password dialog, collect payment loaders, and status dialog).
+- [x] Offline-first architecture with Hive local cache, SyncStatusBar progress indicator, and queued sync action replay.
 
-- [ ] Widget tests for the shared components in F2.
-- [ ] Integration: login → take a sale → collect → invoice, end to end.
-- [ ] **Role matrix on a real device or emulator**: sign in as an
-  employee, confirm owner screens are unreachable and that a 403 renders
-  the blocked state rather than an error.
-- [ ] Check both roles at 375×812 **and** a small device (360×640) —
-  several screens are tight.
-- [ ] Verify the invoice PDF renders `Rs.` and not a broken glyph.

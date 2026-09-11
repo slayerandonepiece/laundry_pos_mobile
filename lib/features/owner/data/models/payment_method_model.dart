@@ -1,0 +1,29 @@
+class StorePaymentMethod {
+  final String id;
+  final String name;
+  final String type;
+  final bool active;
+
+  StorePaymentMethod({
+    required this.id,
+    required this.name,
+    String? type,
+    this.active = true,
+  }) : type = type ?? (name.toUpperCase().contains('UPI') ? 'UPI' : 'Cash');
+
+  factory StorePaymentMethod.fromJson(Map<String, dynamic> json) {
+    final name = json['name']?.toString() ?? '';
+    return StorePaymentMethod(
+      id: json['id']?.toString() ?? '',
+      name: name,
+      type:
+          json['type']?.toString() ??
+          (name.toUpperCase().contains('UPI') ? 'UPI' : 'Cash'),
+      active: json['active'] != false,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'name': name, 'type': type, 'active': active};
+  }
+}

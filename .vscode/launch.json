@@ -1,0 +1,68 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "MyShop (Dev)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "debug",
+      "args": [
+        "--dart-define=ENV=dev"
+      ]
+    },
+    {
+      "name": "MyShop (Stage)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "debug",
+      "args": [
+        "--dart-define=ENV=stage"
+      ]
+    },
+    {
+      "name": "MyShop (Prod)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "debug",
+      "args": [
+        "--dart-define=ENV=prod"
+      ]
+    },
+    {
+      "name": "MyShop (Dev - Profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "args": [
+        "--dart-define=ENV=dev"
+      ]
+    },
+    {
+      "name": "MyShop (Stage - Profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "args": [
+        "--dart-define=ENV=stage"
+      ]
+    },
+    {
+      "name": "MyShop (Prod - Profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "args": [
+        "--dart-define=ENV=prod"
+      ]
+    },
+    {
+      "name": "MyShop (Prod - Release)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "args": [
+        "--dart-define=ENV=prod"
+      ]
+    }
+  ]
+}
