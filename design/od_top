@@ -1,0 +1,69 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr" style="padding-bottom:13px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row" style="gap:11px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div class="num" style="font-size:17px">EL-248</div>
+          <div style="font-size:11px;color:#68758a;margin-top:1px">Placed 11 Sep &middot; due 13 Sep</div>
+        </div>
+      </div>
+      <span class="pill" style="background:#fef3c7;color:#92400e;padding:7px 12px;font-size:11px">Ready</span>
+    </div>
+  </div>
+
+  <div class="bdy" style="gap:12px">
+    <div class="row" style="gap:0;justify-content:space-between">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;background:#14865d;display:grid;place-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <span style="font-size:9.5px;color:#14865d;font-weight:700">Pending</span>
+      </div>
+      <div style="height:2px;background:#14865d;flex:1;margin-bottom:20px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;background:#14865d;display:grid;place-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <span style="font-size:9.5px;color:#14865d;font-weight:700">In progress</span>
+      </div>
+      <div style="height:2px;background:#14865d;flex:1;margin-bottom:20px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2.5px solid #0758d6"></div>
+        <span style="font-size:9.5px;color:#0758d6;font-weight:700">Ready</span>
+      </div>
+      <div style="height:2px;background:#e2e6eb;flex:1;margin-bottom:20px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #dce2e9"></div>
+        <span style="font-size:9.5px;color:#98a2b1;font-weight:600">Delivered</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:13px 15px">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div style="font-size:14.5px;font-weight:700">Anjali Rao</div>
+          <div style="font-size:12px;color:#68758a;margin-top:3px">+91 98455 12034</div>
+        </div>
+        <div style="width:40px;height:40px;border-radius:50%;background:#eaf1ff;display:grid;place-items:center">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 3.5h3l1.5 4-2 1.4a12 12 0 006.1 6.1l1.4-2 4 1.5v3a1.8 1.8 0 01-2 1.8C10.3 19.6 4.4 13.7 4.7 5.5a1.8 1.8 0 011.8-2z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:15px">
+      <div class="row" style="justify-content:space-between;font-size:13px;margin-bottom:11px">
+        <span>Wash &amp; fold <span style="color:#68758a">&middot; 4.2 kg</span></span>
+        <span class="num" style="font-size:13.5px">&#8377;420</span>
+      </div>
+      <div class="row" style="justify-content:space-between;font-size:13px;margin-bottom:11px">
+        <span>Shirt dry clean <span style="color:#68758a">&times; 4</span></span>
+        <span class="num" style="font-size:13.5px">&#8377;520</span>
+      </div>
+      <div class="row" style="justify-content:space-between;font-size:13px">
+        <span>Saree roll press <span style="color:#68758a">&times; 2</span></span>
+        <span class="num" style="font-size:13.5px">&#8377;300</span>
+      </div>
+      <div class="sep" style="margin:13px 0"></div>
+      <div class="row" style="justify-content:space-between">
+        <span style="font-size:14px;font-weight:700">Total</span>
+        <span class="num" style="font-size:19px">&#8377;1,240</span>
+      </div>
+    </div>

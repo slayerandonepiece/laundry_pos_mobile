@@ -1,0 +1,90 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div>
+        <div style="font-size:20px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">Dashboard</div>
+        <div style="font-size:11.5px;color:#5c6878;margin-top:3px">1&ndash;30 Sep &middot; Chinnappanahalli</div>
+      </div>
+      <span class="chip" style="min-height:44px;font-size:11.5px;gap:6px;flex-shrink:0">This month
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 9.5l6.5 6 6.5-6"/></svg>
+      </span>
+    </div>
+  </div>
+
+  <div class="bdy" style="gap:13px">
+    <div class="card" style="padding:16px">
+      <div class="row" style="justify-content:space-between;margin-bottom:15px">
+        <h3 style="font-size:15px">Sales by service</h3>
+        <span style="font-size:11px;color:#5c6878">&#8377;1.94L</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:13px">
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:7px"><span style="font-size:13px;font-weight:600">Wash &amp; fold</span><span class="num" style="font-size:13px">&#8377;82,400</span></div>
+          <div style="height:8px;border-radius:5px;background:#eef1f6;overflow:hidden"><div style="height:100%;width:100%;background:#0758d6;border-radius:5px"></div></div>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:7px"><span style="font-size:13px;font-weight:600">Shirt dry clean</span><span class="num" style="font-size:13px">&#8377;54,200</span></div>
+          <div style="height:8px;border-radius:5px;background:#eef1f6;overflow:hidden"><div style="height:100%;width:66%;background:#4b89e5;border-radius:5px"></div></div>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:7px"><span style="font-size:13px;font-weight:600">Steam iron</span><span class="num" style="font-size:13px">&#8377;31,900</span></div>
+          <div style="height:8px;border-radius:5px;background:#eef1f6;overflow:hidden"><div style="height:100%;width:39%;background:#7fabee;border-radius:5px"></div></div>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:7px"><span style="font-size:13px;font-weight:600">Saree roll press</span><span class="num" style="font-size:13px">&#8377;18,600</span></div>
+          <div style="height:8px;border-radius:5px;background:#eef1f6;overflow:hidden"><div style="height:100%;width:23%;background:#a8c7f8;border-radius:5px"></div></div>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:7px"><span style="font-size:13px;font-weight:600">Blanket wash</span><span class="num" style="font-size:13px">&#8377;6,900</span></div>
+          <div style="height:8px;border-radius:5px;background:#eef1f6;overflow:hidden"><div style="height:100%;width:8%;background:#cddffc;border-radius:5px"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div class="row" style="justify-content:space-between;margin-bottom:15px">
+        <h3 style="font-size:15px">Money in &amp; out</h3>
+        <span style="font-size:11px;color:#5c6878">By payment date</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:7px"><span style="font-size:13px;font-weight:600">Collected</span><span class="num" style="font-size:14px;color:#0f6e4c">&#8377;1,64,200</span></div>
+          <div style="height:9px;border-radius:5px;background:#eef1f6;overflow:hidden"><div style="height:100%;width:100%;background:#0f6e4c;border-radius:5px"></div></div>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between;margin-bottom:7px"><span style="font-size:13px;font-weight:600">Expenses paid</span><span class="num" style="font-size:14px">&#8377;42,300</span></div>
+          <div style="height:9px;border-radius:5px;background:#eef1f6;overflow:hidden"><div style="height:100%;width:26%;background:#95a4ba;border-radius:5px"></div></div>
+        </div>
+      </div>
+      <div class="row" style="justify-content:space-between;border-top:1px solid #eef1f6;margin-top:15px;padding-top:13px">
+        <span style="font-size:13px;font-weight:700">Received minus spent</span>
+        <span class="num" style="font-size:18px">&#8377;1,21,900</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="row" style="justify-content:space-between;padding:15px 16px 13px">
+        <h3 style="font-size:15px">Orders to finish</h3>
+        <span class="pill" style="background:#eaf1ff;color:#0758d6">8</span>
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="padding:13px 16px;gap:11px">
+        <span class="num" style="font-size:13px;flex-shrink:0">EL-247</span>
+        <span style="flex:1;min-width:0;font-size:13px">Meera Krishnan</span>
+        <span class="pill" style="background:#fef2f1;color:#b42318">Overdue</span>
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="padding:13px 16px;gap:11px">
+        <span class="num" style="font-size:13px;flex-shrink:0">EL-249</span>
+        <span style="flex:1;min-width:0;font-size:13px">Anjali Rao</span>
+        <span class="pill" style="background:#fef3c7;color:#92400e">Due today</span>
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="padding:13px 16px;gap:11px">
+        <span class="num" style="font-size:13px;flex-shrink:0">EL-250</span>
+        <span style="flex:1;min-width:0;font-size:13px">Kiran B.</span>
+        <span class="pill" style="background:#eff3f8;color:#5c6878">Upcoming</span>
+      </div>
+    </div>
+  </div>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#fff;font-family:'DM Sans',system-ui,sans-serif;color:#102039;-webkit-font-smoothing:antialiased}
+    a{color:#0758d6;text-decoration:none} a:hover{color:#064bbb}
+    h1,h2,h3{font-family:'Manrope',system-ui,sans-serif;letter-spacing:-.04em;margin:0;line-height:1.2;font-weight:800}
+    /* white app surface throughout; hierarchy comes from borders, not fills */
+    .scr{width:390px;height:844px;background:#fff;display:flex;flex-direction:column;overflow:hidden;position:relative}
+    .safe{height:59px;flex-shrink:0}
+    .hdr{background:#fff;border-bottom:1px solid #e8ecf1;padding:6px 20px 18px;flex-shrink:0;display:flex;flex-direction:column;gap:16px}
+    .appbar{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px}
+    .bdy{flex:1;overflow:hidden;padding:20px;display:flex;flex-direction:column;gap:14px;background:#fff}
+    .card{background:#fff;border:1px solid #e8ecf1;border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(16,32,57,.05)}
+    /* recessed block for hints and grouped fields — the only non-white surface */
+    .inset{background:#f7f9fc;border:1px solid #e8ecf1;border-radius:11px;padding:13px 14px}
+    .nav{flex-shrink:0;background:#fff;border-top:1px solid #e8ecf1;display:flex;gap:4px;padding:10px 10px 26px}
+    .nav>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:52px;justify-content:center;color:#5c6878;font-size:11px;font-weight:600}
+    .nav>div.on{color:#0758d6}
+    .num{font-family:'Manrope',sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.045em;font-weight:800}
+    .btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:9px;background:#0758d6;color:#fff;font-weight:700;font-size:15px}
+    .btn.sec{background:#fff;border:1px solid #dce2e9;color:#102039}
+    .btn.dis{background:#dbe2ec;color:#5a6578}
+    .fld{min-height:50px;border:1px solid #dce2e9;background:#fff;border-radius:9px;padding:13px 14px;display:flex;align-items:center;gap:10px;font-size:15px;color:#102039}
+    .fld.err{border-color:#e8918a;background:#fffafa}
+    .lbl{font-size:11.5px;font-weight:700;color:#5c6878;letter-spacing:.02em}
+    .pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:700;white-space:nowrap}
+    .chip{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid #dce2e9;background:#fff;color:#5c6878;white-space:nowrap}
+    .chip.on{background:#0758d6;border-color:#0758d6;color:#fff}
+    .row{display:flex;align-items:center;gap:10px}
+    .sep{height:1px;background:#eef1f6}
+    .mark{display:grid;place-items:center;border-radius:12px;background:#0758d6;color:#fff;flex-shrink:0}
+    .errbox{display:flex;align-items:flex-start;gap:10px;background:#fef2f1;border:1px solid #f5c6c1;border-radius:11px;padding:13px 14px}
+    .errtxt{font-size:13px;font-weight:600;color:#b42318;line-height:1.45}
+    .hint{font-size:12px;color:#5c6878;line-height:1.55}
+    .scrim{position:absolute;inset:0;background:#061b3a;opacity:.42}
+    .dlgwrap{position:absolute;inset:0;display:grid;place-items:center;padding:24px}
+    .dlg{position:relative;width:100%;background:#fff;border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:18px;box-shadow:0 18px 44px rgba(6,27,58,.28)}
+    .dlgopt{display:flex;align-items:center;gap:13px;border:1px solid #dce2e9;background:#fff;border-radius:11px;padding:0 15px;min-height:54px}
+    .dlgopt.on{border:1.5px solid #0758d6;background:#f5f9ff}
+    .foot{flex-shrink:0;background:#fff;border-top:1px solid #e8ecf1;padding:16px 20px 30px;display:flex;flex-direction:column;gap:12px}
+  </style>
+</helmet>
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row" style="gap:12px">
+        <svg width="23" height="23" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div style="font-size:18px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">Checkout</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">Step 3 of 3</div>
+        </div>
+      </div>
+      <svg width="22" height="22" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.1" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+    </div>
+    <div class="row" style="gap:6px">
+      <div style="flex:1;height:4px;border-radius:99px;background:#0758d6"></div>
+      <div style="flex:1;height:4px;border-radius:99px;background:#0758d6"></div>
+      <div style="flex:1;height:4px;border-radius:99px;background:#0758d6"></div>
+    </div>
+  </div>
+
+  <div class="bdy" style="gap:13px">
+    <div class="card" style="padding:15px">
+      <div class="row" style="justify-content:space-between;margin-bottom:11px">
+        <div>
+          <div style="font-size:14.5px;font-weight:700">Anjali Rao</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">+91 98455 12034 &middot; 2 services</div>
+        </div>
+        <span class="num" style="font-size:22px">&#8377;680</span>
+      </div>
+      <div class="sep" style="margin-bottom:11px"></div>
+      <div class="row" style="justify-content:space-between;font-size:12.5px;color:#5c6878">
+        <span>Wash &amp; fold &middot; 4.2 kg</span><span class="num" style="font-size:12.5px">&#8377;420</span>
+      </div>
+      <div class="row" style="justify-content:space-between;font-size:12.5px;color:#5c6878;margin-top:7px">
+        <span>Shirt dry clean &times; 2</span><span class="num" style="font-size:12.5px">&#8377;260</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <span class="lbl">PAYMENT METHOD</span>
+        <div class="row" style="gap:13px;border:1.5px solid #0758d6;background:#f5f9ff;border-radius:11px;padding:0 15px;min-height:56px">
+          <svg width="21" height="21" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.4"/><circle cx="12" cy="12" r="2.6"/></svg>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:700;color:#0758d6">Cash</div>
+            <div style="font-size:11px;color:#5c6878;margin-top:2px">Collected at the counter now</div>
+          </div>
+          <div style="width:22px;height:22px;border-radius:50%;background:#0758d6;display:grid;place-items:center;flex-shrink:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        </div>
+        <div class="row" style="gap:13px;border:1px solid #dce2e9;background:#fff;border-radius:11px;padding:0 15px;min-height:56px">
+          <svg width="21" height="21" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.8" width="16" height="18.4" rx="2.6"/><path d="M10 18.4h4"/></svg>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:600;color:#102039">UPI</div>
+            <div style="font-size:11px;color:#5c6878;margin-top:2px">Collected at the counter now</div>
+          </div>
+          <div style="width:22px;height:22px;border-radius:50%;border:2px solid #c8d2e0;flex-shrink:0"></div>
+        </div>
+        <div class="row" style="gap:13px;border:1px solid #dce2e9;background:#fff;border-radius:11px;padding:0 15px;min-height:56px">
+          <svg width="21" height="21" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 7.6h11v9.2h-11z"/><path d="M13.8 10.8h3.6l2.8 2.8v3.2h-6.4z"/><circle cx="6.6" cy="18.4" r="1.7"/><circle cx="16.4" cy="18.4" r="1.7"/></svg>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:600;color:#102039">Pay on delivery</div>
+            <div style="font-size:11px;color:#5c6878;margin-top:2px">Nothing collected today</div>
+          </div>
+          <div style="width:22px;height:22px;border-radius:50%;border:2px solid #c8d2e0;flex-shrink:0"></div>
+        </div>
+    </div>
+
+    <label style="display:flex;flex-direction:column;gap:8px">
+      <span class="lbl">ESTIMATED DELIVERY</span>
+      <span class="fld" style="justify-content:space-between">
+        <span>Sat, 13 Sep &middot; <span style="color:#5c6878">2 days</span></span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8.5 3v4M15.5 3v4"/></svg>
+      </span>
+    </label>
+  </div>
+
+  <div class="foot">
+    <div class="row" style="justify-content:space-between">
+      <span style="font-size:13px;color:#5c6878;font-weight:600">Total</span>
+      <span class="num" style="font-size:21px">&#8377;680</span>
+    </div>
+    <div class="btn">Place order</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

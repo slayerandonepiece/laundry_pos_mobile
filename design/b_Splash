@@ -1,0 +1,14 @@
+<div class="scr" style="background:#0758d6;align-items:center;justify-content:center;gap:0">
+  <div style="position:absolute;top:-90px;right:-90px;width:280px;height:280px;border-radius:50%;border:40px solid rgba(255,255,255,.055)"></div>
+  <div style="position:absolute;bottom:-120px;left:-80px;width:300px;height:300px;border-radius:50%;border:52px solid rgba(255,255,255,.045)"></div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:22px;z-index:1">
+    <div style="width:92px;height:92px;border-radius:26px;background:#fff;display:grid;place-items:center">
+      <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6a2.2 2.2 0 00-2.2 2.2c0 1 .7 1.8 1.6 2.1L4 13.4A2 2 0 005.2 17h13.6a2 2 0 001.2-3.6l-7.4-5.5c.9-.3 1.6-1.1 1.6-2.1A2.2 2.2 0 0012 3.6z"/></svg>
+    </div>
+    <div style="text-align:center">
+      <h1 style="font-size:42px;color:#fff">MyShop</h1>
+      <p style="margin:9px 0 0;font-size:12px;font-weight:700;letter-spacing:.19em;color:#a9c7f6">LAUNDRY&nbsp;POS</p>
+    </div>
+  </div>
+  <div style="position:absolute;bottom:54px;font-size:12px;color:#9dbdf2">Signing you in&hellip;</div>
+</div>

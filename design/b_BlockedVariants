@@ -1,0 +1,53 @@
+<div style="width:660px;min-height:720px;background:#fff;padding:34px;display:flex;flex-direction:column;gap:22px">
+  <div>
+    <div style="font-size:11px;font-weight:700;letter-spacing:.16em;color:#0758d6">BLOCKED ACCESS</div>
+    <h1 style="font-size:31px;margin-top:12px">Four reasons, two audiences</h1>
+    <p style="margin:11px 0 0;font-size:14px;color:#5c6878;line-height:1.6;max-width:540px">All four are computed live on every request, never cached — access returns the moment the cause clears. The owner is told what happened; staff are only ever pointed at the owner.</p>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="border:1px solid #e8ecf1;border-radius:12px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,32,57,.05)">
+        <div class="row" style="gap:9px;margin-bottom:11px">
+          <span class="pill" style="background:#fffdf5;color:#92400e">Plan expired</span>
+          <span style="font-size:11px;color:#667388;font-family:Manrope,sans-serif;font-weight:700">payment_lapsed</span>
+        </div>
+        <div style="display:grid;grid-template-columns:64px minmax(0,1fr);gap:9px 13px;font-size:12.5px;line-height:1.55">
+          <span style="color:#0758d6;font-weight:700">OWNER</span><span style="color:#102039">Names the exact paid-through date and says access resumes on renewal.</span>
+          <span style="color:#5c6878;font-weight:700">STAFF</span><span style="color:#5c6878">&ldquo;Access paused. Please check with your store owner.&rdquo; No dates, no figures.</span>
+        </div>
+      </div>
+      <div style="border:1px solid #e8ecf1;border-radius:12px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,32,57,.05)">
+        <div class="row" style="gap:9px;margin-bottom:11px">
+          <span class="pill" style="background:#fef2f1;color:#b42318">Store locked</span>
+          <span style="font-size:11px;color:#667388;font-family:Manrope,sans-serif;font-weight:700">store_locked</span>
+        </div>
+        <div style="display:grid;grid-template-columns:64px minmax(0,1fr);gap:9px 13px;font-size:12.5px;line-height:1.55">
+          <span style="color:#0758d6;font-weight:700">OWNER</span><span style="color:#102039">Locked by the platform administrator; contact support.</span>
+          <span style="color:#5c6878;font-weight:700">STAFF</span><span style="color:#5c6878">Same generic message &mdash; staff cannot tell a lock from a lapse.</span>
+        </div>
+      </div>
+      <div style="border:1px solid #e8ecf1;border-radius:12px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,32,57,.05)">
+        <div class="row" style="gap:9px;margin-bottom:11px">
+          <span class="pill" style="background:#eff3f8;color:#5c6878">Store archived</span>
+          <span style="font-size:11px;color:#667388;font-family:Manrope,sans-serif;font-weight:700">store_archived</span>
+        </div>
+        <div style="display:grid;grid-template-columns:64px minmax(0,1fr);gap:9px 13px;font-size:12.5px;line-height:1.55">
+          <span style="color:#0758d6;font-weight:700">OWNER</span><span style="color:#102039">The store is closed. History is preserved, nothing is destroyed.</span>
+          <span style="color:#5c6878;font-weight:700">STAFF</span><span style="color:#5c6878">Same generic message.</span>
+        </div>
+      </div>
+      <div style="border:1px solid #e8ecf1;border-radius:12px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,32,57,.05)">
+        <div class="row" style="gap:9px;margin-bottom:11px">
+          <span class="pill" style="background:#eff3f8;color:#5c6878">Access removed</span>
+          <span style="font-size:11px;color:#667388;font-family:Manrope,sans-serif;font-weight:700">membership_inactive</span>
+        </div>
+        <div style="display:grid;grid-template-columns:64px minmax(0,1fr);gap:9px 13px;font-size:12.5px;line-height:1.55">
+          <span style="color:#0758d6;font-weight:700">OWNER</span><span style="color:#102039">Not applicable &mdash; an owner cannot revoke their own membership.</span>
+          <span style="color:#5c6878;font-weight:700">STAFF</span><span style="color:#5c6878">&ldquo;Your access to this store was turned off.&rdquo; Other stores are unaffected.</span>
+        </div>
+      </div>
+  </div>
+  <div style="border:1px solid #e8ecf1;border-radius:12px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,32,57,.05)">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">Sign-out always works</div>
+    <div style="font-size:12px;color:#5c6878;line-height:1.6">The blocking screen replaces the content, not the shell. Whatever the reason, the person can still call the owner and sign out — they are never trapped.</div>
+  </div>
+</div>

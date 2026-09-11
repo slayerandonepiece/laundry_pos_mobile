@@ -1,0 +1,38 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div>
+        <div style="font-size:20px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">Orders</div>
+        <div style="font-size:11.5px;color:#5c6878;margin-top:3px">Chinnappanahalli &middot; Ramesh K.</div>
+      </div>
+      <div style="width:40px;height:40px;border-radius:10px;border:1px solid #dce2e9;display:grid;place-items:center">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 16.5v2a1.8 1.8 0 01-1.8 1.8H5.8A1.8 1.8 0 014 18.5v-13a1.8 1.8 0 011.8-1.8h7.4A1.8 1.8 0 0115 5.5v2"/><path d="M19.5 12H9.5M16.5 8.5l3.5 3.5-3.5 3.5"/></svg>
+      </div>
+    </div>
+  </div>
+  <div class="bdy" style="gap:12px">
+    <div class="fld" style="background:#fff;justify-content:space-between">
+      <div class="row" style="gap:10px;min-width:0">
+        <svg width="17" height="17" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        <span style="font-size:14px">EL-999</span>
+      </div>
+      <svg width="18" height="18" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.1" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+    </div>
+    <div class="row" style="gap:8px;overflow:hidden">
+      <span class="chip on">All 31</span>
+      <span class="chip">Pending 8</span>
+      <span class="chip">In progress 11</span>
+      <span class="chip">Ready</span>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:0 24px">
+      <div style="width:64px;height:64px;border-radius:20px;background:#eff3f8;display:grid;place-items:center">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#667388" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+      </div>
+      <div>
+        <h3 style="font-size:17px;margin:0">Nothing matches &ldquo;EL-999&rdquo;</h3>
+        <p class="hint" style="margin:9px 0 0">Try a customer name, phone number, or a different order number.</p>
+      </div>
+      <span style="display:inline-flex;align-items:center;min-height:44px;padding:0 10px;margin:-11px -10px;font-size:13px;font-weight:700;color:#0758d6">Clear search</span>
+    </div>
+  </div>

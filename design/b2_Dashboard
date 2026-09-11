@@ -1,0 +1,79 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row">
+        <div class="mark" style="width:40px;height:40px;font-family:Manrope;font-size:13px;font-weight:800">CH</div>
+        <div>
+          <div class="row" style="gap:6px">
+            <span style="font-size:15px;font-weight:700;line-height:1.25">Chinnappanahalli</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 9.5l6.5 6 6.5-6"/></svg>
+          </div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:2px">Priya N. &middot; Owner</div>
+        </div>
+      </div>
+      <span class="chip" style="min-height:40px;font-size:11.5px;gap:6px;flex-shrink:0">Sep
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 9.5l6.5 6 6.5-6"/></svg>
+      </span>
+    </div>
+  </div>
+
+  <div class="bdy" style="gap:12px">
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="statgrid">
+        <div class="statcell" style="border-right:1px solid #edf1f6;border-bottom:1px solid #edf1f6">
+          <span>Today&rsquo;s sales</span><strong class="num">&#8377;8,450</strong>
+        </div>
+        <div class="statcell" style="border-bottom:1px solid #edf1f6">
+          <span>This month</span><strong class="num">&#8377;1.94L</strong>
+        </div>
+        <div class="statcell" style="border-right:1px solid #edf1f6">
+          <span>Cash in hand</span><strong class="num">&#8377;21,900</strong>
+        </div>
+        <div class="statcell">
+          <span>Orders</span><strong class="num">248</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:15px;background:#fef2f1;border-color:#f5c6c1">
+      <div class="row" style="gap:13px">
+        <div class="tile" style="background:#fff">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#b42318" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.4"/><circle cx="12" cy="12" r="2.6"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11.5px;font-weight:700;color:#b42318">TO COLLECT</div>
+          <div class="num" style="font-size:24px;color:#b42318;margin-top:4px">&#8377;7,240</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:11.5px;color:#b42318;font-weight:600">5 orders</div>
+          <svg width="18" height="18" style="margin-top:6px" viewBox="0 0 24 24" fill="none" stroke="#b42318" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5l6.5 6.5-6.5 6.5"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="ovstrip">
+        <div class="ovcell" style="border-right:1px solid #edf1f6"><span class="num" style="color:#5c6878">8</span><small>Pending</small></div>
+        <div class="ovcell" style="border-right:1px solid #edf1f6"><span class="num" style="color:#0758d6">11</span><small>In progress</small></div>
+        <div class="ovcell" style="border-right:1px solid #edf1f6"><span class="num" style="color:#92400e">4</span><small>Ready</small></div>
+        <div class="ovcell"><span class="num" style="color:#b42318">1</span><small>Overdue</small></div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div class="row" style="justify-content:space-between;margin-bottom:15px">
+        <h3 style="font-size:15px">Daily sales</h3>
+        <span class="seeall">Reports</span>
+      </div>
+      <div style="height:78px;display:flex;gap:9px;align-items:flex-end">
+        <div style="flex:1;height:44%;background:#cddffc;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:66%;background:#0758d6;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:38%;background:#cddffc;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:81%;background:#0758d6;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:57%;background:#cddffc;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:100%;background:#0758d6;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:29%;background:#cddffc;border-radius:4px 4px 0 0"></div>
+      </div>
+    </div>
+  </div>

@@ -1,0 +1,19 @@
+<div class="scr">
+  <div class="scrim"></div>
+  <div class="dlgwrap">
+    <div class="dlg" style="gap:16px">
+      <div>
+        <h2 style="font-size:20px">Mark as paid?</h2>
+        <p class="hint" style="margin:9px 0 0;font-size:13px">Electricity &middot; due 12 Sep</p>
+      </div>
+      <div style="background:#f7f9fc;border:1px solid #e8ecf1;border-radius:12px;padding:15px;text-align:center">
+        <div class="num" style="font-size:30px">&#8377;6,400</div>
+        <div class="hint" style="margin-top:6px">Counts against today&rsquo;s cash in hand</div>
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="btn sec" style="flex:1;min-height:48px">Cancel</div>
+        <div class="btn" style="flex:1;min-height:48px">Mark paid</div>
+      </div>
+    </div>
+  </div>
+</div>

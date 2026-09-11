@@ -1,0 +1,70 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr" style="padding-bottom:13px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row" style="gap:11px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div style="font-size:17px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.03em">Staff</div>
+          <div style="font-size:11px;color:#5c6878;margin-top:1px">3 active &middot; 1 deactivated</div>
+        </div>
+      </div>
+      <div style="width:38px;height:38px;border-radius:10px;background:#0758d6;display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></div>
+    </div>
+  </div>
+  <div class="bdy" style="gap:11px">
+    <div class="card" style="padding:14px 15px;background:#eaf1ff;border-color:#cddffc">
+      <div class="row">
+        <div class="mark" style="width:42px;height:42px;font-family:Manrope;font-size:15px;font-weight:800">PN</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Priya N.</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">priya.n &middot; you</div>
+        </div>
+        <span class="pill" style="background:#0758d6;color:#fff">Owner</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px 15px">
+      <div class="row">
+        <div class="mark" style="width:42px;height:42px;background:#eff3f8;color:#5c6878;font-family:Manrope;font-size:15px;font-weight:800">RK</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Ramesh K.</div>
+          <div class="row" style="gap:6px;margin-top:4px">
+            <span style="font-size:11.5px;color:#5c6878">ramesh.k</span>
+            <span class="pill" style="background:#f1f3f6;color:#5c6878">Employee</span>
+          </div>
+        </div>
+        <div style="width:44px;height:26px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:20px;height:20px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px 15px">
+      <div class="row">
+        <div class="mark" style="width:42px;height:42px;background:#eff3f8;color:#5c6878;font-family:Manrope;font-size:15px;font-weight:800">SD</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Suresh D.</div>
+          <div class="row" style="gap:6px;margin-top:4px">
+            <span style="font-size:11.5px;color:#5c6878">suresh.d</span>
+            <span class="pill" style="background:#f1f3f6;color:#5c6878">Employee</span>
+          </div>
+        </div>
+        <div style="width:44px;height:26px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:20px;height:20px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px 15px;opacity:.58">
+      <div class="row">
+        <div class="mark" style="width:42px;height:42px;background:#eff3f8;color:#5c6878;font-family:Manrope;font-size:15px;font-weight:800">LM</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Lakshmi M.</div>
+          <div class="row" style="gap:6px;margin-top:4px">
+            <span style="font-size:11.5px;color:#5c6878">lakshmi.m</span>
+            <span class="pill" style="background:#fef2f1;color:#b42318">No access</span>
+          </div>
+        </div>
+        <div style="width:44px;height:26px;border-radius:99px;background:#dce2e9;padding:3px;display:flex;flex-shrink:0"><div style="width:20px;height:20px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+
+    <div style="font-size:11.5px;color:#5c6878;line-height:1.55;padding:0 2px">Turning someone off removes their access to this store only &mdash; they keep any account they have at your other stores.</div>
+  </div>

@@ -1,0 +1,48 @@
+<div class="scr" style="justify-content:flex-end">
+  <div style="position:absolute;inset:0;background:#061b3a;opacity:.42"></div>
+  <div style="position:absolute;top:0;left:0;right:0;bottom:0;padding:54px 20px 0;filter:blur(1.5px);opacity:.5">
+    <div class="card" style="padding:14px"><div class="row"><div class="mark" style="width:34px;height:34px;font-size:13px;font-weight:800">CH</div><div><div style="font-weight:700;font-size:14px">Chinnappanahalli</div><div style="font-size:11px;color:#5c6878">Owner workspace</div></div></div></div>
+  </div>
+
+  <div style="position:relative;background:#fff;border-radius:20px 20px 0 0;padding:10px 0 26px;display:flex;flex-direction:column;gap:0;max-height:620px">
+    <div style="width:38px;height:4px;border-radius:99px;background:#dce2e9;margin:0 auto 14px"></div>
+    <div style="padding:0 20px 14px;display:flex;flex-direction:column;gap:13px">
+      <div>
+        <h2 style="font-size:20px">Switch store</h2>
+        <p style="margin:5px 0 0;font-size:12.5px;color:#5c6878">You own 3 stores. Data never mixes between them.</p>
+      </div>
+      <div class="fld" style="background:#f7f9fc;border-color:#e8ecf1">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        <span style="color:#667388">Filter stores</span>
+      </div>
+    </div>
+
+    <div style="padding:0 12px;display:flex;flex-direction:column;gap:4px">
+      <div class="row" style="background:#eaf1ff;border:1px solid #cddffc;border-radius:12px;padding:12px 12px;min-height:64px">
+        <div class="mark" style="width:40px;height:40px;font-family:Manrope;font-size:14px;font-weight:800">CH</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14.5px">Chinnappanahalli</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:2px">Bengaluru &middot; Owner</div>
+        </div>
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </div>
+      <div class="row" style="padding:12px;min-height:64px">
+        <div class="mark" style="width:40px;height:40px;background:#eff3f8;color:#5c6878;font-family:Manrope;font-size:14px;font-weight:800">SU</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14.5px">Sunrise Laundromat</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:2px">Whitefield &middot; Owner</div>
+        </div>
+      </div>
+      <div class="row" style="padding:12px;min-height:64px">
+        <div class="mark" style="width:40px;height:40px;background:#eff3f8;color:#5c6878;font-family:Manrope;font-size:14px;font-weight:800">HS</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14.5px">HSR Express Wash</div>
+          <div class="row" style="gap:6px;margin-top:3px">
+            <span style="font-size:11.5px;color:#5c6878">HSR Layout</span>
+            <span class="pill" style="background:#fef3c7;color:#92400e">Renews in 5d</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

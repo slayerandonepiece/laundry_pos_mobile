@@ -1,0 +1,95 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div>
+        <div style="font-size:20px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">Orders</div>
+        <div style="font-size:11.5px;color:#5c6878;margin-top:3px">Chinnappanahalli &middot; Ramesh K.</div>
+      </div>
+      <div style="width:40px;height:40px;border-radius:10px;border:1px solid #dce2e9;display:grid;place-items:center">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 16.5v2a1.8 1.8 0 01-1.8 1.8H5.8A1.8 1.8 0 014 18.5v-13a1.8 1.8 0 011.8-1.8h7.4A1.8 1.8 0 0115 5.5v2"/><path d="M19.5 12H9.5M16.5 8.5l3.5 3.5-3.5 3.5"/></svg>
+      </div>
+    </div>
+  </div>
+  <div class="bdy" style="gap:12px">
+    <div class="fld" style="background:#fff">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+      <span style="color:#667388;font-size:14px">Search order, customer or phone</span>
+    </div>
+    <div class="row" style="gap:8px;overflow:hidden">
+      <span class="chip on">All 31</span>
+      <span class="chip" style="border-color:#f5c6c1;color:#b42318;background:#fef2f1">To collect 5</span>
+      <span class="chip">Pending 8</span>
+      <span class="chip">Ready</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:11px">
+      <div class="card" style="padding:15px;opacity:1">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="min-width:0;flex:1">
+            <div class="row" style="gap:8px">
+              <span class="num" style="font-size:14.5px">EL-248</span>
+              <span class="pill" style="background:#fef3c7;color:#92400e">Ready</span>
+            </div>
+            <div style="font-size:14px;font-weight:600;margin-top:8px">Vikram Shetty</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:4px">2 services &middot; 11 Sep</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div class="num" style="font-size:17px">&#8377;680</div>
+            <span class="pill" style="background:#fef2f1;color:#b42318;margin-top:7px">&#8377;680 due</span>
+          </div>
+        </div>
+        <div style="margin-top:13px;display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;border:1.5px solid #0758d6;border-radius:9px;color:#0758d6;font-size:13.5px;font-weight:700">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.4"/><circle cx="12" cy="12" r="2.6"/></svg>
+          Collect &#8377;680
+        </div>
+      </div>
+      <div class="card" style="padding:15px;opacity:1">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="min-width:0;flex:1">
+            <div class="row" style="gap:8px">
+              <span class="num" style="font-size:14.5px">EL-249</span>
+              <span class="pill" style="background:#eff3f8;color:#5c6878">Pending</span>
+            </div>
+            <div style="font-size:14px;font-weight:600;margin-top:8px">Anjali Rao</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:4px">2 services &middot; today</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div class="num" style="font-size:17px">&#8377;680</div>
+            <span class="pill" style="background:#e7f5ef;color:#0f6e4c;margin-top:7px">Paid</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="padding:15px;opacity:1">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="min-width:0;flex:1">
+            <div class="row" style="gap:8px">
+              <span class="num" style="font-size:14.5px">EL-247</span>
+              <span class="pill" style="background:#eaf1ff;color:#0758d6">In progress</span>
+            </div>
+            <div style="font-size:14px;font-weight:600;margin-top:8px">Meera Krishnan</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:4px">Dry clean &times;6 &middot; 10 Sep</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div class="num" style="font-size:17px">&#8377;2,100</div>
+            <span class="pill" style="background:#fef2f1;color:#b42318;margin-top:7px">&#8377;2,100 due</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="padding:15px;opacity:.55">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="min-width:0;flex:1">
+            <div class="row" style="gap:8px">
+              <span class="num" style="font-size:14.5px">EL-246</span>
+              <span class="pill" style="background:#e7f5ef;color:#0f6e4c">Delivered</span>
+            </div>
+            <div style="font-size:14px;font-weight:600;margin-top:8px">Sanjay Gupta</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:4px">Steam iron &middot; 9 Sep</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div class="num" style="font-size:17px">&#8377;860</div>
+            <span class="pill" style="background:#e7f5ef;color:#0f6e4c;margin-top:7px">Paid</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>

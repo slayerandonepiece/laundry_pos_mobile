@@ -1,0 +1,40 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row" style="gap:12px">
+        <svg width="23" height="23" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div style="font-size:18px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">Your details</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">Priya N. &middot; Owner</div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+  <div class="bdy" style="gap:18px">
+    <label style="display:flex;flex-direction:column;gap:8px">
+      <span class="lbl">YOUR NAME</span>
+      <span class="fld" style="min-height:54px">Priya N.</span>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:8px">
+      <span class="lbl">USERNAME</span>
+      <span class="fld" style="min-height:54px;justify-content:space-between">priya.n
+        <span style="font-size:11.5px;color:#667388">used to sign in</span>
+      </span>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:8px">
+      <span class="lbl">EMAIL <span style="font-weight:500;color:#667388">&middot; optional</span></span>
+      <span class="fld" style="min-height:54px">priya@chinnappanahalli.in</span>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:8px">
+      <span class="lbl">PHONE <span style="font-weight:500;color:#667388">&middot; optional</span></span>
+      <span class="fld" style="min-height:54px;gap:0"><span style="color:#5c6878;font-weight:600">+91</span><span style="width:1px;height:22px;background:#e8ecf1;margin:0 13px"></span><span class="num" style="font-size:15px">98455 70012</span></span>
+    </label>
+    <div class="inset" style="display:flex;gap:11px;align-items:flex-start">
+      <svg width="18" height="18" style="flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11.2v5M12 7.9v.01"/></svg>
+      <span class="hint">This is you, not the shop. Customers never see these &mdash; the store profile is what prints on invoices.</span>
+    </div>
+  </div>
+  <div class="foot"><div class="btn">Save changes</div></div>
+</div>

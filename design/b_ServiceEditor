@@ -1,0 +1,57 @@
+<div class="scr">
+  <div class="scrim"></div>
+  <div class="dlgwrap">
+    <div class="dlg">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="font-size:20px">Edit service</h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.1" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+      </div>
+
+      <label style="display:flex;flex-direction:column;gap:8px">
+        <span class="lbl">SERVICE NAME</span>
+        <span class="fld">Steam iron</span>
+      </label>
+
+      <label style="display:flex;flex-direction:column;gap:8px">
+        <span class="lbl">CATEGORY</span>
+        <span class="fld" style="justify-content:space-between">Iron
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 9.5l6.5 6 6.5-6"/></svg>
+        </span>
+      </label>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <span class="lbl">CHARGED BY</span>
+        <div class="row" style="gap:9px">
+          <div class="chip on" style="flex:1;justify-content:center;min-height:46px;font-size:14px">Per kg</div>
+          <div class="chip" style="flex:1;justify-content:center;min-height:46px;font-size:14px">Per piece</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div class="row" style="justify-content:space-between">
+          <span class="lbl">PRICE SLABS</span>
+          <span style="display:inline-flex;align-items:center;min-height:44px;padding:0 10px;margin:-11px -10px;font-size:12px;font-weight:700;color:#0758d6">+ Add slab</span>
+        </div>
+        <div class="row" style="gap:9px">
+          <span class="fld" style="flex:1;font-size:13.5px;color:#5c6878">Up to <strong style="color:#102039;margin-left:4px">3 kg</strong></span>
+          <span class="fld" style="flex:1;font-size:13.5px"><span style="color:#5c6878">&#8377;</span>&nbsp;240</span>
+        </div>
+        <div class="row" style="gap:9px">
+          <span class="fld" style="flex:1;font-size:13.5px;color:#5c6878">Then per kg</span>
+          <span class="fld" style="flex:1;font-size:13.5px"><span style="color:#5c6878">&#8377;</span>&nbsp;70</span>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:space-between;border-top:1px solid #eef1f6;padding-top:16px">
+        <div><div style="font-size:13.5px;font-weight:700">Available at the counter</div>
+        <div class="hint" style="margin-top:3px">Hidden services stay on past orders</div></div>
+        <div style="width:46px;height:27px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+
+      <div class="row" style="gap:10px">
+        <div class="btn sec" style="flex:1;min-height:48px">Cancel</div>
+        <div class="btn" style="flex:1;min-height:48px">Save</div>
+      </div>
+    </div>
+  </div>
+</div>

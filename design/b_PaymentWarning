@@ -1,0 +1,64 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr" style="padding-bottom:12px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row">
+        <div class="mark" style="width:34px;height:34px;font-family:Manrope;font-size:12.5px;font-weight:800">CH</div>
+        <div>
+          <div class="row" style="gap:5px"><span style="font-weight:700;font-size:14.5px;line-height:1.25">Chinnappanahalli</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 9.5l6.5 6 6.5-6"/></svg>
+          </div>
+          <div style="font-size:11px;color:#5c6878">Priya N. &middot; Owner</div>
+        </div>
+      </div>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>
+    </div>
+  </div>
+
+  <div class="bdy">
+    <div style="display:flex;gap:11px;background:#fef3c7;border:1px solid #f3d488;border-radius:13px;padding:13px 14px;align-items:flex-start">
+      <svg width="20" height="20" style="flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8l8.6 15.4H3.4z"/><path d="M12 9.6v4M12 16.8v.01"/></svg>
+      <div style="min-width:0">
+        <div style="font-size:13.5px;font-weight:700;color:#7c3a06;line-height:1.4">Renewal due in 5 days</div>
+        <div style="font-size:12.5px;color:#92400e;margin-top:4px;line-height:1.5">Your plan covers this store through <strong>16 Sep 2026</strong>. Record the renewal to avoid an interruption.</div>
+      </div>
+    </div>
+
+    <div class="row" style="gap:11px">
+      <div class="card" style="flex:1;padding:15px;background:#0758d6;border-color:#0758d6;position:relative;overflow:hidden">
+        <div style="position:absolute;right:-26px;top:-18px;width:82px;height:82px;border-radius:50%;border:16px solid rgba(255,255,255,.07)"></div>
+        <div style="font-size:12px;color:#d9e7ff">Today&rsquo;s sales</div>
+        <div class="num" style="font-size:26px;color:#fff;margin-top:9px">&#8377;8,450</div>
+        <div style="font-size:11px;color:#d9e7ff;margin-top:5px">12 orders</div>
+      </div>
+      <div class="card" style="flex:1;padding:15px">
+        <div style="font-size:12px;color:#5c6878">Cash in hand</div>
+        <div class="num" style="font-size:26px;margin-top:9px">&#8377;21,900</div>
+        <div style="font-size:11px;color:#5c6878;margin-top:5px">After expenses</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div class="row" style="justify-content:space-between;margin-bottom:15px">
+        <h3 style="font-size:15px">Sales this week</h3>
+        <span style="font-size:11px;color:#5c6878">Mon&ndash;Sun</span>
+      </div>
+      <div style="height:92px;display:flex;gap:9px;align-items:flex-end">
+        <div style="flex:1;height:44%;background:#a8c7f8;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:66%;background:#0758d6;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:38%;background:#a8c7f8;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:81%;background:#0758d6;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:57%;background:#a8c7f8;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:100%;background:#0758d6;border-radius:4px 4px 0 0"></div>
+        <div style="flex:1;height:29%;background:#a8c7f8;border-radius:4px 4px 0 0"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <div class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg><span>Dashboard</span></div>
+    <div><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><path d="M12 8.2v7.6M8.2 12h7.6"/></svg><span>New Sale</span></div>
+    <div><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3h13v18l-2.6-1.6L13.4 21 11 19.4 8.6 21 6 19.4 5.5 21z"/><path d="M9 8.4h6M9 12.4h6"/></svg><span>Orders</span></div>
+    <div><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg><span>More</span></div>
+  </div>
+</div>

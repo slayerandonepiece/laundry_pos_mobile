@@ -1,0 +1,101 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div>
+        <div style="font-size:20px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">New sale</div>
+        <div style="font-size:11.5px;color:#5c6878;margin-top:3px">6 services available</div>
+      </div>
+      <div style="width:40px;height:40px;border-radius:11px;border:1px solid #dce2e9;background:#fff;display:grid;place-items:center;flex-shrink:0">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+      </div>
+    </div>
+    <div class="row" style="gap:8px">
+      <span class="chip on">All</span>
+      <span class="chip" style="gap:7px"><span style="width:9px;height:9px;border-radius:3px;background:#0758d6"></span>Wash</span>
+      <span class="chip" style="gap:7px"><span style="width:9px;height:9px;border-radius:3px;background:#6d4bc7"></span>Dry clean</span>
+      <span class="chip" style="gap:7px"><span style="width:9px;height:9px;border-radius:3px;background:#92400e"></span>Iron</span>
+    </div>
+  </div>
+  <div class="bdy" style="gap:10px">
+    <div style="background:#f5f9ff;border:1.5px solid #0758d6;border-radius:16px;padding:13px 14px;box-shadow:0 2px 6px rgba(16,32,57,.05)">
+      <div class="row" style="gap:13px">
+        <div class="tile" style="background:#eaf1ff">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 3.5h15v17h-15z"/><circle cx="12" cy="13" r="4.2"/><path d="M8 7h2"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Wash &amp; fold</div>
+          <div class="num" style="font-size:12px;color:#5c6878;margin-top:3px">&#8377;100 / kg</div>
+          <div class="row" style="gap:5px;margin-top:6px"><span class="num" style="font-size:13px;color:#0758d6">&#8377;420</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5l4 4-11 11H5.5v-4z"/></svg><span style="font-size:11px;color:#0758d6;font-weight:600">Edit</span></div>
+        </div>
+        <div style="min-width:100px;min-height:44px;border:1.5px solid #0758d6;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;flex-shrink:0;box-shadow:0 0 0 3px rgba(7,88,214,.13)"><span class="num" style="font-size:16px">4.2</span><span style="font-size:12px;color:#5c6878;font-weight:600">kg</span></div>
+      </div>
+    </div>
+    <div style="background:#f5f9ff;border:1.5px solid #0758d6;border-radius:16px;padding:13px 14px;box-shadow:0 2px 6px rgba(16,32,57,.05)">
+      <div class="row" style="gap:13px">
+        <div class="tile" style="background:#f0ebfd">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6d4bc7" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a2 2 0 00-2 2c0 .9.6 1.6 1.4 1.9L5 12.2A1.8 1.8 0 006 15.5h12a1.8 1.8 0 001-3.3l-6.4-4.8c.8-.3 1.4-1 1.4-1.9a2 2 0 00-2-2z"/><path d="M7 19h10"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Shirt dry clean</div>
+          <div class="num" style="font-size:12px;color:#5c6878;margin-top:3px">&#8377;130 each</div>
+          <div class="row" style="gap:5px;margin-top:6px"><span class="num" style="font-size:13px;color:#0758d6">&#8377;260</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5l4 4-11 11H5.5v-4z"/></svg><span style="font-size:11px;color:#0758d6;font-weight:600">Edit</span></div>
+        </div>
+        <div class="row" style="gap:0;flex-shrink:0;border:1.5px solid #0758d6;border-radius:11px;overflow:hidden;background:#fff"><div style="width:36px;min-height:44px;display:grid;place-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg></div><div class="num" style="min-width:28px;text-align:center;font-size:16px">2</div><div style="width:36px;min-height:44px;display:grid;place-items:center;background:#0758d6"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></div></div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid #edf1f6;border-radius:16px;padding:13px 14px;box-shadow:0 2px 6px rgba(16,32,57,.05)">
+      <div class="row" style="gap:13px">
+        <div class="tile" style="background:#fef3c7">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 15.5v-2.8a5.2 5.2 0 015.2-5.2h6.8l4 8z"/><path d="M3.5 18.5h16"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Steam iron</div>
+          <div class="num" style="font-size:12px;color:#5c6878;margin-top:3px">Up to 3kg &#8377;240 &middot; +&#8377;70/kg</div>
+          
+        </div>
+        <div style="min-width:72px;min-height:44px;border-radius:11px;border:1.5px solid #0758d6;color:#0758d6;font-size:13.5px;font-weight:700;display:grid;place-items:center;flex-shrink:0">Add</div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid #edf1f6;border-radius:16px;padding:13px 14px;box-shadow:0 2px 6px rgba(16,32,57,.05)">
+      <div class="row" style="gap:13px">
+        <div class="tile" style="background:#f0ebfd">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6d4bc7" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a2 2 0 00-2 2c0 .9.6 1.6 1.4 1.9L5 12.2A1.8 1.8 0 006 15.5h12a1.8 1.8 0 001-3.3l-6.4-4.8c.8-.3 1.4-1 1.4-1.9a2 2 0 00-2-2z"/><path d="M7 19h10"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Trouser dry clean</div>
+          <div class="num" style="font-size:12px;color:#5c6878;margin-top:3px">&#8377;160 each</div>
+          
+        </div>
+        <div style="min-width:72px;min-height:44px;border-radius:11px;border:1.5px solid #0758d6;color:#0758d6;font-size:13.5px;font-weight:700;display:grid;place-items:center;flex-shrink:0">Add</div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid #edf1f6;border-radius:16px;padding:13px 14px;box-shadow:0 2px 6px rgba(16,32,57,.05)">
+      <div class="row" style="gap:13px">
+        <div class="tile" style="background:#fef3c7">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 15.5v-2.8a5.2 5.2 0 015.2-5.2h6.8l4 8z"/><path d="M3.5 18.5h16"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:700">Saree roll press</div>
+          <div class="num" style="font-size:12px;color:#5c6878;margin-top:3px">&#8377;150 each</div>
+          
+        </div>
+        <div style="min-width:72px;min-height:44px;border-radius:11px;border:1.5px solid #0758d6;color:#0758d6;font-size:13.5px;font-weight:700;display:grid;place-items:center;flex-shrink:0">Add</div>
+      </div>
+    </div>
+  </div>
+  <div style="flex-shrink:0;background:#fff;border-top:1px solid #e8ecf1;padding:14px 20px;display:flex;flex-direction:column;gap:12px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row" style="gap:9px">
+        <div style="min-width:24px;height:24px;border-radius:8px;background:#0758d6;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;font-family:Manrope,sans-serif">2</div>
+        <span style="font-size:13px;color:#5c6878;font-weight:600">services added</span>
+      </div>
+      <div class="row" style="gap:14px">
+        <span style="display:inline-flex;align-items:center;min-height:44px;padding:0 10px;margin:-11px -10px;font-size:13px;font-weight:700;color:#b42318">Clear</span>
+        <span class="num" style="font-size:20px">&#8377;680</span>
+      </div>
+    </div>
+    <div class="btn">Continue to checkout
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5l6.5 6.5-6.5 6.5"/></svg>
+    </div>
+  </div>

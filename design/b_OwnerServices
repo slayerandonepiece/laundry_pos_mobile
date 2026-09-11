@@ -1,0 +1,94 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row" style="gap:12px">
+        <svg width="23" height="23" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div style="font-size:18px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">Services</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">9 active &middot; 2 hidden</div>
+        </div>
+      </div>
+      <div style="width:40px;height:40px;border-radius:10px;background:#0758d6;display:grid;place-items:center;flex-shrink:0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></div>
+    </div>
+  </div>
+  <div class="bdy" style="gap:11px">
+    <div class="card" style="padding:14px 15px;opacity:1">
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14.5px;font-weight:700">Wash &amp; fold</div>
+          <div style="font-size:11px;color:#667388;margin-top:3px">Wash</div>
+          <div class="row" style="gap:7px;margin-top:6px">
+            <span class="pill" style="background:#eaf1ff;color:#0758d6">Per kg</span>
+            <span class="num" style="font-size:12.5px;color:#5c6878">&#8377;100 / kg</span>
+          </div>
+        </div>
+        <div style="width:46px;height:27px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+    <div class="card" style="padding:14px 15px;opacity:1">
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14.5px;font-weight:700">Shirt dry clean</div>
+          <div style="font-size:11px;color:#667388;margin-top:3px">Dry clean</div>
+          <div class="row" style="gap:7px;margin-top:6px">
+            <span class="pill" style="background:#eff3f8;color:#5c6878">Per piece</span>
+            <span class="num" style="font-size:12.5px;color:#5c6878">&#8377;130</span>
+          </div>
+        </div>
+        <div style="width:46px;height:27px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+    <div class="card" style="padding:14px 15px;opacity:1">
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14.5px;font-weight:700">Saree roll press</div>
+          <div style="font-size:11px;color:#667388;margin-top:3px">Iron</div>
+          <div class="row" style="gap:7px;margin-top:6px">
+            <span class="pill" style="background:#eff3f8;color:#5c6878">Per piece</span>
+            <span class="num" style="font-size:12.5px;color:#5c6878">&#8377;150</span>
+          </div>
+        </div>
+        <div style="width:46px;height:27px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+    <div class="card" style="padding:14px 15px;opacity:1">
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14.5px;font-weight:700">Steam iron</div>
+          <div style="font-size:11px;color:#667388;margin-top:3px">Iron</div>
+          <div class="row" style="gap:7px;margin-top:6px">
+            <span class="pill" style="background:#eaf1ff;color:#0758d6">Per kg</span>
+            <span class="num" style="font-size:12.5px;color:#5c6878">Up to 3kg &#8377;240 &middot; +&#8377;70/kg</span>
+          </div>
+        </div>
+        <div style="width:46px;height:27px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+    <div class="card" style="padding:14px 15px;opacity:1">
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14.5px;font-weight:700">Trouser dry clean</div>
+          <div style="font-size:11px;color:#667388;margin-top:3px">Dry clean</div>
+          <div class="row" style="gap:7px;margin-top:6px">
+            <span class="pill" style="background:#eff3f8;color:#5c6878">Per piece</span>
+            <span class="num" style="font-size:12.5px;color:#5c6878">&#8377;160</span>
+          </div>
+        </div>
+        <div style="width:46px;height:27px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+    <div class="card" style="padding:14px 15px;opacity:.6">
+      <div class="row" style="justify-content:space-between;gap:12px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14.5px;font-weight:700">Curtain wash</div>
+          <div style="font-size:11px;color:#667388;margin-top:3px">Wash</div>
+          <div class="row" style="gap:7px;margin-top:6px">
+            <span class="pill" style="background:#eff3f8;color:#5c6878">Hidden</span>
+            <span class="num" style="font-size:12.5px;color:#5c6878">&#8377;400</span>
+          </div>
+        </div>
+        <div style="width:46px;height:27px;border-radius:99px;background:#dce2e9;padding:3px;display:flex;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+    </div>
+  </div>

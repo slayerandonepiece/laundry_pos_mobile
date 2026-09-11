@@ -1,0 +1,56 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row" style="gap:12px">
+        <svg width="23" height="23" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div style="font-size:18px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">Collect payment</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">EL-248 &middot; Vikram Shetty</div>
+        </div>
+      </div>
+      <svg width="22" height="22" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.1" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+    </div>
+  </div>
+
+  <div class="bdy" style="gap:15px">
+    <div style="background:#fef2f1;border:1px solid #f5c6c1;border-radius:14px;padding:18px 20px;text-align:center">
+      <div style="font-size:12px;font-weight:700;color:#b42318;letter-spacing:.03em">BALANCE DUE</div>
+      <div class="num" style="font-size:38px;color:#b42318;margin-top:8px">&#8377;280</div>
+      <div style="font-size:11.5px;color:#5c6878;margin-top:7px">of &#8377;680 total &middot; &#8377;400 already paid</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <span class="lbl">COLLECTED VIA</span>
+        <div class="row" style="gap:13px;border:1.5px solid #0758d6;background:#f5f9ff;border-radius:11px;padding:0 15px;min-height:56px">
+          <svg width="21" height="21" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.4"/><circle cx="12" cy="12" r="2.6"/></svg>
+          <div style="flex:1;min-width:0"><div style="font-size:14.5px;font-weight:700;color:#0758d6">Cash</div><div style="font-size:11px;color:#5c6878;margin-top:2px">Handed over at the counter</div></div>
+          <div style="width:22px;height:22px;border-radius:50%;background:#0758d6;display:grid;place-items:center;flex-shrink:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        </div>
+        <div class="row" style="gap:13px;border:1px solid #dce2e9;background:#fff;border-radius:11px;padding:0 15px;min-height:56px">
+          <svg width="21" height="21" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.8" width="16" height="18.4" rx="2.6"/><path d="M10 18.4h4"/></svg>
+          <div style="flex:1;min-width:0"><div style="font-size:14.5px;font-weight:600;color:#102039">UPI</div><div style="font-size:11px;color:#5c6878;margin-top:2px">Scanned or transferred</div></div>
+          <div style="width:22px;height:22px;border-radius:50%;border:2px solid #c8d2e0;flex-shrink:0"></div>
+        </div>
+    </div>
+
+    <label style="display:flex;flex-direction:column;gap:8px">
+      <span class="lbl">AMOUNT RECEIVED</span>
+      <span class="fld" style="min-height:54px;border-color:#0758d6;box-shadow:0 0 0 3px rgba(7,88,214,.13)">
+        <span style="color:#5c6878;font-size:16px">&#8377;</span>&nbsp;<span class="num" style="font-size:19px">280</span>
+      </span>
+    </label>
+
+    <div class="row" style="justify-content:space-between;border:1.5px solid #0758d6;background:#f5f9ff;border-radius:11px;padding:14px 15px">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:13.5px;font-weight:700;color:#0758d6">Also mark as delivered</div>
+        <div style="font-size:11.5px;color:#5c6878;margin-top:3px">Creates the invoice for this order</div>
+      </div>
+      <div style="width:46px;height:27px;border-radius:99px;background:#0758d6;padding:3px;display:flex;justify-content:flex-end;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="btn">Collect &#8377;280 and deliver</div>
+  </div>
+</div>

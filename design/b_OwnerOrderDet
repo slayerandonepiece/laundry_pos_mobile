@@ -1,0 +1,87 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row" style="gap:12px">
+        <svg width="23" height="23" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div style="font-size:18px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">EL-248</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">Taken by Ramesh K. &middot; 11 Sep</div>
+        </div>
+      </div>
+      <span class="pill" style="background:#fef3c7;color:#92400e;padding:7px 13px;font-size:11px;flex-shrink:0">Ready</span>
+    </div>
+  </div>
+  <div class="bdy" style="gap:13px">
+    <div class="row" style="gap:0;justify-content:space-between">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:1"><div style="width:22px;height:22px;border-radius:50%;background:#0f6e4c;display:grid;place-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><span style="font-size:11px;color:#0f6e4c;font-weight:700">Pending</span></div>
+      <div style="height:2px;background:#0f6e4c;flex:1;margin-bottom:21px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:1"><div style="width:22px;height:22px;border-radius:50%;background:#0f6e4c;display:grid;place-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><span style="font-size:11px;color:#0f6e4c;font-weight:700">In progress</span></div>
+      <div style="height:2px;background:#0f6e4c;flex:1;margin-bottom:21px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:1"><div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2.5px solid #0758d6"></div><span style="font-size:11px;color:#0758d6;font-weight:700">Ready</span></div>
+      <div style="height:2px;background:#e8ecf1;flex:1;margin-bottom:21px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:1"><div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #dce2e9"></div><span style="font-size:11px;color:#667388;font-weight:600">Delivered</span></div>
+    </div>
+
+    <div class="card" style="padding:14px 15px">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div style="font-size:14.5px;font-weight:700">Vikram Shetty</div>
+          <div style="font-size:12px;color:#5c6878;margin-top:4px">+91 98455 12034</div>
+        </div>
+        <div style="width:42px;height:42px;border-radius:50%;background:#eaf1ff;display:grid;place-items:center;flex-shrink:0">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 3.5h3l1.5 4-2 1.4a12 12 0 006.1 6.1l1.4-2 4 1.5v3a1.8 1.8 0 01-2 1.8C10.3 19.6 4.4 13.7 4.7 5.5a1.8 1.8 0 011.8-2z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:15px">
+      <div class="row" style="justify-content:space-between;font-size:13.5px;margin-bottom:11px">
+        <span>Wash &amp; fold <span style="color:#5c6878">&middot; 4.2 kg</span></span>
+        <span class="num" style="font-size:13.5px">&#8377;420</span>
+      </div>
+      <div class="row" style="justify-content:space-between;font-size:13.5px">
+        <span>Shirt dry clean <span style="color:#5c6878">&times; 2</span></span>
+        <span class="num" style="font-size:13.5px">&#8377;260</span>
+      </div>
+      <div class="sep" style="margin:13px 0"></div>
+      <div class="row" style="justify-content:space-between;font-size:12.5px;color:#5c6878;margin-bottom:10px">
+        <span>Pay on delivery</span><span style="font-size:12.5px;color:#5c6878">nothing collected yet</span>
+      </div>
+      <div class="row" style="justify-content:space-between">
+        <span style="display:inline-flex;align-items:center;min-height:44px;padding:0 10px;margin:-11px -10px;font-size:13.5px;font-weight:700;color:#b42318">Balance due</span>
+        <span class="num" style="font-size:20px;color:#b42318">&#8377;680</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px 15px">
+      <div class="row" style="gap:11px;align-items:flex-start">
+        <svg width="18" height="18" style="flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 5.5h15M4.5 10.5h15M4.5 15.5h9"/></svg>
+        <div style="min-width:0">
+          <div style="font-size:12px;font-weight:700;color:#5c6878">CARE INSTRUCTIONS</div>
+          <div style="font-size:13px;margin-top:5px;line-height:1.55">Separate whites. No starch on the shirts.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.4"/><circle cx="12" cy="12" r="2.6"/></svg>
+      Collect payment
+    </div>
+    <div class="btn sec" style="min-height:48px;font-size:14px">Update status</div>
+
+    <div class="inset" style="display:flex;gap:11px;align-items:flex-start">
+      <svg width="18" height="18" style="flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="#667388" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.4" width="15" height="9.4" rx="2.2"/><path d="M8.2 10.4V7.6a3.8 3.8 0 017.6 0v2.8"/></svg>
+      <span class="hint">The invoice is created once this order is collected in full.</span>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="row" style="padding:15px;gap:13px;min-height:56px">
+        <svg width="20" height="20" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.2V12l3.2 2"/></svg>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600">Activity &amp; history</div>
+          <div style="font-size:11px;color:#5c6878;margin-top:2px">Delivery commitment, who changed what</div>
+        </div>
+        <svg width="18" height="18" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#667388" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5l6.5 6.5-6.5 6.5"/></svg>
+      </div>
+    </div>

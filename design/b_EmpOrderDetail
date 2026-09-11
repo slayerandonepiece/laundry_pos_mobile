@@ -1,0 +1,88 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row" style="gap:12px">
+        <svg width="23" height="23" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div class="num" style="font-size:18px">EL-248</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">Placed 11 Sep &middot; ready by 13 Sep</div>
+        </div>
+      </div>
+      <span class="pill" style="background:#fef3c7;color:#92400e;padding:7px 13px;font-size:11px;flex-shrink:0">Ready</span>
+    </div>
+  </div>
+
+  <div class="bdy" style="gap:13px">
+    <div class="row" style="gap:0;justify-content:space-between">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;background:#0f6e4c;display:grid;place-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <span style="font-size:11px;color:#0f6e4c;font-weight:700">Pending</span>
+      </div>
+      <div style="height:2px;background:#0f6e4c;flex:1;margin-bottom:21px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;background:#0f6e4c;display:grid;place-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <span style="font-size:11px;color:#0f6e4c;font-weight:700">In progress</span>
+      </div>
+      <div style="height:2px;background:#0f6e4c;flex:1;margin-bottom:21px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2.5px solid #0758d6"></div>
+        <span style="font-size:11px;color:#0758d6;font-weight:700">Ready</span>
+      </div>
+      <div style="height:2px;background:#e8ecf1;flex:1;margin-bottom:21px"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:1">
+        <div style="width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #dce2e9"></div>
+        <span style="font-size:11px;color:#667388;font-weight:600">Delivered</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px 15px">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div style="font-size:14.5px;font-weight:700">Vikram Shetty</div>
+          <div style="font-size:12px;color:#5c6878;margin-top:4px">+91 98455 12034</div>
+        </div>
+        <div style="width:42px;height:42px;border-radius:50%;background:#eaf1ff;display:grid;place-items:center;flex-shrink:0">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 3.5h3l1.5 4-2 1.4a12 12 0 006.1 6.1l1.4-2 4 1.5v3a1.8 1.8 0 01-2 1.8C10.3 19.6 4.4 13.7 4.7 5.5a1.8 1.8 0 011.8-2z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:15px">
+      <div class="row" style="justify-content:space-between;font-size:13.5px;margin-bottom:11px">
+        <span>Wash &amp; fold <span style="color:#5c6878">&middot; 4.2 kg</span></span>
+        <span class="num" style="font-size:13.5px">&#8377;420</span>
+      </div>
+      <div class="row" style="justify-content:space-between;font-size:13.5px">
+        <span>Shirt dry clean <span style="color:#5c6878">&times; 2</span></span>
+        <span class="num" style="font-size:13.5px">&#8377;260</span>
+      </div>
+      <div class="sep" style="margin:13px 0"></div>
+      <div class="row" style="justify-content:space-between;font-size:12.5px;color:#5c6878;margin-bottom:10px">
+        <span>Paid &middot; Cash, 11 Sep</span><span class="num" style="font-size:13px;color:#102039">&#8377;400</span>
+      </div>
+      <div class="row" style="justify-content:space-between">
+        <span style="display:inline-flex;align-items:center;min-height:44px;padding:0 10px;margin:-11px -10px;font-size:13.5px;font-weight:700;color:#b42318">Balance due</span>
+        <span class="num" style="font-size:19px;color:#b42318">&#8377;280</span>
+      </div>
+    </div>
+
+    <div class="btn">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.2A8.5 8.5 0 116.3 5.4"/><path d="M20.5 3.5v6h-6"/></svg>
+      Update status
+    </div>
+    <div class="row" style="gap:9px">
+      <div class="btn sec" style="flex:1;min-height:52px;font-size:12px;flex-direction:column;gap:5px;padding:8px 0">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
+        View
+      </div>
+      <div class="btn sec" style="flex:1;min-height:52px;font-size:12px;flex-direction:column;gap:5px;padding:8px 0">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0f6e4c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.6a8.4 8.4 0 01-12.4 7.4L3.5 20.5l1.6-4.8a8.4 8.4 0 1115.4-4.1z"/></svg>
+        WhatsApp
+      </div>
+      <div class="btn sec" style="flex:1;min-height:52px;font-size:12px;flex-direction:column;gap:5px;padding:8px 0">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8v11.7M8 11.5l4 4 4-4"/><path d="M4.5 20h15"/></svg>
+        Download
+      </div>
+    </div>
+  </div>

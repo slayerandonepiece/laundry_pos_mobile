@@ -1,0 +1,82 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr" style="padding-bottom:13px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row" style="gap:11px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div style="font-size:17px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.03em">Expenses</div>
+          <div style="font-size:11px;color:#5c6878;margin-top:1px">September &middot; &#8377;42,300</div>
+        </div>
+      </div>
+      <div style="width:38px;height:38px;border-radius:10px;background:#0758d6;display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></div>
+    </div>
+  </div>
+  <div class="bdy" style="gap:11px">
+    <div class="row" style="gap:7px">
+      <span class="chip on">All</span>
+      <span class="chip">Unpaid 3</span>
+      <span class="chip">Recurring</span>
+    </div>
+
+    <div class="lbl" style="margin-top:2px">SEPTEMBER 2026</div>
+    <div class="card" style="padding:13px 15px">
+      <div class="row" style="justify-content:space-between">
+        <div style="min-width:0">
+          <div class="row" style="gap:7px">
+            <span style="font-size:14px;font-weight:700">Shop rent</span>
+            <span class="pill" style="background:#eaf1ff;color:#0758d6">Monthly</span>
+          </div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:4px">Due 5 Sep</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="num" style="font-size:16px">&#8377;28,000</div>
+          <span class="pill" style="background:#e7f5ef;color:#0f6e4c;margin-top:5px">Paid</span>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:13px 15px">
+      <div class="row" style="justify-content:space-between">
+        <div style="min-width:0">
+          <div class="row" style="gap:7px">
+            <span style="font-size:14px;font-weight:700">Electricity</span>
+            <span class="pill" style="background:#eaf1ff;color:#0758d6">Monthly</span>
+          </div>
+          <div style="font-size:11.5px;color:#b42318;margin-top:4px;font-weight:600">Due 12 Sep &middot; tomorrow</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="num" style="font-size:16px">&#8377;6,400</div>
+          <span class="pill" style="background:#fef3c7;color:#92400e;margin-top:5px">Unpaid</span>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:13px 15px">
+      <div class="row" style="justify-content:space-between">
+        <div style="min-width:0">
+          <div style="font-size:14px;font-weight:700">Detergent restock</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:4px">8 Sep</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="num" style="font-size:16px">&#8377;4,200</div>
+          <span class="pill" style="background:#fef3c7;color:#92400e;margin-top:5px">Unpaid</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="lbl" style="margin-top:6px">AUGUST 2026</div>
+    <div class="card" style="padding:13px 15px;opacity:.62">
+      <div class="row" style="justify-content:space-between">
+        <div style="min-width:0">
+          <div class="row" style="gap:7px">
+            <span style="font-size:14px;font-weight:700">Shop rent</span>
+            <span class="pill" style="background:#eaf1ff;color:#0758d6">Monthly</span>
+          </div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:4px">Due 5 Aug</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="num" style="font-size:16px">&#8377;28,000</div>
+          <span class="pill" style="background:#e7f5ef;color:#0f6e4c;margin-top:5px">Paid</span>
+        </div>
+      </div>
+    </div>
+  </div>

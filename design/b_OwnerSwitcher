@@ -1,0 +1,44 @@
+<div class="scr">
+  <div class="scrim"></div>
+  <div class="dlgwrap">
+    <div class="dlg">
+      <div>
+        <h2 style="font-size:20px">Switch store</h2>
+        <p class="hint" style="margin:8px 0 0">You own 3 stores. Data never mixes between them.</p>
+      </div>
+      <div class="fld" style="background:#f7f9fc;border-color:#e8ecf1;min-height:46px">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        <span style="color:#667388;font-size:14px">Search stores</span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="dlgopt on" style="min-height:62px">
+          <div class="mark" style="width:38px;height:38px;font-family:Manrope;font-size:13px;font-weight:800">CH</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:700;color:#0758d6">Chinnappanahalli</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:2px">Bengaluru</div>
+          </div>
+          <svg width="20" height="20" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        </div>
+        <div class="dlgopt" style="min-height:62px">
+          <div class="mark" style="width:38px;height:38px;background:#eff3f8;color:#5c6878;font-family:Manrope;font-size:13px;font-weight:800">SU</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:600">Sunrise Laundromat</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:2px">Whitefield</div>
+          </div>
+        </div>
+        <div class="dlgopt" style="min-height:62px">
+          <div class="mark" style="width:38px;height:38px;background:#eff3f8;color:#5c6878;font-family:Manrope;font-size:13px;font-weight:800">HS</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:600">HSR Express Wash</div>
+            <div class="row" style="gap:6px;margin-top:3px">
+              <span style="font-size:11.5px;color:#5c6878">HSR Layout</span>
+              <span class="pill" style="background:#fffdf5;color:#92400e;border:1px solid #f3d488">Renews in 5d</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn sec" style="min-height:48px">Cancel</div>
+    </div>
+  </div>
+</div>

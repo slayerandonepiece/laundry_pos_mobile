@@ -1,0 +1,37 @@
+<div class="scr">
+  <div class="scrim"></div>
+  <div class="dlgwrap">
+    <div class="dlg">
+      <div>
+        <h2 style="font-size:20px">Update status</h2>
+        <p class="hint" style="margin:8px 0 0">EL-248 &middot; Vikram Shetty</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="dlgopt">
+          <span style="flex:1;font-size:15px;font-weight:600">Pending</span>
+          <div style="width:22px;height:22px;border-radius:50%;border:2px solid #c8d2e0;flex-shrink:0"></div>
+        </div>
+        <div class="dlgopt">
+          <span style="flex:1;font-size:15px;font-weight:600">In progress</span>
+          <div style="width:22px;height:22px;border-radius:50%;border:2px solid #c8d2e0;flex-shrink:0"></div>
+        </div>
+        <div class="dlgopt on">
+          <span style="flex:1;font-size:15px;font-weight:700;color:#0758d6">Ready</span>
+          <div style="width:22px;height:22px;border-radius:50%;background:#0758d6;display:grid;place-items:center;flex-shrink:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        </div>
+
+      </div>
+
+      <div class="row" style="gap:10px;background:#fffdf5;border:1px solid #f3d488;border-radius:11px;padding:12px 13px;align-items:flex-start">
+        <svg width="17" height="17" style="flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8l8.6 15.4H3.4z"/><path d="M12 9.6v4M12 16.8v.01"/></svg>
+        <span style="font-size:12px;color:#92400e;line-height:1.5">Delivered is not set here &mdash; collecting the payment marks the order delivered.</span>
+      </div>
+
+      <div class="row" style="gap:10px">
+        <div class="btn sec" style="flex:1;min-height:48px">Cancel</div>
+        <div class="btn" style="flex:1;min-height:48px">Update</div>
+      </div>
+    </div>
+  </div>
+</div>

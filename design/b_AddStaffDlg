@@ -1,0 +1,34 @@
+<div class="scr">
+  <div class="scrim"></div>
+  <div class="dlgwrap">
+    <div class="dlg">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="font-size:20px">Add staff</h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.1" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:8px">
+        <span class="lbl">FULL NAME</span>
+        <span class="fld">Suresh D.</span>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:8px">
+        <span class="lbl">USERNAME</span>
+        <span class="fld">suresh.d</span>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:8px">
+        <span class="lbl">TEMPORARY PASSWORD</span>
+        <span class="fld" style="justify-content:space-between">
+          <span class="num" style="font-size:15px;letter-spacing:.08em">7K4M2QPX</span>
+          <span style="display:inline-flex;align-items:center;min-height:44px;padding:0 10px;margin:-11px -10px;font-size:12px;font-weight:700;color:#0758d6">Generate</span>
+        </span>
+      </label>
+      <div class="row" style="gap:10px;background:#f7f9fc;border:1px solid #e8ecf1;border-radius:11px;padding:13px 14px;align-items:flex-start">
+        <svg width="17" height="17" style="flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11.2v5M12 7.9v.01"/></svg>
+        <span class="hint">They sign in with this once, then choose their own password. Staff get New Sale and Orders only.</span>
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="btn sec" style="flex:1;min-height:48px">Cancel</div>
+        <div class="btn" style="flex:1;min-height:48px">Add</div>
+      </div>
+    </div>
+  </div>
+</div>

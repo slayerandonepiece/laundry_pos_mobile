@@ -1,0 +1,549 @@
+{
+  "artboards": [
+    {
+      "file": "Splash.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "1 \u00b7 Splash"
+    },
+    {
+      "file": "LoginEmpty.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "2a \u00b7 Login \u2014 empty"
+    },
+    {
+      "file": "LoginValidation.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "2b \u00b7 Login \u2014 field errors"
+    },
+    {
+      "file": "LoginInvalid.dc.html",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "2c \u00b7 Login \u2014 wrong password"
+    },
+    {
+      "file": "LoginLoading.dc.html",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "2d \u00b7 Login \u2014 signing in"
+    },
+    {
+      "file": "LoginNoStore.dc.html",
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "2e \u00b7 Login \u2014 no store linked"
+    },
+    {
+      "file": "ResetPassword.dc.html",
+      "x": 0,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "3a \u00b7 Set new password"
+    },
+    {
+      "file": "ResetPasswordError.dc.html",
+      "x": 470,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "3b \u00b7 Set new password \u2014 mismatch"
+    },
+    {
+      "file": "AccessBlocked.dc.html",
+      "x": 940,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "4 \u00b7 Access blocked"
+    },
+    {
+      "file": "BlockedVariants.dc.html",
+      "x": 1410,
+      "y": 1000,
+      "w": 660,
+      "h": 720,
+      "title": "4a \u00b7 All four block reasons"
+    },
+    {
+      "file": "NewSaleBrowse.dc.html",
+      "x": 0,
+      "y": 2000,
+      "w": 390,
+      "h": 844,
+      "title": "5a \u00b7 New sale \u2014 services"
+    },
+    {
+      "file": "NewSaleAdding.dc.html",
+      "x": 470,
+      "y": 2000,
+      "w": 390,
+      "h": 844,
+      "title": "5b \u00b7 Adding \u2014 kg field & stepper"
+    },
+    {
+      "file": "EditItem.dc.html",
+      "x": 940,
+      "y": 2000,
+      "w": 390,
+      "h": 844,
+      "title": "5c \u00b7 Edit or remove an item"
+    },
+    {
+      "file": "ClearCart.dc.html",
+      "x": 1410,
+      "y": 2000,
+      "w": 390,
+      "h": 844,
+      "title": "5d \u00b7 Clear the sale"
+    },
+    {
+      "file": "CustomerDetails.dc.html",
+      "x": 1880,
+      "y": 2000,
+      "w": 390,
+      "h": 844,
+      "title": "6 \u00b7 Customer \u2014 full screen"
+    },
+    {
+      "file": "Checkout.dc.html",
+      "x": 2350,
+      "y": 2000,
+      "w": 390,
+      "h": 844,
+      "title": "7 \u00b7 Checkout \u2014 full screen"
+    },
+    {
+      "file": "OrderPlaced.dc.html",
+      "x": 2820,
+      "y": 2000,
+      "w": 390,
+      "h": 844,
+      "title": "8 \u00b7 Order placed"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 3000,
+      "w": 390,
+      "h": 844,
+      "title": "9 \u00b7 Orders \u2014 To collect"
+    },
+    {
+      "file": "OrdersEmpty.dc.html",
+      "x": 470,
+      "y": 3000,
+      "w": 390,
+      "h": 844,
+      "title": "9a \u00b7 Orders \u2014 first use"
+    },
+    {
+      "file": "OrdersNoResults.dc.html",
+      "x": 940,
+      "y": 3000,
+      "w": 390,
+      "h": 844,
+      "title": "9b \u00b7 Orders \u2014 no match"
+    },
+    {
+      "file": "OrderDetail.dc.html",
+      "x": 1410,
+      "y": 3000,
+      "w": 390,
+      "h": 844,
+      "title": "9c \u00b7 Order detail \u2014 full screen"
+    },
+    {
+      "file": "StatusDialogDue.dc.html",
+      "x": 1880,
+      "y": 3000,
+      "w": 390,
+      "h": 844,
+      "title": "9d \u00b7 Update status"
+    },
+    {
+      "file": "CollectDialog.dc.html",
+      "x": 2350,
+      "y": 3000,
+      "w": 390,
+      "h": 844,
+      "title": "9e \u00b7 Collect payment"
+    },
+    {
+      "file": "OrderDone.dc.html",
+      "x": 0,
+      "y": 4000,
+      "w": 390,
+      "h": 844,
+      "title": "9f \u00b7 Order detail \u2014 settled"
+    },
+    {
+      "file": "OrderActivity.dc.html",
+      "x": 470,
+      "y": 4000,
+      "w": 390,
+      "h": 844,
+      "title": "9g \u00b7 Order activity & history"
+    },
+    {
+      "file": "InvoiceActions.dc.html",
+      "x": 940,
+      "y": 4000,
+      "w": 390,
+      "h": 844,
+      "title": "9h \u00b7 Invoice actions"
+    },
+    {
+      "file": "InvoiceViewer.dc.html",
+      "x": 1410,
+      "y": 4000,
+      "w": 390,
+      "h": 844,
+      "title": "9i \u00b7 Invoice"
+    },
+    {
+      "file": "RbacLegend.dc.html",
+      "x": 1880,
+      "y": 4000,
+      "w": 660,
+      "h": 760,
+      "title": "Access matrix"
+    },
+    {
+      "file": "OwnerDash.dc.html",
+      "x": 0,
+      "y": 5200,
+      "w": 390,
+      "h": 844,
+      "title": "A1 \u00b7 Dashboard"
+    },
+    {
+      "file": "DashboardReports.dc.html",
+      "x": 470,
+      "y": 5200,
+      "w": 390,
+      "h": 844,
+      "title": "A2 \u00b7 Dashboard \u2014 reports"
+    },
+    {
+      "file": "DateRange.dc.html",
+      "x": 940,
+      "y": 5200,
+      "w": 390,
+      "h": 844,
+      "title": "A3 \u00b7 Reporting period"
+    },
+    {
+      "file": "OwnerSwitcher.dc.html",
+      "x": 1410,
+      "y": 5200,
+      "w": 390,
+      "h": 844,
+      "title": "A4 \u00b7 Switch store"
+    },
+    {
+      "file": "OwnerWarning.dc.html",
+      "x": 1880,
+      "y": 5200,
+      "w": 390,
+      "h": 844,
+      "title": "A5 \u00b7 Renewal due"
+    },
+    {
+      "file": "OwnerBlocked.dc.html",
+      "x": 2350,
+      "y": 5200,
+      "w": 390,
+      "h": 844,
+      "title": "A6 \u00b7 Plan expired"
+    },
+    {
+      "file": "OwnerOrders.dc.html",
+      "x": 0,
+      "y": 6200,
+      "w": 390,
+      "h": 844,
+      "title": "A7 \u00b7 Orders"
+    },
+    {
+      "file": "OwnerOrderDetail.dc.html",
+      "x": 470,
+      "y": 6200,
+      "w": 390,
+      "h": 844,
+      "title": "A8 \u00b7 Order detail \u2014 full screen"
+    },
+    {
+      "file": "OwnerServices.dc.html",
+      "x": 0,
+      "y": 7200,
+      "w": 390,
+      "h": 844,
+      "title": "A9 \u00b7 Services"
+    },
+    {
+      "file": "ServiceEditor.dc.html",
+      "x": 470,
+      "y": 7200,
+      "w": 390,
+      "h": 844,
+      "title": "A10 \u00b7 Edit service"
+    },
+    {
+      "file": "OwnerExpenses.dc.html",
+      "x": 940,
+      "y": 7200,
+      "w": 390,
+      "h": 844,
+      "title": "A11 \u00b7 Expenses"
+    },
+    {
+      "file": "AddExpense.dc.html",
+      "x": 1410,
+      "y": 7200,
+      "w": 390,
+      "h": 844,
+      "title": "A12 \u00b7 Add expense"
+    },
+    {
+      "file": "MarkPaid.dc.html",
+      "x": 1880,
+      "y": 7200,
+      "w": 390,
+      "h": 844,
+      "title": "A13 \u00b7 Mark expense paid"
+    },
+    {
+      "file": "OwnerMore.dc.html",
+      "x": 0,
+      "y": 8200,
+      "w": 390,
+      "h": 844,
+      "title": "A14 \u00b7 More"
+    },
+    {
+      "file": "OwnerStaff.dc.html",
+      "x": 470,
+      "y": 8200,
+      "w": 390,
+      "h": 844,
+      "title": "A15 \u00b7 Staff"
+    },
+    {
+      "file": "AddStaff.dc.html",
+      "x": 940,
+      "y": 8200,
+      "w": 390,
+      "h": 844,
+      "title": "A16 \u00b7 Add staff"
+    },
+    {
+      "file": "PaymentMethods.dc.html",
+      "x": 1410,
+      "y": 8200,
+      "w": 390,
+      "h": 844,
+      "title": "A17 \u00b7 Payment methods"
+    },
+    {
+      "file": "StoreProfile.dc.html",
+      "x": 1880,
+      "y": 8200,
+      "w": 390,
+      "h": 844,
+      "title": "A18 \u00b7 Store profile"
+    },
+    {
+      "file": "OwnerProfile.dc.html",
+      "x": 2350,
+      "y": 8200,
+      "w": 390,
+      "h": 844,
+      "title": "A19 \u00b7 Your details"
+    },
+    {
+      "file": "ChangePassword.dc.html",
+      "x": 2820,
+      "y": 8200,
+      "w": 390,
+      "h": 844,
+      "title": "A20 \u00b7 Change password"
+    },
+    {
+      "file": "V_Today.dc.html",
+      "x": 4000,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "V1 \u00b7 Today \u2014 the counter's home"
+    },
+    {
+      "file": "V_Orders.dc.html",
+      "x": 4470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "V2 \u00b7 Orders \u2014 grouped by urgency"
+    },
+    {
+      "file": "V_OrderDetail.dc.html",
+      "x": 4940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "V3 \u00b7 Order detail"
+    },
+    {
+      "file": "V_CollectDialog.dc.html",
+      "x": 5410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "V4 \u00b7 Collect payment"
+    },
+    {
+      "file": "V_Dashboard.dc.html",
+      "x": 4000,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "V5 \u00b7 Dashboard \u2014 one stat cluster"
+    },
+    {
+      "file": "V_NewSale.dc.html",
+      "x": 4470,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "V6 \u00b7 New sale \u2014 typed tiles"
+    },
+    {
+      "file": "V_Checkout.dc.html",
+      "x": 4940,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "V7 \u00b7 Checkout"
+    },
+    {
+      "file": "V_Expenses.dc.html",
+      "x": 5410,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "V8 \u00b7 Expenses \u2014 unpaid first"
+    },
+    {
+      "file": "V_More.dc.html",
+      "x": 5880,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "V9 \u00b7 More"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "band-signin",
+      "x": 0,
+      "y": -176,
+      "w": 520,
+      "text": "1\u20132 \u00b7 SIGNING IN\nEvery login state the server can actually produce: empty, client-side field validation, rejected credentials, in flight, and authenticated-but-not-linked-to-a-store."
+    },
+    {
+      "id": "name-note",
+      "x": 2900,
+      "y": 0,
+      "w": 400,
+      "text": "App name is a placeholder\n\n\"MyShop\" appears only on the splash and login. The customer invoice carries the SHOP's name and address, never the app's \u2014 so renaming the product later touches two screens and no customer-facing output."
+    },
+    {
+      "id": "band-firstrun",
+      "x": 0,
+      "y": 824,
+      "w": 520,
+      "text": "3\u20134 \u00b7 FIRST RUN AND BLOCKED\nAfter the owner resets a password, the temporary one gets the employee in once and the app forces a new one. 4a is the reference sheet for all four block reasons and what each role is told."
+    },
+    {
+      "id": "status-gap",
+      "x": 2160,
+      "y": 1000,
+      "w": 430,
+      "text": "\u26a0 STATUS VOCABULARY \u2014 needs a decision\n\nThese screens use four statuses: Pending \u2192 In progress \u2192 Ready \u2192 Delivered.\n\nThe backend has THREE (prisma/schema.prisma:29): PENDING, IN_PROGRESS, COMPLETED. There is no Ready and no Delivered.\n\nThe designs keep your four because you specified them twice. Shipping them needs the enum extended and a migration; otherwise Ready and Delivered both collapse onto COMPLETED and the 9-series loses a step."
+    },
+    {
+      "id": "band-sale",
+      "x": 0,
+      "y": 1824,
+      "w": 560,
+      "text": "5\u20138 \u00b7 TAKING A SALE\nTap Add: a kg field for weighed services, a \u2212 / + stepper for per-piece. Cards now show real slab pricing.\n\n5c is how a mis-added service or mistyped weight gets fixed \u2014 without it there was no way back. 5d clears the whole sale.\n\nCheckout takes the FULL amount or nothing: Cash, UPI, or Pay on delivery."
+    },
+    {
+      "id": "band-orders",
+      "x": 0,
+      "y": 2824,
+      "w": 640,
+      "text": "9 \u00b7 ORDERS \u2014 THE COLLECT-AND-DELIVER LOOP\nOpening an order always pushes a full independent screen. Both actions on it are dialogs:\n\n9d Update status offers Pending / In progress / Ready. Delivered is never set by hand.\n9e Collect payment takes Cash or UPI for the whole amount \u2014 that one action marks the order delivered and creates the invoice.\n9g carries care instructions, the delivery commitment (overdue / due today / upcoming) and the full status history with who did what."
+    },
+    {
+      "id": "invoice-rule",
+      "x": 1880,
+      "y": 4800,
+      "w": 430,
+      "text": "Invoice rule\n\nCreated only when the order is collected in full \u2014 the same moment it becomes delivered (9e). Never earlier.\n\nBackend changes: getOrCreateOrderInvoice() creates on any view request today; it must refuse until the order is settled. And recordPaymentAction is owner-only \u2014 that guard must be relaxed for 9e."
+    },
+    {
+      "id": "owner-band",
+      "x": 0,
+      "y": 4980,
+      "w": 700,
+      "text": "\u2550\u2550\u2550 SHOP OWNER \u2550\u2550\u2550\nSame system as the employee app \u2014 white surfaces, 56px app bars, centred dialogs, full-screen detail. Four tabs instead of two. New Sale is identical to the employee's (5a\u20138) and is not redrawn.\n\nA1\u2013A6 daily: dashboard, its reports half, the reporting-period picker, store switcher, and the two subscription states.\nA7\u2013A8 orders: same screens as staff, plus who took the order.\nA9\u2013A20 everything an employee never sees."
+    },
+    {
+      "id": "owner-orders-note",
+      "x": 940,
+      "y": 6200,
+      "w": 420,
+      "text": "The owner's order screens are deliberately the SAME as the employee's, plus staff attribution \u2014 one order detail, one collect dialog, one status dialog to build. The role changes what is reachable, not how an order behaves."
+    },
+    {
+      "id": "profile-split",
+      "x": 2900,
+      "y": 8200,
+      "w": 420,
+      "text": "Two different profiles\n\nA18 Store profile \u2014 name, address, phone \u2014 is the invoice header, the only business identity a customer sees.\n\nA19 Your details \u2014 name, username, email, phone \u2014 is the person. Customers never see it. The web app puts both on one Profile page; on mobile they are separate because only one of them is customer-facing."
+    },
+    {
+      "id": "parity-note",
+      "x": 2350,
+      "y": 2824,
+      "w": 430,
+      "text": "Checked against the running web app\n\nEverything the web workspace does at mobile width is now covered, except two deliberate restrictions you set: no partial payments (the web has a free \"Received now\" amount and a separate Record-a-payment amount), and no per-order notes field at the customer step \u2014 though notes still DISPLAY on 9g as Care instructions.\n\nStill web-only by design: the platform-admin sign-in link on login, which belongs to Super Admin, not this app."
+    },
+    {
+      "id": "v2-band",
+      "x": 4000,
+      "y": -300,
+      "w": 760,
+      "text": "\u2550\u2550\u2550 V2 \u2014 PROPOSED REDESIGN \u2550\u2550\u2550\nA separate exploration. Nothing on the left has been touched; v1 remains the approved set.\n\nWhat changed, and why:\n\u2022 Page ground is a faint cool tint (#f7f9fc) so white cards read as objects rather than outlined regions. This reverses the \"pure white\" instruction \u2014 deliberately, to be judged side by side.\n\u2022 Every row leads with a tinted TYPE tile instead of an order code. Laundry has no product photos, so service type carries the colour: wash = blue, dry clean = violet, iron = amber.\n\u2022 Lists group themselves by urgency (Overdue / Due today / Upcoming) instead of relying on the user to pick a filter.\n\u2022 Four dashboard figures collapse into ONE card, freeing ~100px \u2014 which is what makes room for the status strip and To-collect card above the fold.\n\u2022 V1 Today is new: the screen that answers \"what do I need to finish right now?\". Nothing in v1 answers that.\n\nAdapted from the StayFlow operations app's widget vocabulary, not copied from it. The three consumer laundry references were deliberately NOT followed \u2014 photography, greetings and promo cards cost space a counter tool cannot spare."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

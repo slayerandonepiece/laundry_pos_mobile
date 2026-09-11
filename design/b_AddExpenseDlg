@@ -1,0 +1,48 @@
+<div class="scr">
+  <div class="scrim"></div>
+  <div class="dlgwrap">
+    <div class="dlg">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="font-size:20px">Add expense</h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.1" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:8px">
+        <span class="lbl">WHAT FOR</span>
+        <span class="fld">Detergent restock</span>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:8px">
+        <span class="lbl">CATEGORY</span>
+        <span class="fld" style="justify-content:space-between">Supplies
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 9.5l6.5 6 6.5-6"/></svg>
+        </span>
+      </label>
+      <div class="row" style="gap:11px">
+        <label style="display:flex;flex-direction:column;gap:8px;flex:1">
+          <span class="lbl">AMOUNT</span>
+          <span class="fld"><span style="color:#5c6878">&#8377;</span>&nbsp;4,200</span>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:8px;flex:1">
+          <span class="lbl">DATE</span>
+          <span class="fld" style="justify-content:space-between;gap:6px">8 Sep
+            <svg width="17" height="17" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8.5 3v4M15.5 3v4"/></svg>
+          </span>
+        </label>
+      </div>
+      <div class="row" style="justify-content:space-between;background:#f7f9fc;border:1px solid #e8ecf1;border-radius:11px;padding:13px 14px">
+        <div style="min-width:0">
+          <div style="font-size:13.5px;font-weight:700">Repeat every month</div>
+          <div class="hint" style="margin-top:3px">Creates next month automatically</div>
+        </div>
+        <div style="width:46px;height:27px;border-radius:99px;background:#dce2e9;padding:3px;display:flex;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+      <div class="row" style="justify-content:space-between;border-top:1px solid #eef1f6;padding-top:16px">
+        <span style="font-size:13.5px;font-weight:700">Already paid</span>
+        <div style="width:46px;height:27px;border-radius:99px;background:#dce2e9;padding:3px;display:flex;flex-shrink:0"><div style="width:21px;height:21px;border-radius:50%;background:#fff"></div></div>
+      </div>
+      <div class="row" style="gap:10px">
+        <div class="btn sec" style="flex:1;min-height:48px">Cancel</div>
+        <div class="btn" style="flex:1;min-height:48px">Add</div>
+      </div>
+    </div>
+  </div>
+</div>

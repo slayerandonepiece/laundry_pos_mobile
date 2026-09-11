@@ -1,0 +1,72 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row" style="gap:12px">
+        <svg width="23" height="23" style="flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="#102039" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        <div>
+          <div style="font-size:18px;font-weight:800;font-family:Manrope,sans-serif;letter-spacing:-.04em">Order activity</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:3px">EL-248 &middot; Vikram Shetty</div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+  <div class="bdy" style="gap:13px">
+    <div class="card" style="padding:15px">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:12.5px;color:#5c6878;font-weight:600">Expected delivery</span>
+        <span style="font-size:13.5px;font-weight:700">Sat, 13 Sep 2026</span>
+      </div>
+      <div class="sep" style="margin-bottom:12px"></div>
+      <div class="row" style="justify-content:space-between">
+        <span style="font-size:12.5px;color:#5c6878;font-weight:600">Commitment</span>
+        <span class="pill" style="background:#fef2f1;color:#b42318">Overdue &middot; 2 days</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:15px">
+      <h3 style="font-size:14px;margin-bottom:9px">Care instructions</h3>
+      <p style="margin:0;font-size:13px;color:#5c6878;line-height:1.6">Separate whites. No starch on the shirts. Customer will collect after 6pm.</p>
+    </div>
+
+    <div class="card" style="padding:15px">
+      <h3 style="font-size:14px;margin-bottom:15px">Status history</h3>
+      <div style="display:flex;flex-direction:column;gap:0">
+        <div class="row" style="gap:13px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+            <div style="width:11px;height:11px;border-radius:50%;background:#0758d6"></div>
+            <div style="width:2px;flex:1;min-height:34px;background:#e8ecf1"></div>
+          </div>
+          <div style="flex:1;min-width:0;padding-bottom:16px">
+            <div style="font-size:13.5px;font-weight:700">Ready</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:3px">13 Sep, 10:40 am &middot; Ramesh K.</div>
+          </div>
+        </div>
+        <div class="row" style="gap:13px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+            <div style="width:11px;height:11px;border-radius:50%;background:#c8d2e0"></div>
+            <div style="width:2px;flex:1;min-height:34px;background:#e8ecf1"></div>
+          </div>
+          <div style="flex:1;min-width:0;padding-bottom:16px">
+            <div style="font-size:13.5px;font-weight:700">In progress</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:3px">11 Sep, 2:05 pm &middot; Suresh D.</div>
+          </div>
+        </div>
+        <div class="row" style="gap:13px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+            <div style="width:11px;height:11px;border-radius:50%;background:#c8d2e0"></div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:700">Pending</div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:3px">11 Sep, 9:20 am &middot; Ramesh K.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inset" style="display:flex;gap:11px;align-items:flex-start">
+      <svg width="18" height="18" style="flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11.2v5M12 7.9v.01"/></svg>
+      <span class="hint">Work status and payment are tracked separately &mdash; an order can be finished but still owe money.</span>
+    </div>
+  </div>

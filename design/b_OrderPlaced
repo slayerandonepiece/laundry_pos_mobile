@@ -1,0 +1,38 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="bdy" style="justify-content:center;padding:24px 28px;gap:0">
+    <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px">
+      <div style="width:82px;height:82px;border-radius:50%;background:#e7f5ef;display:grid;place-items:center">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#0f6e4c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </div>
+      <div>
+        <h1 style="font-size:26px">Order placed</h1>
+        <p style="margin:11px 0 0;font-size:14.5px;color:#5c6878;line-height:1.6">Anjali Rao &middot; ready by Sat, 13 Sep</p>
+      </div>
+
+      <div class="card" style="width:100%;padding:17px">
+        <div class="row" style="justify-content:space-between;margin-bottom:13px">
+          <span style="font-size:12.5px;color:#5c6878;font-weight:600">Order</span>
+          <span class="num" style="font-size:17px">EL-249</span>
+        </div>
+        <div class="sep" style="margin-bottom:13px"></div>
+        <div class="row" style="justify-content:space-between">
+          <span class="row" style="gap:7px;font-size:13.5px;font-weight:700;color:#0f6e4c">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0f6e4c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+            Paid in full &middot; Cash
+          </span>
+          <span class="num" style="font-size:19px">&#8377;680</span>
+        </div>
+      </div>
+
+      <div class="inset" style="display:flex;gap:11px;align-items:flex-start;text-align:left;width:100%">
+        <svg width="19" height="19" style="flex-shrink:0;margin-top:1px" viewBox="0 0 24 24" fill="none" stroke="#667388" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.8h7.5L19 8.3v12.9H6z"/><path d="M13.2 2.8v5.6h5.6"/></svg>
+        <span class="hint">The invoice is created when this order is collected in full and handed over. You can share it then.</span>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="btn">Start another sale</div>
+    <div class="btn sec" style="color:#5c6878">Go to orders</div>
+  </div>
+</div>

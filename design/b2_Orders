@@ -1,0 +1,107 @@
+<div class="scr">
+  <div class="safe"></div>
+  <div class="hdr">
+    <div class="appbar">
+      <div class="row">
+        <div class="mark" style="width:40px;height:40px;font-family:Manrope;font-size:13px;font-weight:800">RK</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;line-height:1.25">Ramesh K.</div>
+          <div style="font-size:11.5px;color:#5c6878;margin-top:2px">Chinnappanahalli</div>
+        </div>
+      </div>
+      <div class="row" style="gap:9px;flex-shrink:0">
+        <div style="width:40px;height:40px;border-radius:11px;border:1px solid #dce2e9;background:#fff;display:grid;place-items:center">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        </div>
+        <div style="width:40px;height:40px;border-radius:11px;border:1px solid #dce2e9;background:#fff;display:grid;place-items:center">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 16.5v2a1.8 1.8 0 01-1.8 1.8H5.8A1.8 1.8 0 014 18.5v-13a1.8 1.8 0 011.8-1.8h7.4A1.8 1.8 0 0115 5.5v2"/><path d="M19.5 12H9.5M16.5 8.5l3.5 3.5-3.5 3.5"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="bdy" style="gap:11px">
+    <div class="row" style="gap:8px;overflow:hidden">
+      <span class="chip on" style="gap:7px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>All 31</span>
+      <span class="chip" style="gap:7px;border-color:#f5c6c1;color:#b42318;background:#fef2f1">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b42318" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.4"/></svg>To collect 5</span>
+      <span class="chip" style="gap:7px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5c6878" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>Pending 8</span>
+    </div>
+
+    <div class="sechead" style="margin-top:3px"><span style="color:#b42318">OVERDUE &middot; 1</span></div>
+      <div class="card" style="padding:14px">
+        <div class="row" style="gap:13px;align-items:flex-start">
+          <div class="tile" style="background:#fef2f1">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#b42318" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a2 2 0 00-2 2c0 .9.6 1.6 1.4 1.9L5 12.2A1.8 1.8 0 006 15.5h12a1.8 1.8 0 001-3.3l-6.4-4.8c.8-.3 1.4-1 1.4-1.9a2 2 0 00-2-2z"/><path d="M7 19h10"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="row" style="justify-content:space-between;gap:10px">
+              <span style="font-size:15px;font-weight:700">Meera Krishnan</span>
+              <span class="num" style="font-size:16px;flex-shrink:0">&#8377;2,100</span>
+            </div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:3px">EL-247 &middot; Dry clean &times;6</div>
+            <div class="row" style="gap:7px;margin-top:9px">
+              <span class="pill" style="background:#eaf1ff;color:#0758d6">In progress</span>
+              <span style="font-size:11.5px;color:#b42318">Due 2 days ago</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    <div class="sechead" style="margin-top:6px"><span style="color:#92400e">DUE TODAY &middot; 2</span><span class="seeall">See all</span></div>
+      <div class="card" style="padding:14px">
+        <div class="row" style="gap:13px;align-items:flex-start">
+          <div class="tile" style="background:#fef3c7">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 3.5h15v17h-15z"/><circle cx="12" cy="13" r="4.2"/><path d="M8 7h2"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="row" style="justify-content:space-between;gap:10px">
+              <span style="font-size:15px;font-weight:700">Vikram Shetty</span>
+              <span class="num" style="font-size:16px;flex-shrink:0">&#8377;680</span>
+            </div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:3px">EL-248 &middot; Wash &amp; fold, 2 more</div>
+            <div class="row" style="gap:7px;margin-top:9px">
+              <span class="pill" style="background:#fef3c7;color:#92400e">Ready</span>
+              <span style="font-size:11.5px;color:#92400e">Ready to collect</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="padding:14px">
+        <div class="row" style="gap:13px;align-items:flex-start">
+          <div class="tile" style="background:#eaf1ff">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 15.5v-2.8a5.2 5.2 0 015.2-5.2h6.8l4 8z"/><path d="M3.5 18.5h16"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="row" style="justify-content:space-between;gap:10px">
+              <span style="font-size:15px;font-weight:700">Anjali Rao</span>
+              <span class="num" style="font-size:16px;flex-shrink:0">&#8377;680</span>
+            </div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:3px">EL-249 &middot; Steam iron &times;4</div>
+            <div class="row" style="gap:7px;margin-top:9px">
+              <span class="pill" style="background:#eff3f8;color:#5c6878">Pending</span>
+              <span style="font-size:11.5px;color:#5c6878">Paid &middot; by 6pm</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    <div class="sechead" style="margin-top:6px"><span style="color:#5c6878">UPCOMING &middot; 28</span><span class="seeall">See all</span></div>
+      <div class="card" style="padding:14px">
+        <div class="row" style="gap:13px;align-items:flex-start">
+          <div class="tile" style="background:#eaf1ff">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0758d6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 3.5h15v17h-15z"/><circle cx="12" cy="13" r="4.2"/><path d="M8 7h2"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="row" style="justify-content:space-between;gap:10px">
+              <span style="font-size:15px;font-weight:700">Kiran B.</span>
+              <span class="num" style="font-size:16px;flex-shrink:0">&#8377;600</span>
+            </div>
+            <div style="font-size:11.5px;color:#5c6878;margin-top:3px">EL-250 &middot; Wash &amp; fold 6kg</div>
+            <div class="row" style="gap:7px;margin-top:9px">
+              <span class="pill" style="background:#eff3f8;color:#5c6878">Pending</span>
+              <span style="font-size:11.5px;color:#5c6878">Sat, 14 Sep</span>
+            </div>
+          </div>
+        </div>
+      </div>
+  </div>
