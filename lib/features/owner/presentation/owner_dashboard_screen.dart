@@ -265,11 +265,14 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       child: Row(
         children: [
-          // Card 1: Sales today (distinguished by accent border & accent color)
+          // Card 1: Sales today (solid primary fill, matching web's colorful hero tile)
           Expanded(
-            child: AppCard(
-              border: Border.all(color: AppColors.primary, width: 1.5),
+            child: Container(
               padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(14),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -278,8 +281,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     style: TextStyle(
                       fontFamily: AppTextStyles.fontBody,
                       fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.mutedText,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -292,7 +295,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         fontFamily: AppTextStyles.fontDisplay,
                         fontSize: 28,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.primary,
+                        color: Colors.white,
                       ),
                     ),
                   ),
@@ -302,7 +305,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     style: const TextStyle(
                       fontFamily: AppTextStyles.fontBody,
                       fontSize: 11.5,
-                      color: AppColors.mutedText,
+                      color: Color(0xFFD9E7FF),
                     ),
                   ),
                 ],
@@ -367,6 +370,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: _buildOperationChip(
               label: 'Waiting',
               count: metrics.todo,
+              indicatorColor: AppColors.warning,
+              backgroundColor: AppColors.warningBg,
               onTap: widget.onOrdersTabPressed,
             ),
           ),
@@ -375,6 +380,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: _buildOperationChip(
               label: 'Completed',
               count: metrics.completed,
+              indicatorColor: AppColors.success,
+              backgroundColor: AppColors.successBg,
               onTap: widget.onOrdersTabPressed,
             ),
           ),
@@ -383,6 +390,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: _buildOperationChip(
               label: 'Due today',
               count: metrics.dueToday,
+              indicatorColor: AppColors.primary,
+              backgroundColor: AppColors.primaryTint,
               onTap: widget.onOrdersTabPressed,
             ),
           ),
@@ -394,27 +403,43 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _buildOperationChip({
     required String label,
     required int count,
+    required Color indicatorColor,
+    required Color backgroundColor,
     VoidCallback? onTap,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
       ),
       child: InkWell(
         onTap: onTap,
         child: Column(
           children: [
-            Text(
-              '$count',
-              style: const TextStyle(
-                fontFamily: AppTextStyles.fontDisplay,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.text,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: indicatorColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  '$count',
+                  style: const TextStyle(
+                    fontFamily: AppTextStyles.fontDisplay,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 2),
             Text(
@@ -482,9 +507,9 @@ class _PeriodSelectorPill extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.selectedSurface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.controlBorder),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -495,11 +520,11 @@ class _PeriodSelectorPill extends StatelessWidget {
                 fontFamily: AppTextStyles.fontBody,
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
-                color: AppColors.text,
+                color: AppColors.primary,
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down, size: 16, color: AppColors.mutedText),
+            const Icon(Icons.keyboard_arrow_down, size: 16, color: AppColors.primary),
           ],
         ),
       ),
@@ -545,17 +570,60 @@ class _SalesTrendChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Sales by date',
-            style: TextStyle(
-              fontFamily: AppTextStyles.fontBody,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.text,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Sales by date',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(_caption, style: AppTextStyles.hint),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryTint,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'Income',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(_caption, style: AppTextStyles.hint),
           const SizedBox(height: 16),
           SizedBox(
             height: 180,
@@ -618,15 +686,15 @@ class _SalesTrendChart extends StatelessWidget {
                     spots: spots,
                     isCurved: true,
                     curveSmoothness: 0.35,
-                    color: AppColors.mutedText,
+                    color: AppColors.primary,
                     barWidth: 2.5,
                     isStrokeCapRound: true,
                     dotData: FlDotData(
                       show: true,
                       getDotPainter: (spot, percent, barData, index) {
                         return FlDotCirclePainter(
-                          radius: 3,
-                          color: AppColors.mutedText,
+                          radius: 3.5,
+                          color: AppColors.primary,
                           strokeWidth: 2,
                           strokeColor: Colors.white,
                         );
@@ -638,8 +706,8 @@ class _SalesTrendChart extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          AppColors.mutedText.withValues(alpha: 0.12),
-                          AppColors.mutedText.withValues(alpha: 0.01),
+                          AppColors.primary.withValues(alpha: 0.20),
+                          AppColors.primary.withValues(alpha: 0.01),
                         ],
                       ),
                     ),
@@ -712,7 +780,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
           PieChartSectionData(
             value: pendingCount.toDouble(),
             color: AppColors.neutralText,
-            radius: 12,
+            radius: 13,
             showTitle: false,
           ),
         );
@@ -722,7 +790,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
           PieChartSectionData(
             value: inProgressCount.toDouble(),
             color: AppColors.primary,
-            radius: 12,
+            radius: 13,
             showTitle: false,
           ),
         );
@@ -732,7 +800,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
           PieChartSectionData(
             value: completedCount.toDouble(),
             color: AppColors.success,
-            radius: 12,
+            radius: 13,
             showTitle: false,
           ),
         );
@@ -758,16 +826,45 @@ class _OrdersMovingDonutChart extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              SizedBox(
-                width: 90,
-                height: 90,
-                child: PieChart(
-                  PieChartData(
-                    sectionsSpace: 2,
-                    centerSpaceRadius: 28,
-                    sections: sections,
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 90,
+                    height: 90,
+                    child: PieChart(
+                      PieChartData(
+                        sectionsSpace: 2.5,
+                        centerSpaceRadius: 28,
+                        sections: sections,
+                      ),
+                    ),
                   ),
-                ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$total',
+                        style: const TextStyle(
+                          fontFamily: AppTextStyles.fontDisplay,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.text,
+                          height: 1.0,
+                        ),
+                      ),
+                      const Text(
+                        'orders',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.mutedText,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
               const SizedBox(width: 24),
               Expanded(
@@ -842,6 +939,15 @@ class _SalesByServiceChart extends StatelessWidget {
 
   const _SalesByServiceChart({required this.serviceMix});
 
+  static const _serviceColors = [
+    AppColors.primary, // Brand blue
+    Color(0xFF0F6E4C), // Success emerald
+    Color(0xFF2563EB), // Vibrant blue
+    Color(0xFFD97706), // Amber
+    Color(0xFF7C3AED), // Purple
+    Color(0xFF0284C7), // Sky blue
+  ];
+
   @override
   Widget build(BuildContext context) {
     if (serviceMix.isEmpty) return const SizedBox.shrink();
@@ -894,16 +1000,33 @@ class _SalesByServiceChart extends StatelessWidget {
                         if (idx < 0 || idx >= serviceMix.length) {
                           return const SizedBox.shrink();
                         }
+                        final color = _serviceColors[idx % _serviceColors.length];
                         return SideTitleWidget(
                           meta: meta,
-                          child: Text(
-                            serviceMix[idx].label,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.text,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  serviceMix[idx].label,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.text,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       },
@@ -912,12 +1035,13 @@ class _SalesByServiceChart extends StatelessWidget {
                 ),
                 barGroups: List.generate(serviceMix.length, (i) {
                   final amountInRupees = (serviceMix[i].amount / 100).toDouble();
+                  final rodColor = _serviceColors[i % _serviceColors.length];
                   return BarChartGroupData(
                     x: i,
                     barRods: [
                       BarChartRodData(
                         toY: amountInRupees,
-                        color: AppColors.mutedText,
+                        color: rodColor,
                         width: 14,
                         borderRadius: BorderRadius.circular(4),
                         label: BarChartRodLabel(

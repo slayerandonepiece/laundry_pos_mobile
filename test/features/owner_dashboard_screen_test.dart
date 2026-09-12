@@ -16,7 +16,6 @@ import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
-import 'package:myshop/shared/widgets/app_card.dart';
 
 class FakeDashboardOwnerRepository implements OwnerRepository {
   DashboardMetrics metrics;
@@ -184,18 +183,23 @@ void main() {
       expect(find.text('₹500'), findsOneWidget);
       expect(find.text('2 orders'), findsOneWidget);
 
-      // Assert "Sales today" value is styled with accent color AppColors.primary
+      // Assert "Sales today" is a solid-primary-fill hero card with white text
       final todayValueText = tester.widget<Text>(find.text('₹500'));
-      expect(todayValueText.style?.color, AppColors.primary);
+      expect(todayValueText.style?.color, Colors.white);
+      final todayCardContainer = tester.widget<Container>(
+        find
+            .ancestor(
+              of: find.text('₹500'),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      expect(
+        (todayCardContainer.decoration as BoxDecoration).color,
+        AppColors.primary,
+      );
       expect(todayValueText.style?.fontSize, 28);
       expect(todayValueText.style?.fontWeight, FontWeight.w500);
-
-      // Assert "Sales today" AppCard container has the accent border
-      final appCards = tester.widgetList<AppCard>(find.byType(AppCard)).toList();
-      final todayCard = appCards.firstWhere((card) {
-        return card.border?.top.color == AppColors.primary;
-      });
-      expect(todayCard.border?.top.color, AppColors.primary);
 
       // Card 2: "Sales yesterday" (when 'today' selected)
       expect(find.text('Sales yesterday'), findsOneWidget);
@@ -273,9 +277,9 @@ void main() {
       expect(find.text('How your sales moved today'), findsOneWidget);
       expect(find.byType(LineChart), findsOneWidget);
 
-      // Check line color is muted (AppColors.mutedText, NOT bright primary)
+      // Check line color matches app theme (AppColors.primary)
       final lineChart = tester.widget<LineChart>(find.byType(LineChart));
-      expect(lineChart.data.lineBarsData.first.color, AppColors.mutedText);
+      expect(lineChart.data.lineBarsData.first.color, AppColors.primary);
 
       // Empty cash case
       fakeOwnerRepo.metrics = DashboardMetrics(todaySales: 10000, cash: []);
@@ -327,7 +331,6 @@ void main() {
         // Sum of counts equals mockOrdersRepo.cachedOrders.length (1 + 2 + 1 = 4)
         final totalOrderCount = sections.fold<double>(0, (sum, s) => sum + s.value);
         expect(totalOrderCount.toInt(), mockOrdersRepo.cachedOrders.length);
-
       },
     );
 
@@ -371,7 +374,7 @@ void main() {
       expect(find.byType(BarChart), findsOneWidget);
 
       final barChart = tester.widget<BarChart>(find.byType(BarChart));
-      expect(barChart.data.barGroups.first.barRods.first.color, AppColors.mutedText);
+      expect(barChart.data.barGroups.first.barRods.first.color, AppColors.primary);
 
       // Empty serviceMix
       fakeOwnerRepo.metrics = DashboardMetrics(todaySales: 10000, serviceMix: []);
