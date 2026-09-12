@@ -23,7 +23,10 @@ class ExpensesScreen extends StatefulWidget {
 }
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _selectedPeriod = '30d'; // 'today' | '7d' | '30d'
   String _activeFilter = 'all'; // 'all' | 'unpaid' | 'recurring'
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -32,7 +35,92 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  DateTime _startOfDay(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
+
+  DateTime? _parseDate(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) return null;
+    return DateTime.tryParse(dateStr.trim());
+  }
+
+  bool _matchesPeriod(DateTime targetDate, String period, DateTime todayStart) {
+    final d = _startOfDay(targetDate);
+    final tomorrowStart = todayStart.add(const Duration(days: 1));
+
+    switch (period) {
+      case 'today':
+        return d.isAtSameMomentAs(todayStart);
+      case '7d':
+        final start7d = todayStart.subtract(const Duration(days: 6));
+        return !d.isBefore(start7d) && d.isBefore(tomorrowStart);
+      case '30d':
+        final start30d = todayStart.subtract(const Duration(days: 29));
+        final isLast30d = !d.isBefore(start30d) && d.isBefore(tomorrowStart);
+        final isThisMonth =
+            d.year == todayStart.year && d.month == todayStart.month;
+        return isLast30d || isThisMonth;
+      default:
+        return true;
+    }
+  }
+
+  bool _expenseMatchesPeriod(
+    Expense expense,
+    String period,
+    DateTime todayStart,
+  ) {
+    final dueDt = _parseDate(expense.due);
+    final dueMatches =
+        dueDt != null && _matchesPeriod(dueDt, period, todayStart);
+    if (expense.isPaid) {
+      final paidDt = _parseDate(expense.paid);
+      final paidMatches =
+          paidDt != null && _matchesPeriod(paidDt, period, todayStart);
+      return dueMatches || paidMatches;
+    }
+    return dueMatches;
+  }
+
+  void _showMarkPaidDialog(BuildContext context, Expense expense) {
+    showDialog(
+      context: context,
+      builder: (_) => CentredDialog(
+        title: 'Mark expense paid?',
+        subtitle:
+            'Mark "${expense.title}" (${CurrencyFormatter.format(expense.amount)}) as paid?',
+        confirmLabel: 'Mark paid',
+        onConfirm: () {
+          context.read<OwnerBloc>().add(MarkExpensePaidEvent(expense.id));
+          Navigator.pop(context);
+        },
+        cancelLabel: 'Cancel',
+        onCancel: () => Navigator.pop(context),
+      ),
+    );
+  }
+
+  void _showAddExpenseDialog(BuildContext context) {
+    final bloc = context.read<OwnerBloc>();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: bloc,
+          child: const AddExpenseScreen(),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final todayStart = _startOfDay(now);
+
     return BlocConsumer<OwnerBloc, OwnerState>(
       listener: (context, state) {
         if (state.actionMessage != null) {
@@ -46,16 +134,54 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         }
       },
       builder: (context, state) {
-        final expenses = state.expenses;
-        final totalAmount = expenses.fold(0, (sum, e) => sum + e.amount);
+        final allExpenses = state.expenses;
 
-        final filtered = expenses.where((e) {
+        // 1. Compute stats within selected period
+        int paidInPeriod = 0;
+        int unpaidInPeriod = 0;
+        for (final e in allExpenses) {
+          if (e.isPaid) {
+            final paidDt = _parseDate(e.paid);
+            if (paidDt != null &&
+                _matchesPeriod(paidDt, _selectedPeriod, todayStart)) {
+              paidInPeriod += e.amount;
+            }
+          } else {
+            final dueDt = _parseDate(e.due);
+            if (dueDt != null &&
+                _matchesPeriod(dueDt, _selectedPeriod, todayStart)) {
+              unpaidInPeriod += e.amount;
+            }
+          }
+        }
+
+        // 2. Filter expenses by period
+        final periodExpenses = allExpenses.where((e) {
+          return _expenseMatchesPeriod(e, _selectedPeriod, todayStart);
+        }).toList();
+
+        final unpaidCountInPeriod =
+            periodExpenses.where((e) => !e.isPaid).length;
+
+        // 3. Filter by search query and category/status chips
+        final displayedExpenses = periodExpenses.where((e) {
+          if (_searchQuery.isNotEmpty) {
+            final q = _searchQuery.toLowerCase().trim();
+            final matchesTitle = e.title.toLowerCase().contains(q);
+            final matchesCategory = e.category.toLowerCase().contains(q);
+            if (!matchesTitle && !matchesCategory) return false;
+          }
+
           if (_activeFilter == 'unpaid') return !e.isPaid;
           if (_activeFilter == 'recurring') return e.monthly;
           return true;
         }).toList();
 
-        final unpaidCount = expenses.where((e) => !e.isPaid).length;
+        final recurringShownCount =
+            displayedExpenses.where((e) => e.monthly).length;
+
+        final totalPeriodAmount =
+            periodExpenses.fold(0, (sum, e) => sum + e.amount);
 
         return Scaffold(
           backgroundColor: AppColors.surface,
@@ -81,7 +207,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Total ${CurrencyFormatter.format(totalAmount)}',
+                  'Period total ${CurrencyFormatter.format(totalPeriodAmount)}',
                   style: AppTextStyles.hint,
                 ),
               ],
@@ -115,7 +241,187 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                // Filter chips
+                // 1. Period selector row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Expense overview',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontDisplay,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    _PeriodSelector(
+                      selectedPeriod: _selectedPeriod,
+                      onPeriodChanged: (val) {
+                        setState(() => _selectedPeriod = val);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // 2. Stats row
+                // Headline primary card: Paid in selected period
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Paid in selected period',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFD9E7FF),
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      Text(
+                        CurrencyFormatter.format(paidInPeriod),
+                        style: const TextStyle(
+                          fontFamily: AppTextStyles.fontDisplay,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Two secondary cards: Unpaid bills in period & Recurring bills shown
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppCard(
+                        padding: const EdgeInsets.all(15),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Unpaid bills in period',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.mutedText,
+                              ),
+                            ),
+                            const SizedBox(height: 9),
+                            Text(
+                              CurrencyFormatter.format(unpaidInPeriod),
+                              style: TextStyle(
+                                fontFamily: AppTextStyles.fontDisplay,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: unpaidInPeriod > 0
+                                    ? AppColors.danger
+                                    : AppColors.text,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: AppCard(
+                        padding: const EdgeInsets.all(15),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Recurring bills shown',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.mutedText,
+                              ),
+                            ),
+                            const SizedBox(height: 9),
+                            Text(
+                              '$recurringShownCount',
+                              style: const TextStyle(
+                                fontFamily: AppTextStyles.fontDisplay,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.text,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // 3. Search box
+                Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    border: Border.all(color: AppColors.controlBorder),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.search,
+                        size: 19,
+                        color: AppColors.mutedText,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.fontBody,
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Search bills or categories...',
+                            hintStyle: TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 14,
+                              color: AppColors.faintText,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onChanged: (val) {
+                            setState(() => _searchQuery = val);
+                          },
+                        ),
+                      ),
+                      if (_searchController.text.isNotEmpty)
+                        InkWell(
+                          onTap: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                          child: const Icon(
+                            Icons.close,
+                            size: 18,
+                            color: AppColors.mutedText,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // 4. Filter chips
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -127,7 +433,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       ),
                       const SizedBox(width: 8),
                       AppFilterChip(
-                        label: 'Unpaid $unpaidCount',
+                        label: 'Unpaid $unpaidCountInPeriod',
                         isSelected: _activeFilter == 'unpaid',
                         onTap: () => setState(() => _activeFilter = 'unpaid'),
                       ),
@@ -143,17 +449,36 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                if (filtered.isEmpty)
+                // 5. Ledger list or Empty state
+                if (displayedExpenses.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(top: 40),
+                    padding: const EdgeInsets.only(top: 30),
                     child: EmptyState(
-                      icon: Icons.receipt_long_outlined,
-                      title: 'No expenses found',
-                      subtitle: 'Add an expense using the + button above.',
+                      icon: allExpenses.isEmpty
+                          ? Icons.receipt_long_outlined
+                          : Icons.search_off_outlined,
+                      title: allExpenses.isEmpty
+                          ? 'No expenses yet'
+                          : 'No expenses match your filters',
+                      subtitle: allExpenses.isEmpty
+                          ? 'Add an expense using the + button above.'
+                          : 'Try changing your period, search query, or filters.',
+                      actionLabel: allExpenses.isEmpty
+                          ? 'Add expense'
+                          : 'Clear filters',
+                      onAction: allExpenses.isEmpty
+                          ? () => _showAddExpenseDialog(context)
+                          : () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchQuery = '';
+                                _activeFilter = 'all';
+                              });
+                            },
                     ),
                   )
                 else
-                  ...filtered.map((expense) {
+                  ...displayedExpenses.map((expense) {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 11),
                       child: AppCard(
@@ -193,6 +518,20 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                     '${expense.category} · Due ${expense.due}',
                                     style: AppTextStyles.hint,
                                   ),
+                                  if (expense.isPaid &&
+                                      expense.paid != null &&
+                                      expense.paid!.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Paid ${expense.paid}',
+                                      style: const TextStyle(
+                                        fontFamily: AppTextStyles.fontBody,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.success,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -229,160 +568,238 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       },
     );
   }
+}
 
-  void _showMarkPaidDialog(BuildContext context, Expense expense) {
-    showDialog(
-      context: context,
-      builder: (_) => CentredDialog(
-        title: 'Mark expense paid?',
-        subtitle:
-            'Mark "${expense.title}" (${CurrencyFormatter.format(expense.amount)}) as paid?',
-        confirmLabel: 'Mark paid',
-        onConfirm: () {
-          context.read<OwnerBloc>().add(MarkExpensePaidEvent(expense.id));
-          Navigator.pop(context);
-        },
-        cancelLabel: 'Cancel',
-        onCancel: () => Navigator.pop(context),
+class AddExpenseScreen extends StatefulWidget {
+  const AddExpenseScreen({super.key});
+
+  @override
+  State<AddExpenseScreen> createState() => _AddExpenseScreenState();
+}
+
+class _AddExpenseScreenState extends State<AddExpenseScreen> {
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _amountController = TextEditingController();
+  String _category = 'Operations';
+  bool _monthly = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  void _handleSave() {
+    final title = _titleController.text.trim();
+    final amountInRupees = double.tryParse(_amountController.text.trim()) ?? 0;
+    final amountInPaise = (amountInRupees * 100).round();
+    if (title.isEmpty || amountInPaise <= 0) {
+      setState(() {
+        _errorMessage = 'Please enter a valid title and amount.';
+      });
+      return;
+    }
+
+    final now = DateTime.now();
+    final due =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+    context.read<OwnerBloc>().add(
+      AddExpenseEvent(
+        title: title,
+        category: _category,
+        amount: amountInPaise,
+        due: due,
+        monthly: _monthly,
+      ),
+    );
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.text),
+          onPressed: () => Navigator.pop(context),
+        ),
+        titleSpacing: 0,
+        title: const Text(
+          'Add expense',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontDisplay,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.6,
+            color: AppColors.text,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: AppColors.border, height: 1),
+        ),
+      ),
+      body: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppTextField(
+              label: 'TITLE',
+              hint: 'e.g. Shop rent, Electricity, Detergent',
+              controller: _titleController,
+            ),
+            const SizedBox(height: 14),
+            AppTextField(
+              label: 'AMOUNT (₹)',
+              hint: 'e.g. 5000',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              controller: _amountController,
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: InputDecoration(
+                labelText: 'CATEGORY',
+                labelStyle: AppTextStyles.fieldLabel,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 14,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              items: [
+                'Operations',
+                'Supplies',
+                'Rent',
+                'Utilities',
+                'Maintenance',
+                'Other',
+              ]
+                  .map(
+                    (c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(c),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => _category = v);
+                }
+              },
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.inset,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Recurring monthly expense',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.text,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Switch(
+                    value: _monthly,
+                    activeThumbColor: AppColors.primary,
+                    onChanged: (v) => setState(() => _monthly = v),
+                  ),
+                ],
+              ),
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.fontBody,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.danger,
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            PrimaryButton(
+              label: 'Save expense',
+              onPressed: _handleSave,
+            ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  void _showAddExpenseDialog(BuildContext context) {
-    final titleController = TextEditingController();
-    final amountController = TextEditingController();
-    String category = 'Operations';
-    bool monthly = false;
+class _PeriodSelector extends StatelessWidget {
+  final String selectedPeriod;
+  final ValueChanged<String> onPeriodChanged;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 10,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 38,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.controlBorder,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const Text(
-                  'Add expense',
-                  style: TextStyle(
-                    fontFamily: AppTextStyles.fontDisplay,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                AppTextField(
-                  label: 'TITLE',
-                  hint: 'e.g. Shop rent, Electricity, Detergent',
-                  controller: titleController,
-                ),
-                const SizedBox(height: 12),
-                AppTextField(
-                  label: 'AMOUNT (₹)',
-                  hint: 'e.g. 5000',
-                  keyboardType: TextInputType.number,
-                  controller: amountController,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: category,
-                        decoration: InputDecoration(
-                          labelText: 'CATEGORY',
-                          labelStyle: AppTextStyles.fieldLabel,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        items:
-                            [
-                                  'Operations',
-                                  'Supplies',
-                                  'Rent',
-                                  'Utilities',
-                                  'Maintenance',
-                                  'Other',
-                                ]
-                                .map(
-                                  (c) => DropdownMenuItem(
-                                    value: c,
-                                    child: Text(c),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged: (v) =>
-                            setDialogState(() => category = v ?? 'Operations'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'Recurring monthly expense',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                  value: monthly,
-                  activeThumbColor: AppColors.primary,
-                  onChanged: (v) => setDialogState(() => monthly = v),
-                ),
-                const SizedBox(height: 18),
-                PrimaryButton(
-                  label: 'Save expense',
-                  onPressed: () {
-                    final title = titleController.text.trim();
-                    final amountInRupees =
-                        double.tryParse(amountController.text.trim()) ?? 0;
-                    final amountInPaise = (amountInRupees * 100).round();
-                    if (title.isEmpty || amountInPaise <= 0) return;
+  const _PeriodSelector({
+    required this.selectedPeriod,
+    required this.onPeriodChanged,
+  });
 
-                    final now = DateTime.now();
-                    final due =
-                        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  static const _labels = {
+    'today': 'Today',
+    '7d': 'Last 7 days',
+    '30d': 'This month',
+  };
 
-                    context.read<OwnerBloc>().add(
-                      AddExpenseEvent(
-                        title: title,
-                        category: category,
-                        amount: amountInPaise,
-                        due: due,
-                        monthly: monthly,
-                      ),
-                    );
-                    Navigator.pop(sheetContext);
-                  },
-                ),
-              ],
-            ),
-          );
-        },
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.controlBorder),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: selectedPeriod,
+          icon: const Icon(
+            Icons.expand_more,
+            size: 16,
+            color: AppColors.mutedText,
+          ),
+          style: const TextStyle(
+            fontFamily: AppTextStyles.fontBody,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.text,
+          ),
+          onChanged: (val) {
+            if (val != null) {
+              onPeriodChanged(val);
+            }
+          },
+          items: _labels.entries.map((e) {
+            return DropdownMenuItem<String>(value: e.key, child: Text(e.value));
+          }).toList(),
+        ),
       ),
     );
   }
