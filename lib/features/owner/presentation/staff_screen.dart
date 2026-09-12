@@ -5,6 +5,7 @@ import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
+import 'package:myshop/features/owner/data/models/staff_model.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
@@ -18,10 +19,45 @@ class StaffScreen extends StatefulWidget {
 }
 
 class _StaffScreenState extends State<StaffScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
     context.read<OwnerBloc>().add(LoadStaffEvent());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _showAddStaffDialog(BuildContext context) {
+    final bloc = context.read<OwnerBloc>();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: bloc,
+          child: const AddStaffScreen(),
+        ),
+      ),
+    );
+  }
+
+  void _showEditStaffDialog(BuildContext context, StaffMember member) {
+    final bloc = context.read<OwnerBloc>();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: bloc,
+          child: EditStaffScreen(member: member),
+        ),
+      ),
+    );
   }
 
   @override
@@ -40,6 +76,12 @@ class _StaffScreenState extends State<StaffScreen> {
       },
       builder: (context, state) {
         final staff = state.staff;
+        final filteredStaff = staff.where((member) {
+          if (_searchQuery.isEmpty) return true;
+          final query = _searchQuery.toLowerCase();
+          return member.name.toLowerCase().contains(query) ||
+              member.username.toLowerCase().contains(query);
+        }).toList();
 
         return Scaffold(
           backgroundColor: AppColors.surface,
@@ -96,27 +138,109 @@ class _StaffScreenState extends State<StaffScreen> {
             onRefresh: () async {
               context.read<OwnerBloc>().add(LoadStaffEvent());
             },
-            child: staff.isEmpty
-                ? ListView(
-                    padding: const EdgeInsets.all(20),
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                // 1. Subtitle matching web
+                const Text(
+                  'Employees can use Sales and manage Orders.',
+                  style: TextStyle(
+                    fontFamily: AppTextStyles.fontBody,
+                    fontSize: 13.5,
+                    color: AppColors.mutedText,
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // 2. Search box
+                Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    border: Border.all(color: AppColors.controlBorder),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                  child: Row(
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.only(top: 40),
-                        child: EmptyState(
-                          icon: Icons.people_outline,
-                          title: 'No staff members yet',
-                          subtitle:
-                              'Add employees to take sales and manage orders.',
+                      const Icon(
+                        Icons.search,
+                        size: 19,
+                        color: AppColors.mutedText,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.fontBody,
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Search name or username...',
+                            hintStyle: TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 14,
+                              color: AppColors.faintText,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onChanged: (val) {
+                            setState(() => _searchQuery = val);
+                          },
                         ),
                       ),
+                      if (_searchController.text.isNotEmpty)
+                        InkWell(
+                          onTap: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.close,
+                              size: 16,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 3. Employee cards or empty state
+                if (staff.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: EmptyState(
+                      icon: Icons.people_outline,
+                      title: 'No staff members yet',
+                      subtitle:
+                          'Add employees to take sales and manage orders.',
+                    ),
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(20),
-                    itemCount: staff.length,
+                else if (filteredStaff.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 40),
+                    child: EmptyState(
+                      icon: Icons.search_off,
+                      title: 'No staff found',
+                      subtitle: 'No members match "$_searchQuery".',
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: filteredStaff.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 11),
                     itemBuilder: (context, index) {
-                      final member = staff[index];
+                      final member = filteredStaff[index];
                       return AppCard(
                         padding: const EdgeInsets.all(14),
                         child: Row(
@@ -162,12 +286,40 @@ class _StaffScreenState extends State<StaffScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '@${member.username}',
+                                    '@${member.username} · Employee',
                                     style: AppTextStyles.hint,
                                   ),
                                 ],
                               ),
                             ),
+                            OutlinedButton(
+                              onPressed: () =>
+                                  _showEditStaffDialog(context, member),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                side: const BorderSide(
+                                  color: AppColors.controlBorder,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                              ),
+                              child: const Text(
+                                'Edit',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
                             Switch(
                               value: member.active,
                               activeThumbColor: AppColors.primary,
@@ -182,95 +334,284 @@ class _StaffScreenState extends State<StaffScreen> {
                       );
                     },
                   ),
+
+                // 4. Footer note matching web
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Text(
+                      'Deactivated employees cannot sign in until reactivated.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 12.5,
+                        color: AppColors.mutedText,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
+}
 
-  void _showAddStaffDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final usernameController = TextEditingController();
-    final passwordController = TextEditingController();
+class AddStaffScreen extends StatefulWidget {
+  const AddStaffScreen({super.key});
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  @override
+  State<AddStaffScreen> createState() => _AddStaffScreenState();
+}
+
+class _AddStaffScreenState extends State<AddStaffScreen> {
+  final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = _nameController.text.trim();
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (name.isEmpty || username.isEmpty || password.length < 8) {
+      setState(() {
+        if (name.isEmpty) {
+          _errorMessage = 'Full name is required';
+        } else if (username.isEmpty) {
+          _errorMessage = 'Username is required';
+        } else {
+          _errorMessage = 'Password must be at least 8 characters';
+        }
+      });
+      return;
+    }
+
+    context.read<OwnerBloc>().add(
+      AddStaffEvent(
+        name: name,
+        username: username,
+        password: password,
+      ),
+    );
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.text),
+          onPressed: () => Navigator.pop(context),
         ),
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 10,
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+        titleSpacing: 0,
+        title: const Text(
+          'Add staff member',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontDisplay,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppColors.text,
+          ),
         ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: AppColors.border, height: 1),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 38,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
+            if (_errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: AppColors.controlBorder,
-                  borderRadius: BorderRadius.circular(99),
+                  color: AppColors.dangerBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    fontFamily: AppTextStyles.fontBody,
+                    fontSize: 13,
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-            const Text(
-              'Add staff member',
-              style: TextStyle(
-                fontFamily: AppTextStyles.fontDisplay,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 14),
+            ],
             AppTextField(
               label: 'FULL NAME',
               hint: 'e.g. Ramesh Kumar',
-              controller: nameController,
+              controller: _nameController,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             AppTextField(
               label: 'USERNAME',
               hint: 'e.g. ramesh',
-              controller: usernameController,
+              controller: _usernameController,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             AppTextField(
               label: 'TEMPORARY PASSWORD',
               hint: 'At least 8 characters',
               obscureText: true,
-              controller: passwordController,
+              controller: _passwordController,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             PrimaryButton(
               label: 'Create staff account',
-              onPressed: () {
-                final name = nameController.text.trim();
-                final username = usernameController.text.trim();
-                final password = passwordController.text.trim();
+              onPressed: _save,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-                if (name.isEmpty || username.isEmpty || password.length < 8) {
-                  return;
-                }
+class EditStaffScreen extends StatefulWidget {
+  final StaffMember member;
 
-                context.read<OwnerBloc>().add(
-                  AddStaffEvent(
-                    name: name,
-                    username: username,
-                    password: password,
+  const EditStaffScreen({super.key, required this.member});
+
+  @override
+  State<EditStaffScreen> createState() => _EditStaffScreenState();
+}
+
+class _EditStaffScreenState extends State<EditStaffScreen> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _usernameController;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.member.name);
+    _usernameController = TextEditingController(text: widget.member.username);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = _nameController.text.trim();
+    final username = _usernameController.text.trim();
+
+    if (name.isEmpty || username.isEmpty) {
+      setState(() {
+        if (name.isEmpty) {
+          _errorMessage = 'Full name is required';
+        } else {
+          _errorMessage = 'Username is required';
+        }
+      });
+      return;
+    }
+
+    context.read<OwnerBloc>().add(
+      UpdateStaffEvent(
+        employeeId: widget.member.id,
+        name: name,
+        username: username,
+      ),
+    );
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.text),
+          onPressed: () => Navigator.pop(context),
+        ),
+        titleSpacing: 0,
+        title: const Text(
+          'Edit staff member',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontDisplay,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppColors.text,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: AppColors.border, height: 1),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    fontFamily: AppTextStyles.fontBody,
+                    fontSize: 13,
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w600,
                   ),
-                );
-                Navigator.pop(sheetContext);
-              },
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            AppTextField(
+              label: 'FULL NAME',
+              hint: 'e.g. Ramesh Kumar',
+              controller: _nameController,
+            ),
+            const SizedBox(height: 14),
+            AppTextField(
+              label: 'USERNAME',
+              hint: 'e.g. ramesh',
+              controller: _usernameController,
+            ),
+            const SizedBox(height: 24),
+            PrimaryButton(
+              label: 'Save changes',
+              onPressed: _save,
             ),
           ],
         ),
