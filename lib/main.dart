@@ -12,7 +12,7 @@ import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
-import 'package:myshop/features/auth/presentation/employee_bootstrap_screen.dart';
+import 'package:myshop/features/auth/presentation/bootstrap_screen.dart';
 import 'package:myshop/features/auth/presentation/login_screen.dart';
 import 'package:myshop/features/auth/presentation/reset_password_screen.dart';
 import 'package:myshop/features/auth/presentation/splash_screen.dart';
@@ -180,8 +180,8 @@ class _MyShopAppState extends State<MyShopApp> {
                 Navigator.of(context).popUntil((route) => route.isFirst);
               } else if (state is AuthenticatedState) {
                 // Preload catalog and orders upon authenticating.
-                // For fresh employee login, initial loading is handled by EmployeeBootstrapScreen.
-                if (!state.isEmployee || !state.isFreshLogin) {
+                // For fresh login, initial loading is handled by BootstrapScreen.
+                if (!state.isFreshLogin) {
                   _cartBloc.add(LoadCatalogEvent());
                   _ordersBloc.add(LoadOrdersEvent());
                   if (state.isOwner) {
@@ -215,12 +215,13 @@ class _MyShopAppState extends State<MyShopApp> {
               }
 
               if (state is AuthenticatedState) {
-                if (state.isEmployee && state.isFreshLogin) {
-                  return EmployeeBootstrapScreen(
+                if (state.isFreshLogin) {
+                  return BootstrapScreen(
                     authState: state,
                     authRepository: widget.authRepository,
                     posRepository: widget.posRepository,
                     ordersRepository: widget.ordersRepository,
+                    ownerRepository: widget.ownerRepository,
                     localCache: widget.localCache,
                     onCompleted: () {
                       _authBloc.add(BootstrapCompletedEvent());

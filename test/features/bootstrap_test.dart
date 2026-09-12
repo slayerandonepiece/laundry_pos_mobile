@@ -7,9 +7,12 @@ import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
 import 'package:myshop/features/auth/data/models/user_model.dart';
-import 'package:myshop/features/auth/presentation/employee_bootstrap_screen.dart';
+import 'package:myshop/features/auth/presentation/bootstrap_screen.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
+import 'package:myshop/features/owner/data/models/dashboard_model.dart';
+import 'package:myshop/features/owner/data/models/expense_model.dart';
+import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/pos/data/models/product_model.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 
@@ -176,6 +179,36 @@ class FakeOrdersRepository extends OrdersRepository {
   }
 }
 
+class FakeOwnerRepository extends OwnerRepository {
+  bool getDashboardMetricsShouldFail = false;
+  int getDashboardMetricsCallCount = 0;
+  bool listExpensesShouldFail = false;
+  int listExpensesCallCount = 0;
+
+  FakeOwnerRepository() : super(apiClient: ApiClient());
+
+  @override
+  Future<DashboardMetrics> getDashboardMetrics({
+    String? from,
+    String? to,
+  }) async {
+    getDashboardMetricsCallCount++;
+    if (getDashboardMetricsShouldFail) {
+      throw Exception('Network error loading dashboard metrics');
+    }
+    return DashboardMetrics();
+  }
+
+  @override
+  Future<List<Expense>> listExpenses() async {
+    listExpensesCallCount++;
+    if (listExpensesShouldFail) {
+      throw Exception('Network error loading expenses');
+    }
+    return [];
+  }
+}
+
 class FakeConnectivityService extends ConnectivityService {
   FakeConnectivityService() : super.internal();
   bool mockOffline = false;
@@ -188,11 +221,12 @@ class FakeConnectivityService extends ConnectivityService {
 }
 
 void main() {
-  group('EmployeeBootstrapScreen Tests', () {
+  group('BootstrapScreen Tests', () {
     late FakeLocalCache fakeCache;
     late FakeAuthRepository fakeAuthRepo;
     late FakePosRepository fakePosRepo;
     late FakeOrdersRepository fakeOrdersRepo;
+    late FakeOwnerRepository fakeOwnerRepo;
     late FakeConnectivityService fakeConnectivity;
     late AuthenticatedState employeeState;
     late AuthenticatedState ownerState;
@@ -202,6 +236,7 @@ void main() {
       fakeAuthRepo = FakeAuthRepository(localCache: fakeCache);
       fakePosRepo = FakePosRepository(localCache: fakeCache);
       fakeOrdersRepo = FakeOrdersRepository(localCache: fakeCache);
+      fakeOwnerRepo = FakeOwnerRepository();
       fakeConnectivity = FakeConnectivityService();
 
       final employeeUser = User(
@@ -258,17 +293,18 @@ void main() {
     );
 
     testWidgets(
-      'Full happy path: 4 steps resolve sequentially and invoke onCompleted',
+      'Employee happy path: 4 steps resolve sequentially and invoke onCompleted',
       (tester) async {
         bool completedCalled = false;
 
         await tester.pumpWidget(
           MaterialApp(
-            home: EmployeeBootstrapScreen(
+            home: BootstrapScreen(
               authState: employeeState,
               authRepository: fakeAuthRepo,
               posRepository: fakePosRepo,
               ordersRepository: fakeOrdersRepo,
+              ownerRepository: fakeOwnerRepo,
               localCache: fakeCache,
               connectivityService: fakeConnectivity,
               onCompleted: () {
@@ -278,7 +314,7 @@ void main() {
           ),
         );
 
-        // Verify header and 4 checklist items render
+        // Verify header and 4 checklist items render (not owner steps)
         expect(find.text('Setting things up'), findsOneWidget);
         expect(
           find.text('Just a moment while we get your store ready'),
@@ -288,6 +324,8 @@ void main() {
         expect(find.text('Loading store details'), findsOneWidget);
         expect(find.text('Loading products'), findsOneWidget);
         expect(find.text('Loading recent orders'), findsOneWidget);
+        expect(find.text('Loading dashboard'), findsNothing);
+        expect(find.text('Loading expenses'), findsNothing);
 
         // Step 1: finishes after short frame delay
         await tester.pump(const Duration(milliseconds: 250));
@@ -302,6 +340,8 @@ void main() {
         expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1);
         expect(fakePosRepo.listProductsCallCount, 1);
         expect(fakeOrdersRepo.fetchRecentOrdersCallCount, 1);
+        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 0);
+        expect(fakeOwnerRepo.listExpensesCallCount, 0);
         expect(fakeOrdersRepo.lastLimitPassed, 30);
         expect(fakeOrdersRepo.lastSortPassed, 'recent');
 
@@ -316,6 +356,156 @@ void main() {
     );
 
     testWidgets(
+      'Owner happy path: 6 steps resolve sequentially and invoke onCompleted',
+      (tester) async {
+        bool completedCalled = false;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BootstrapScreen(
+              authState: ownerState,
+              authRepository: fakeAuthRepo,
+              posRepository: fakePosRepo,
+              ordersRepository: fakeOrdersRepo,
+              ownerRepository: fakeOwnerRepo,
+              localCache: fakeCache,
+              connectivityService: fakeConnectivity,
+              onCompleted: () {
+                completedCalled = true;
+              },
+            ),
+          ),
+        );
+
+        // Verify header and all 6 checklist items render
+        expect(find.text('Setting things up'), findsOneWidget);
+        expect(find.text('Finding your store'), findsOneWidget);
+        expect(find.text('Loading store details'), findsOneWidget);
+        expect(find.text('Loading products'), findsOneWidget);
+        expect(find.text('Loading recent orders'), findsOneWidget);
+        expect(find.text('Loading dashboard'), findsOneWidget);
+        expect(find.text('Loading expenses'), findsOneWidget);
+
+        // Step 1: finishes after short frame delay
+        await tester.pump(const Duration(milliseconds: 250));
+
+        // Let steps 2, 3, 4, 5, 6 resolve
+        await tester.pump(const Duration(milliseconds: 300)); // Step 2
+        await tester.pump(const Duration(milliseconds: 300)); // Step 3
+        await tester.pump(const Duration(milliseconds: 300)); // Step 4
+        await tester.pump(const Duration(milliseconds: 300)); // Step 5
+        await tester.pump(const Duration(milliseconds: 300)); // Step 6
+        await tester.pump(const Duration(milliseconds: 400)); // Finish delay
+
+        // Check all repositories were called, including owner repo methods
+        expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1);
+        expect(fakePosRepo.listProductsCallCount, 1);
+        expect(fakeOrdersRepo.fetchRecentOrdersCallCount, 1);
+        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 1);
+        expect(fakeOwnerRepo.listExpensesCallCount, 1);
+
+        expect(completedCalled, isTrue);
+      },
+    );
+
+    testWidgets(
+      'Owner step 5 failure: displays error state, Retry button, and retries dashboard',
+      (tester) async {
+        fakeOwnerRepo.getDashboardMetricsShouldFail = true;
+        bool completedCalled = false;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BootstrapScreen(
+              authState: ownerState,
+              authRepository: fakeAuthRepo,
+              posRepository: fakePosRepo,
+              ordersRepository: fakeOrdersRepo,
+              ownerRepository: fakeOwnerRepo,
+              localCache: fakeCache,
+              connectivityService: fakeConnectivity,
+              onCompleted: () {
+                completedCalled = true;
+              },
+            ),
+          ),
+        );
+
+        await tester.pump(const Duration(milliseconds: 250)); // Step 1
+        await tester.pump(const Duration(milliseconds: 300)); // Step 2
+        await tester.pump(const Duration(milliseconds: 300)); // Step 3
+        await tester.pump(const Duration(milliseconds: 300)); // Step 4
+        await tester.pump(const Duration(milliseconds: 300)); // Step 5 fails
+
+        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 1);
+        expect(fakeOwnerRepo.listExpensesCallCount, 0);
+        expect(find.text('Failed to load dashboard'), findsOneWidget);
+        expect(find.text('Retry'), findsOneWidget);
+        expect(completedCalled, isFalse);
+
+        // Fix dashboard and tap Retry
+        fakeOwnerRepo.getDashboardMetricsShouldFail = false;
+        await tester.tap(find.text('Retry'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300)); // Step 5 retries
+        await tester.pump(const Duration(milliseconds: 300)); // Step 6 runs
+        await tester.pump(const Duration(milliseconds: 400)); // Finish delay
+
+        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 2);
+        expect(fakeOwnerRepo.listExpensesCallCount, 1);
+        expect(completedCalled, isTrue);
+      },
+    );
+
+    testWidgets(
+      'Owner step 6 failure: displays error state, Retry button, and retries expenses',
+      (tester) async {
+        fakeOwnerRepo.listExpensesShouldFail = true;
+        bool completedCalled = false;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BootstrapScreen(
+              authState: ownerState,
+              authRepository: fakeAuthRepo,
+              posRepository: fakePosRepo,
+              ordersRepository: fakeOrdersRepo,
+              ownerRepository: fakeOwnerRepo,
+              localCache: fakeCache,
+              connectivityService: fakeConnectivity,
+              onCompleted: () {
+                completedCalled = true;
+              },
+            ),
+          ),
+        );
+
+        await tester.pump(const Duration(milliseconds: 250)); // Step 1
+        await tester.pump(const Duration(milliseconds: 300)); // Step 2
+        await tester.pump(const Duration(milliseconds: 300)); // Step 3
+        await tester.pump(const Duration(milliseconds: 300)); // Step 4
+        await tester.pump(const Duration(milliseconds: 300)); // Step 5 succeeds
+        await tester.pump(const Duration(milliseconds: 300)); // Step 6 fails
+
+        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 1);
+        expect(fakeOwnerRepo.listExpensesCallCount, 1);
+        expect(find.text('Failed to load expenses'), findsOneWidget);
+        expect(find.text('Retry'), findsOneWidget);
+        expect(completedCalled, isFalse);
+
+        // Fix expenses and tap Retry
+        fakeOwnerRepo.listExpensesShouldFail = false;
+        await tester.tap(find.text('Retry'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300)); // Step 6 retries
+        await tester.pump(const Duration(milliseconds: 400)); // Finish delay
+
+        expect(fakeOwnerRepo.listExpensesCallCount, 2);
+        expect(completedCalled, isTrue);
+      },
+    );
+
+    testWidgets(
       'Step failure: displays error state, Retry button, and retries only that step',
       (tester) async {
         fakePosRepo.listProductsShouldFail = true;
@@ -323,11 +513,12 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            home: EmployeeBootstrapScreen(
+            home: BootstrapScreen(
               authState: employeeState,
               authRepository: fakeAuthRepo,
               posRepository: fakePosRepo,
               ordersRepository: fakeOrdersRepo,
+              ownerRepository: fakeOwnerRepo,
               localCache: fakeCache,
               connectivityService: fakeConnectivity,
               onCompleted: () {
@@ -375,11 +566,12 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: EmployeeBootstrapScreen(
+          home: BootstrapScreen(
             authState: employeeState,
             authRepository: fakeAuthRepo,
             posRepository: fakePosRepo,
             ordersRepository: fakeOrdersRepo,
+            ownerRepository: fakeOwnerRepo,
             localCache: fakeCache,
             connectivityService: fakeConnectivity,
             onCompleted: () {
@@ -437,11 +629,12 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            home: EmployeeBootstrapScreen(
+            home: BootstrapScreen(
               authState: employeeState,
               authRepository: fakeAuthRepo,
               posRepository: fakePosRepo,
               ordersRepository: fakeOrdersRepo,
+              ownerRepository: fakeOwnerRepo,
               localCache: fakeCache,
               connectivityService: fakeConnectivity,
               onCompleted: () {

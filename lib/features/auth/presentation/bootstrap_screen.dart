@@ -11,40 +11,43 @@ import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
+import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 import 'package:myshop/features/shell/presentation/main_navigation_shell.dart';
 
 enum StepStatus { pending, active, done, error, offlineCached }
 
-class EmployeeBootstrapScreen extends StatefulWidget {
+class BootstrapScreen extends StatefulWidget {
   final AuthenticatedState authState;
   final VoidCallback? onCompleted;
   final AuthRepository? authRepository;
   final PosRepository? posRepository;
   final OrdersRepository? ordersRepository;
+  final OwnerRepository? ownerRepository;
   final LocalCacheService? localCache;
   final ConnectivityService? connectivityService;
 
-  const EmployeeBootstrapScreen({
+  const BootstrapScreen({
     super.key,
     required this.authState,
     this.onCompleted,
     this.authRepository,
     this.posRepository,
     this.ordersRepository,
+    this.ownerRepository,
     this.localCache,
     this.connectivityService,
   });
 
   @override
-  State<EmployeeBootstrapScreen> createState() =>
-      _EmployeeBootstrapScreenState();
+  State<BootstrapScreen> createState() => _BootstrapScreenState();
 }
 
-class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
+class _BootstrapScreenState extends State<BootstrapScreen> {
   late final AuthRepository _authRepository;
   late final PosRepository _posRepository;
   late final OrdersRepository _ordersRepository;
+  late final OwnerRepository _ownerRepository;
   late final LocalCacheService _localCache;
   late final ConnectivityService _connectivityService;
 
@@ -52,10 +55,14 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
   StepStatus _step2Status = StepStatus.pending;
   StepStatus _step3Status = StepStatus.pending;
   StepStatus _step4Status = StepStatus.pending;
+  StepStatus _step5Status = StepStatus.pending;
+  StepStatus _step6Status = StepStatus.pending;
 
   String? _step2Error;
   String? _step3Error;
   String? _step4Error;
+  String? _step5Error;
+  String? _step6Error;
 
   bool _isOffline = false;
   bool _canContinueAnyway = false;
@@ -68,6 +75,15 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
     _posRepository = widget.posRepository ?? context.read<PosRepository>();
     _ordersRepository =
         widget.ordersRepository ?? context.read<OrdersRepository>();
+    if (widget.ownerRepository != null) {
+      _ownerRepository = widget.ownerRepository!;
+    } else {
+      try {
+        _ownerRepository = context.read<OwnerRepository>();
+      } catch (_) {
+        _ownerRepository = OwnerRepository();
+      }
+    }
     _localCache = widget.localCache ?? LocalCacheService();
     _connectivityService =
         widget.connectivityService ?? ConnectivityService.instance;
@@ -212,7 +228,11 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
         setState(() {
           _step4Status = StepStatus.offlineCached;
         });
-        await _finishAndNavigate();
+        if (widget.authState.isOwner) {
+          await _executeStep5();
+        } else {
+          await _finishAndNavigate();
+        }
         return;
       }
     }
@@ -223,7 +243,11 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
       setState(() {
         _step4Status = StepStatus.done;
       });
-      await _finishAndNavigate();
+      if (widget.authState.isOwner) {
+        await _executeStep5();
+      } else {
+        await _finishAndNavigate();
+      }
     } catch (e) {
       if (!mounted) return;
       final cached = _localCache.getCachedOrders();
@@ -232,7 +256,11 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
           _step4Status = StepStatus.offlineCached;
           _canContinueAnyway = true;
         });
-        await _finishAndNavigate();
+        if (widget.authState.isOwner) {
+          await _executeStep5();
+        } else {
+          await _finishAndNavigate();
+        }
       } else {
         setState(() {
           _step4Status = StepStatus.error;
@@ -243,14 +271,75 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
     }
   }
 
+  // Step 5: Loading dashboard (Owner only)
+  Future<void> _executeStep5() async {
+    if (!mounted) return;
+    setState(() {
+      _step5Status = StepStatus.active;
+      _step5Error = null;
+    });
+
+    try {
+      await _ownerRepository.getDashboardMetrics();
+      if (!mounted) return;
+      setState(() {
+        _step5Status = StepStatus.done;
+      });
+      await _executeStep6();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _step5Status = StepStatus.error;
+        _step5Error = 'Failed to load dashboard';
+        _canContinueAnyway = true;
+      });
+    }
+  }
+
+  // Step 6: Loading expenses (Owner only)
+  Future<void> _executeStep6() async {
+    if (!mounted) return;
+    setState(() {
+      _step6Status = StepStatus.active;
+      _step6Error = null;
+    });
+
+    try {
+      await _ownerRepository.listExpenses();
+      if (!mounted) return;
+      setState(() {
+        _step6Status = StepStatus.done;
+      });
+      await _finishAndNavigate();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _step6Status = StepStatus.error;
+        _step6Error = 'Failed to load expenses';
+        _canContinueAnyway = true;
+      });
+    }
+  }
+
   bool get _allStepsCompleted {
-    return (_step1Status == StepStatus.done) &&
+    final baseStepsCompleted =
+        (_step1Status == StepStatus.done) &&
         (_step2Status == StepStatus.done ||
             _step2Status == StepStatus.offlineCached) &&
         (_step3Status == StepStatus.done ||
             _step3Status == StepStatus.offlineCached) &&
         (_step4Status == StepStatus.done ||
             _step4Status == StepStatus.offlineCached);
+
+    if (!widget.authState.isOwner) {
+      return baseStepsCompleted;
+    }
+
+    return baseStepsCompleted &&
+        (_step5Status == StepStatus.done ||
+            _step5Status == StepStatus.offlineCached) &&
+        (_step6Status == StepStatus.done ||
+            _step6Status == StepStatus.offlineCached);
   }
 
   Future<void> _finishAndNavigate() async {
@@ -281,179 +370,255 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
   Widget build(BuildContext context) {
     final storeName = widget.authState.currentStore.storeName;
 
+    final steps = [
+      _BootstrapStepItem(
+        title: 'Finding your store',
+        subtitle: storeName.isNotEmpty ? storeName : null,
+        status: _step1Status,
+      ),
+      _BootstrapStepItem(
+        title: 'Loading store details',
+        status: _step2Status,
+        errorText: _step2Error,
+        onRetry: _executeStep2,
+      ),
+      _BootstrapStepItem(
+        title: 'Loading products',
+        status: _step3Status,
+        errorText: _step3Error,
+        onRetry: _executeStep3,
+      ),
+      _BootstrapStepItem(
+        title: 'Loading recent orders',
+        status: _step4Status,
+        errorText: _step4Error,
+        onRetry: _executeStep4,
+      ),
+      if (widget.authState.isOwner) ...[
+        _BootstrapStepItem(
+          title: 'Loading dashboard',
+          status: _step5Status,
+          errorText: _step5Error,
+          onRetry: _executeStep5,
+        ),
+        _BootstrapStepItem(
+          title: 'Loading expenses',
+          status: _step6Status,
+          errorText: _step6Error,
+          onRetry: _executeStep6,
+        ),
+      ],
+    ];
+
     return PopScope(
       canPop: false,
       child: Scaffold(
         backgroundColor: AppColors.surface,
         body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const Spacer(flex: 2),
-
-                // Centered branding icon
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryTint,
-                    borderRadius: BorderRadius.circular(20),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 24,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight - 48,
                   ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.local_laundry_service_rounded,
-                      size: 40,
-                      color: AppColors.primary,
+                  child: IntrinsicHeight(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Spacer(flex: 2),
+
+                        // Centered branding icon + top spinner / checkmark
+                        _BootstrapHeader(allStepsCompleted: _allStepsCompleted),
+                        const SizedBox(height: 18),
+
+                        // Title & Subtitle
+                        const Text(
+                          'Setting things up',
+                          style: AppTextStyles.h1,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _isOffline
+                              ? 'Offline · getting store ready from cached data'
+                              : 'Just a moment while we get your store ready',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.mutedText,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+
+                        const Spacer(flex: 2),
+
+                        // Checklist card
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.inset,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 16,
+                          ),
+                          child: Column(
+                            children: [
+                              for (int i = 0; i < steps.length; i++) ...[
+                                if (i > 0)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 4),
+                                    child: Divider(
+                                      color: AppColors.divider,
+                                      height: 1,
+                                    ),
+                                  ),
+                                _ChecklistRow(
+                                  title: steps[i].title,
+                                  subtitle: steps[i].subtitle,
+                                  status: steps[i].status,
+                                  errorText: steps[i].errorText,
+                                  onRetry: steps[i].onRetry,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+
+                        // "Continue anyway" escape hatch if error occurs but user shouldn't be trapped
+                        if (_canContinueAnyway && !_allStepsCompleted) ...[
+                          const SizedBox(height: 20),
+                          TextButton.icon(
+                            onPressed: _continueAnyway,
+                            icon: const Icon(
+                              Icons.arrow_forward,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            label: const Text(
+                              'Continue anyway',
+                              style: TextStyle(
+                                fontFamily: AppTextStyles.fontBody,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+
+                        const Spacer(flex: 3),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-
-                // Top spinner indicator
-                if (!_allStepsCompleted)
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: AppColors.primary,
-                    ),
-                  )
-                else
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.successBg,
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.check,
-                        size: 16,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 18),
-
-                // Title & Subtitle
-                const Text(
-                  'Setting things up',
-                  style: AppTextStyles.h1,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _isOffline
-                      ? 'Offline · getting store ready from cached data'
-                      : 'Just a moment while we get your store ready',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.mutedText,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                const Spacer(flex: 2),
-
-                // 4-row checklist card
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.inset,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 16,
-                  ),
-                  child: Column(
-                    children: [
-                      _buildChecklistRow(
-                        title: 'Finding your store',
-                        subtitle: storeName.isNotEmpty ? storeName : null,
-                        status: _step1Status,
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 4),
-                        child: Divider(color: AppColors.divider, height: 1),
-                      ),
-                      _buildChecklistRow(
-                        title: 'Loading store details',
-                        status: _step2Status,
-                        errorText: _step2Error,
-                        onRetry: _executeStep2,
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 4),
-                        child: Divider(color: AppColors.divider, height: 1),
-                      ),
-                      _buildChecklistRow(
-                        title: 'Loading products',
-                        status: _step3Status,
-                        errorText: _step3Error,
-                        onRetry: _executeStep3,
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 4),
-                        child: Divider(color: AppColors.divider, height: 1),
-                      ),
-                      _buildChecklistRow(
-                        title: 'Loading recent orders',
-                        status: _step4Status,
-                        errorText: _step4Error,
-                        onRetry: _executeStep4,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // "Continue anyway" escape hatch if error occurs but user shouldn't be trapped
-                if (_canContinueAnyway && !_allStepsCompleted) ...[
-                  const SizedBox(height: 20),
-                  TextButton.icon(
-                    onPressed: _continueAnyway,
-                    icon: const Icon(
-                      Icons.arrow_forward,
-                      size: 16,
-                      color: AppColors.primary,
-                    ),
-                    label: const Text(
-                      'Continue anyway',
-                      style: TextStyle(
-                        fontFamily: AppTextStyles.fontBody,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ],
-
-                const Spacer(flex: 3),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildChecklistRow({
-    required String title,
-    String? subtitle,
-    required StepStatus status,
-    String? errorText,
-    VoidCallback? onRetry,
-  }) {
+class _BootstrapStepItem {
+  final String title;
+  final String? subtitle;
+  final StepStatus status;
+  final String? errorText;
+  final VoidCallback? onRetry;
+
+  const _BootstrapStepItem({
+    required this.title,
+    this.subtitle,
+    required this.status,
+    this.errorText,
+    this.onRetry,
+  });
+}
+
+class _BootstrapHeader extends StatelessWidget {
+  final bool allStepsCompleted;
+
+  const _BootstrapHeader({required this.allStepsCompleted});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Centered branding icon
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: AppColors.primaryTint,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.local_laundry_service_rounded,
+              size: 40,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Top spinner indicator / checkmark
+        if (!allStepsCompleted)
+          const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: AppColors.primary,
+            ),
+          )
+        else
+          Container(
+            width: 24,
+            height: 24,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.successBg,
+            ),
+            child: const Center(
+              child: Icon(Icons.check, size: 16, color: AppColors.success),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ChecklistRow extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final StepStatus status;
+  final String? errorText;
+  final VoidCallback? onRetry;
+
+  const _ChecklistRow({
+    required this.title,
+    this.subtitle,
+    required this.status,
+    this.errorText,
+    this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _buildStatusIndicator(status),
+          _StepStatusIndicator(status: status),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -481,7 +646,7 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
                   )
                 else if (subtitle != null && status == StepStatus.done)
                   Text(
-                    subtitle,
+                    subtitle!,
                     style: AppTextStyles.bodySmall.copyWith(
                       fontSize: 11.5,
                       color: AppColors.mutedText,
@@ -489,7 +654,7 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
                   )
                 else if (errorText != null && status == StepStatus.error)
                   Text(
-                    errorText,
+                    errorText!,
                     style: AppTextStyles.bodySmall.copyWith(
                       fontSize: 11.5,
                       color: AppColors.danger,
@@ -523,8 +688,15 @@ class _EmployeeBootstrapScreenState extends State<EmployeeBootstrapScreen> {
       ),
     );
   }
+}
 
-  Widget _buildStatusIndicator(StepStatus status) {
+class _StepStatusIndicator extends StatelessWidget {
+  final StepStatus status;
+
+  const _StepStatusIndicator({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
     switch (status) {
       case StepStatus.pending:
         return Container(

@@ -127,7 +127,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               children: [
                 // 1. Renewal warning banner (Screen A5) if due in <= 7 days
                 if (paidThroughDate != null)
-                  _buildRenewalBanner(paidThroughDate),
+                  _RenewalBanner(paidThroughDate: paidThroughDate),
 
                 // 2. Title and Period Dropdown
                 Row(
@@ -143,7 +143,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         color: AppColors.text,
                       ),
                     ),
-                    _buildPeriodSelector(),
+                    _PeriodSelector(
+                      selectedPeriod: _selectedPeriod,
+                      onPeriodChanged: (val) {
+                        setState(() => _selectedPeriod = val);
+                        context.read<OwnerBloc>().add(LoadDashboardEvent());
+                      },
+                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -153,88 +159,32 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   children: [
                     // Card 1: Today's sales (Primary blue card)
                     Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Today's sales",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFFD9E7FF),
-                              ),
-                            ),
-                            const SizedBox(height: 9),
-                            Text(
-                              CurrencyFormatter.format(metrics.todaySales),
-                              style: const TextStyle(
-                                fontFamily: AppTextStyles.fontDisplay,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              '${metrics.todayCount} ${metrics.todayCount == 1 ? "order" : "orders"}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFFD9E7FF),
-                              ),
-                            ),
-                          ],
-                        ),
+                      child: _MetricCard(
+                        label: "Today's sales",
+                        value: CurrencyFormatter.format(metrics.todaySales),
+                        subtitle:
+                            '${metrics.todayCount} ${metrics.todayCount == 1 ? "order" : "orders"}',
+                        variant: MetricCardVariant.primary,
                       ),
                     ),
                     const SizedBox(width: 11),
 
                     // Card 2: Period Sales
                     Expanded(
-                      child: AppCard(
-                        padding: const EdgeInsets.all(15),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _selectedPeriod == 'today'
-                                  ? 'Yesterday'
-                                  : (_selectedPeriod == '7d'
-                                        ? 'Last 7 days'
-                                        : 'This month'),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.mutedText,
-                              ),
-                            ),
-                            const SizedBox(height: 9),
-                            Text(
-                              CurrencyFormatter.format(
-                                metrics.periodSales > 0
-                                    ? metrics.periodSales
-                                    : metrics.todaySales,
-                              ),
-                              style: const TextStyle(
-                                fontFamily: AppTextStyles.fontDisplay,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.text,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              '${metrics.periodOrders > 0 ? metrics.periodOrders : metrics.todayCount} orders',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.mutedText,
-                              ),
-                            ),
-                          ],
+                      child: _MetricCard(
+                        label: _selectedPeriod == 'today'
+                            ? 'Yesterday'
+                            : (_selectedPeriod == '7d'
+                                  ? 'Last 7 days'
+                                  : 'This month'),
+                        value: CurrencyFormatter.format(
+                          metrics.periodSales > 0
+                              ? metrics.periodSales
+                              : metrics.todaySales,
                         ),
+                        subtitle:
+                            '${metrics.periodOrders > 0 ? metrics.periodOrders : metrics.todayCount} orders',
+                        variant: MetricCardVariant.standard,
                       ),
                     ),
                   ],
@@ -245,109 +195,40 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   children: [
                     // Card 3: To collect (Uncollected balance in danger red)
                     Expanded(
-                      child: InkWell(
+                      child: _MetricCard(
+                        label: 'To collect',
+                        value: CurrencyFormatter.format(metrics.outstanding),
+                        subtitle: '${metrics.todo} orders waiting',
+                        variant: MetricCardVariant.danger,
                         onTap: widget.onOrdersTabPressed,
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          padding: const EdgeInsets.all(15),
-                          decoration: BoxDecoration(
-                            color: AppColors.dangerBg,
-                            border: Border.all(color: AppColors.dangerBorder),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'To collect',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.danger,
-                                    ),
-                                  ),
-                                  Icon(
-                                    Icons.chevron_right,
-                                    size: 16,
-                                    color: AppColors.danger,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 9),
-                              Text(
-                                CurrencyFormatter.format(metrics.outstanding),
-                                style: const TextStyle(
-                                  fontFamily: AppTextStyles.fontDisplay,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.danger,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                '${metrics.todo} orders waiting',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.danger,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
                     ),
                     const SizedBox(width: 11),
 
                     // Card 4: Orders to finish
                     Expanded(
-                      child: AppCard(
-                        padding: const EdgeInsets.all(15),
+                      child: _MetricCard(
+                        label: 'To finish',
+                        value: '${metrics.todo}',
+                        variant: MetricCardVariant.standard,
                         onTap: widget.onOrdersTabPressed,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        subtitleWidget: Row(
                           children: [
-                            const Text(
-                              'To finish',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.mutedText,
-                              ),
-                            ),
-                            const SizedBox(height: 9),
-                            Text(
-                              '${metrics.todo}',
-                              style: const TextStyle(
-                                fontFamily: AppTextStyles.fontDisplay,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.text,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Row(
-                              children: [
-                                if (metrics.overdue > 0)
-                                  Text(
-                                    '${metrics.overdue} overdue · ',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.danger,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                Text(
-                                  '${metrics.dueToday} due today',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.warning,
-                                  ),
+                            if (metrics.overdue > 0)
+                              Text(
+                                '${metrics.overdue} overdue · ',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.danger,
+                                  fontWeight: FontWeight.w700,
                                 ),
-                              ],
+                              ),
+                            Text(
+                              '${metrics.dueToday} due today',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.warning,
+                              ),
                             ),
                           ],
                         ),
@@ -473,9 +354,32 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  Widget _buildPeriodSelector() {
-    final labels = {'today': 'Today', '7d': 'Last 7 days', '30d': 'This month'};
+  String _getInitials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+  }
+}
 
+class _PeriodSelector extends StatelessWidget {
+  final String selectedPeriod;
+  final ValueChanged<String> onPeriodChanged;
+
+  const _PeriodSelector({
+    required this.selectedPeriod,
+    required this.onPeriodChanged,
+  });
+
+  static const _labels = {
+    'today': 'Today',
+    '7d': 'Last 7 days',
+    '30d': 'This month',
+  };
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       height: 38,
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -486,7 +390,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: _selectedPeriod,
+          value: selectedPeriod,
           icon: const Icon(
             Icons.expand_more,
             size: 16,
@@ -500,19 +404,25 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           ),
           onChanged: (val) {
             if (val != null) {
-              setState(() => _selectedPeriod = val);
-              context.read<OwnerBloc>().add(LoadDashboardEvent());
+              onPeriodChanged(val);
             }
           },
-          items: labels.entries.map((e) {
+          items: _labels.entries.map((e) {
             return DropdownMenuItem<String>(value: e.key, child: Text(e.value));
           }).toList(),
         ),
       ),
     );
   }
+}
 
-  Widget _buildRenewalBanner(String paidThroughDate) {
+class _RenewalBanner extends StatelessWidget {
+  final String paidThroughDate;
+
+  const _RenewalBanner({required this.paidThroughDate});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -544,12 +454,164 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       ),
     );
   }
+}
 
-  String _getInitials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
+enum MetricCardVariant { primary, standard, danger }
+
+class _MetricCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? subtitle;
+  final Widget? subtitleWidget;
+  final MetricCardVariant variant;
+  final VoidCallback? onTap;
+
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    this.subtitle,
+    this.subtitleWidget,
+    this.variant = MetricCardVariant.standard,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    switch (variant) {
+      case MetricCardVariant.primary:
+        return Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(fontSize: 12, color: Color(0xFFD9E7FF)),
+              ),
+              const SizedBox(height: 9),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.fontDisplay,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 5),
+              subtitleWidget ??
+                  (subtitle != null
+                      ? Text(
+                          subtitle!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFD9E7FF),
+                          ),
+                        )
+                      : const SizedBox.shrink()),
+            ],
+          ),
+        );
+      case MetricCardVariant.danger:
+        return InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: AppColors.dangerBg,
+              border: Border.all(color: AppColors.dangerBorder),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.danger,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: AppColors.danger,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 9),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontFamily: AppTextStyles.fontDisplay,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.danger,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                subtitleWidget ??
+                    (subtitle != null
+                        ? Text(
+                            subtitle!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.danger,
+                            ),
+                          )
+                        : const SizedBox.shrink()),
+              ],
+            ),
+          ),
+        );
+      case MetricCardVariant.standard:
+        return AppCard(
+          padding: const EdgeInsets.all(15),
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.mutedText,
+                ),
+              ),
+              const SizedBox(height: 9),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.fontDisplay,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.text,
+                ),
+              ),
+              const SizedBox(height: 5),
+              subtitleWidget ??
+                  (subtitle != null
+                      ? Text(
+                          subtitle!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.mutedText,
+                          ),
+                        )
+                      : const SizedBox.shrink()),
+            ],
+          ),
+        );
     }
-    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
   }
 }
