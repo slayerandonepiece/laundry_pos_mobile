@@ -4,22 +4,17 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
-import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
-import 'package:myshop/features/orders/presentation/order_detail_screen.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
-import 'package:myshop/shared/widgets/empty_state.dart';
-import 'package:myshop/shared/widgets/status_pill.dart';
-import 'package:myshop/shared/widgets/sticky_header_delegate.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
   final VoidCallback? onOrdersTabPressed;
@@ -32,109 +27,51 @@ class OwnerDashboardScreen extends StatefulWidget {
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   String _selectedPeriod = 'today'; // 'today' | '7d' | '30d'
+  late final ScrollController _scrollController;
+  bool _isCollapsed = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController()..addListener(_onScroll);
     context.read<OwnerBloc>().add(LoadDashboardEvent());
     context.read<OrdersBloc>().add(LoadOrdersEvent());
+  }
+
+  void _onScroll() {
+    final collapsed = _scrollController.hasClients && _scrollController.offset > 30;
+    if (collapsed != _isCollapsed) {
+      setState(() => _isCollapsed = collapsed);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     String storeName = 'MyShop';
-    String ownerSubtitle = 'Owner';
     bool hasMultipleStores = false;
-    String? paidThroughDate;
 
     if (authState is AuthenticatedState) {
       storeName = authState.currentStore.storeName;
-      ownerSubtitle = '${authState.user.displayName} · Owner';
       hasMultipleStores = authState.availableStores.length > 1;
-      paidThroughDate = authState.currentStore.paidThroughDate;
     }
 
     final initials = _getInitials(storeName);
 
     return Scaffold(
       backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        titleSpacing: 20,
-        title: InkWell(
-          onTap: hasMultipleStores
-              ? () => StoreSwitcherDialog.show(context)
-              : null,
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: const TextStyle(
-                      fontFamily: AppTextStyles.fontDisplay,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        storeName,
-                        style: const TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.text,
-                        ),
-                      ),
-                      if (hasMultipleStores) ...[
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.expand_more,
-                          size: 16,
-                          color: AppColors.mutedText,
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(ownerSubtitle, style: AppTextStyles.hint),
-                ],
-              ),
-            ],
-          ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: AppColors.border, height: 1),
-        ),
-      ),
       body: BlocBuilder<OwnerBloc, OwnerState>(
         builder: (context, ownerState) {
           final metrics = ownerState.metrics;
           final ordersState = context.watch<OrdersBloc>().state;
           final allOrders = ordersState.allOrders;
-          final pendingOrders = allOrders
-              .where((o) => !o.isDelivered)
-              .toList()
-            ..sort((a, b) => a.dueDateTime.compareTo(b.dueDateTime));
-          final ordersToFinish = pendingOrders.take(5).toList();
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -142,245 +79,355 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               context.read<OrdersBloc>().add(LoadOrdersEvent());
             },
             child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                // 1. Renewal warning banner (Screen A5) if due in <= 7 days
-                if (paidThroughDate != null)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      child: _RenewalBanner(paidThroughDate: paidThroughDate),
-                    ),
-                  ),
-
-                // 2. Title and Period Dropdown (pinned sticky header)
-                SliverPersistentHeader(
+                // 1. Header with custom SliverAppBar
+                SliverAppBar(
                   pinned: true,
-                  delegate: StickyHeaderDelegate(
-                    height: 58,
-                    child: Container(
-                      color: AppColors.surface,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Dashboard',
-                            style: TextStyle(
-                              fontFamily: AppTextStyles.fontDisplay,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.6,
-                              color: AppColors.text,
-                            ),
-                          ),
-                          _PeriodSelector(
-                            selectedPeriod: _selectedPeriod,
-                            onPeriodChanged: (val) {
-                              setState(() => _selectedPeriod = val);
-                              context.read<OwnerBloc>().add(LoadDashboardEvent());
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // 3. 2x2 Metric Cards Grid
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 11,
-                      crossAxisSpacing: 11,
-                      childAspectRatio: 1.3,
-                    ),
-                    delegate: SliverChildListDelegate([
-                      // Card 1: Today's sales (Primary blue card)
-                      _MetricCard(
-                        label: "Today's sales",
-                        value: CurrencyFormatter.format(metrics.todaySales),
-                        subtitle:
-                            '${metrics.todayCount} ${metrics.todayCount == 1 ? "order" : "orders"}',
-                        variant: MetricCardVariant.primary,
-                      ),
-
-                      // Card 2: Period Sales
-                      _MetricCard(
-                        label: _selectedPeriod == 'today'
-                            ? 'Yesterday'
-                            : (_selectedPeriod == '7d'
-                                ? 'Last 7 days'
-                                : 'This month'),
-                        value: CurrencyFormatter.format(
-                          metrics.periodSales > 0
-                              ? metrics.periodSales
-                              : metrics.todaySales,
-                        ),
-                        subtitle:
-                            '${metrics.periodOrders > 0 ? metrics.periodOrders : metrics.todayCount} orders',
-                        variant: MetricCardVariant.standard,
-                      ),
-
-                      // Card 3: To collect (Uncollected balance in danger red)
-                      _MetricCard(
-                        label: 'To collect',
-                        value: CurrencyFormatter.format(metrics.outstanding),
-                        subtitle: '${metrics.todo} orders waiting',
-                        variant: MetricCardVariant.danger,
-                        onTap: widget.onOrdersTabPressed,
-                      ),
-
-                      // Card 4: Orders to finish
-                      _MetricCard(
-                        label: 'To finish',
-                        value: '${metrics.todo}',
-                        variant: MetricCardVariant.standard,
-                        onTap: widget.onOrdersTabPressed,
-                        subtitleWidget: Row(
-                          children: [
-                            if (metrics.overdue > 0)
-                              Text(
-                                '${metrics.overdue} overdue · ',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.danger,
-                                  fontWeight: FontWeight.w700,
+                  expandedHeight: 96,
+                  backgroundColor: AppColors.surface,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  centerTitle: false,
+                  automaticallyImplyLeading: false,
+                  title: _isCollapsed
+                      ? InkWell(
+                          onTap: hasMultipleStores ? () => StoreSwitcherDialog.show(context) : null,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 28,
+                                height: 28,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.primaryTint,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      fontFamily: AppTextStyles.fontDisplay,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            Text(
-                              '${metrics.dueToday} due today',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.warning,
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Dashboard',
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.fontDisplay,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.text,
+                                ),
                               ),
+                            ],
+                          ),
+                        )
+                      : null,
+                  flexibleSpace: FlexibleSpaceBar(
+                    collapseMode: CollapseMode.parallax,
+                    background: SafeArea(
+                      bottom: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            InkWell(
+                              onTap: hasMultipleStores ? () => StoreSwitcherDialog.show(context) : null,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${storeName.toUpperCase()} WORKSPACE',
+                                    style: const TextStyle(
+                                      fontFamily: AppTextStyles.fontBody,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                      color: AppColors.mutedText,
+                                    ),
+                                  ),
+                                  if (hasMultipleStores) ...[
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.expand_more, size: 14, color: AppColors.mutedText),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Text(
+                                  'Dashboard',
+                                  style: TextStyle(
+                                    fontFamily: AppTextStyles.fontDisplay,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.text,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                _PeriodSelectorPill(
+                                  selectedPeriod: _selectedPeriod,
+                                  onPeriodChanged: (val) {
+                                    setState(() => _selectedPeriod = val);
+                                    context.read<OwnerBloc>().add(LoadDashboardEvent());
+                                  },
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                    ]),
+                    ),
                   ),
                 ),
 
-                // 4. Sales Trend Chart
+                // 2. Two Large Money Cards
+                SliverToBoxAdapter(
+                  child: _buildMoneyCards(metrics),
+                ),
+
+                // 3. Compact 3-Chip Operational Row
+                SliverToBoxAdapter(
+                  child: _buildOperationalChips(metrics),
+                ),
+
+                // 4. Sales by Date Trend Chart
                 if (metrics.cash.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      child: _SalesTrendChart(cash: metrics.cash),
-                    ),
-                  ),
-
-                // 5. Order Status Donut
-                if (metrics.completed > 0 || metrics.todo > 0)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      child: _OrderStatusDonut(
-                        completed: metrics.completed,
-                        todo: metrics.todo,
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      child: _SalesTrendChart(
+                        cash: metrics.cash,
+                        selectedPeriod: _selectedPeriod,
                       ),
                     ),
                   ),
 
-                // 6. Sales by Service breakdown
+                // 5. How Orders are Moving Donut Chart
+                if (allOrders.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      child: _OrdersMovingDonutChart(allOrders: allOrders),
+                    ),
+                  ),
+
+                // 6. Sales by Service Horizontal Bar Chart
                 if (metrics.serviceMix.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      child: _SalesByServiceChart(
-                        serviceMix: metrics.serviceMix,
-                      ),
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      child: _SalesByServiceChart(serviceMix: metrics.serviceMix),
                     ),
                   ),
 
-                // 7. Cash Flow summary
-                if (metrics.cash.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      child: _CashBreakdownChart(cash: metrics.cash),
-                    ),
-                  ),
-
-                // 8. Orders to finish section
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Orders to finish',
-                          style: TextStyle(
-                            fontFamily: AppTextStyles.fontDisplay,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.text,
-                          ),
-                        ),
-                        if (ordersToFinish.isNotEmpty &&
-                            widget.onOrdersTabPressed != null)
-                          InkWell(
-                            onTap: widget.onOrdersTabPressed,
-                            child: const Text(
-                              'View all',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                if (ordersToFinish.isEmpty)
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(20, 8, 20, 24),
-                      child: EmptyState(
-                        icon: Icons.check_circle_outline,
-                        title: 'Nothing here yet',
-                        subtitle:
-                            "Nothing due today or overdue, you're all caught up",
-                      ),
-                    ),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                    sliver: SliverList.separated(
-                      itemCount: ordersToFinish.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final order = ordersToFinish[index];
-                        return _DashboardOrderCard(
-                          order: order,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    OrderDetailScreen(initialOrder: order),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 28)),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildMoneyCards(DashboardMetrics metrics) {
+    String periodCardTitle;
+    int periodSalesAmount;
+    int periodOrderCount;
+
+    if (_selectedPeriod == '7d') {
+      periodCardTitle = 'Sales this week';
+      periodSalesAmount = metrics.periodSales > 0 ? metrics.periodSales : metrics.todaySales;
+      periodOrderCount = metrics.periodOrders > 0 ? metrics.periodOrders : metrics.todayCount;
+    } else if (_selectedPeriod == '30d') {
+      periodCardTitle = 'Sales this month';
+      periodSalesAmount = metrics.periodSales > 0 ? metrics.periodSales : metrics.todaySales;
+      periodOrderCount = metrics.periodOrders > 0 ? metrics.periodOrders : metrics.todayCount;
+    } else {
+      periodCardTitle = 'Sales yesterday';
+      periodSalesAmount = metrics.periodSales > 0 ? metrics.periodSales : metrics.todaySales;
+      periodOrderCount = metrics.periodOrders > 0 ? metrics.periodOrders : metrics.todayCount;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: Row(
+        children: [
+          // Card 1: Sales today (distinguished by accent border & accent color)
+          Expanded(
+            child: AppCard(
+              border: Border.all(color: AppColors.primary, width: 1.5),
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Sales today',
+                    style: TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.mutedText,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      CurrencyFormatter.format(metrics.todaySales),
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.fontDisplay,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${metrics.todayCount} ${metrics.todayCount == 1 ? "order" : "orders"}',
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 11.5,
+                      color: AppColors.mutedText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Card 2: Sales this period (plain card with AppColors.text)
+          Expanded(
+            child: AppCard(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    periodCardTitle,
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.mutedText,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      CurrencyFormatter.format(periodSalesAmount),
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.fontDisplay,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.text,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$periodOrderCount ${periodOrderCount == 1 ? "order" : "orders"}',
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 11.5,
+                      color: AppColors.mutedText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperationalChips(DashboardMetrics metrics) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildOperationChip(
+              label: 'Waiting',
+              count: metrics.todo,
+              onTap: widget.onOrdersTabPressed,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildOperationChip(
+              label: 'Completed',
+              count: metrics.completed,
+              onTap: widget.onOrdersTabPressed,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildOperationChip(
+              label: 'Due today',
+              count: metrics.dueToday,
+              onTap: widget.onOrdersTabPressed,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperationChip({
+    required String label,
+    required int count,
+    VoidCallback? onTap,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          children: [
+            Text(
+              '$count',
+              style: const TextStyle(
+                fontFamily: AppTextStyles.fontDisplay,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                fontFamily: AppTextStyles.fontBody,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: AppColors.mutedText,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -394,263 +441,89 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 }
 
-class _PeriodSelector extends StatelessWidget {
+class _PeriodSelectorPill extends StatelessWidget {
   final String selectedPeriod;
   final ValueChanged<String> onPeriodChanged;
 
-  const _PeriodSelector({
+  const _PeriodSelectorPill({
     required this.selectedPeriod,
     required this.onPeriodChanged,
   });
 
-  static const _labels = {
-    'today': 'Today',
-    '7d': 'Last 7 days',
-    '30d': 'This month',
-  };
+  String get _label {
+    switch (selectedPeriod) {
+      case '7d':
+        return 'This week';
+      case '30d':
+        return 'This month';
+      case 'today':
+      default:
+        return 'Today';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.controlBorder),
-        borderRadius: BorderRadius.circular(999),
+    return PopupMenuButton<String>(
+      initialValue: selectedPeriod,
+      tooltip: 'Select period',
+      onSelected: onPeriodChanged,
+      itemBuilder: (context) => const [
+        PopupMenuItem(value: 'today', child: Text('Today')),
+        PopupMenuItem(value: '7d', child: Text('This week')),
+        PopupMenuItem(value: '30d', child: Text('This month')),
+      ],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.border),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: selectedPeriod,
-          icon: const Icon(
-            Icons.expand_more,
-            size: 16,
-            color: AppColors.mutedText,
-          ),
-          style: const TextStyle(
-            fontFamily: AppTextStyles.fontBody,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.text,
-          ),
-          onChanged: (val) {
-            if (val != null) {
-              onPeriodChanged(val);
-            }
-          },
-          items: _labels.entries.map((e) {
-            return DropdownMenuItem<String>(value: e.key, child: Text(e.value));
-          }).toList(),
+      color: AppColors.surface,
+      elevation: 3,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.controlBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _label,
+              style: const TextStyle(
+                fontFamily: AppTextStyles.fontBody,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.text,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.keyboard_arrow_down, size: 16, color: AppColors.mutedText),
+          ],
         ),
       ),
     );
   }
 }
 
-class _RenewalBanner extends StatelessWidget {
-  final String paidThroughDate;
-
-  const _RenewalBanner({required this.paidThroughDate});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.warningNoticeBg,
-        border: Border.all(color: AppColors.warningBorder),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.warning_amber_rounded,
-            size: 20,
-            color: AppColors.warning,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Your plan renews on $paidThroughDate. Please keep payment updated.',
-              style: const TextStyle(
-                fontFamily: AppTextStyles.fontBody,
-                fontSize: 12,
-                color: AppColors.warning,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-enum MetricCardVariant { primary, standard, danger }
-
-class _MetricCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final String? subtitle;
-  final Widget? subtitleWidget;
-  final MetricCardVariant variant;
-  final VoidCallback? onTap;
-
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    this.subtitle,
-    this.subtitleWidget,
-    this.variant = MetricCardVariant.standard,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    switch (variant) {
-      case MetricCardVariant.primary:
-        return Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 12, color: Color(0xFFD9E7FF)),
-              ),
-              const SizedBox(height: 9),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontFamily: AppTextStyles.fontDisplay,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 5),
-              subtitleWidget ??
-                  (subtitle != null
-                      ? Text(
-                          subtitle!,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFFD9E7FF),
-                          ),
-                        )
-                      : const SizedBox.shrink()),
-            ],
-          ),
-        );
-      case MetricCardVariant.danger:
-        return InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: AppColors.dangerBg,
-              border: Border.all(color: AppColors.dangerBorder),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.danger,
-                      ),
-                    ),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 16,
-                      color: AppColors.danger,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontFamily: AppTextStyles.fontDisplay,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.danger,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                subtitleWidget ??
-                    (subtitle != null
-                        ? Text(
-                            subtitle!,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.danger,
-                            ),
-                          )
-                        : const SizedBox.shrink()),
-              ],
-            ),
-          ),
-        );
-      case MetricCardVariant.standard:
-        return AppCard(
-          padding: const EdgeInsets.all(15),
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.mutedText,
-                ),
-              ),
-              const SizedBox(height: 9),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontFamily: AppTextStyles.fontDisplay,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 5),
-              subtitleWidget ??
-                  (subtitle != null
-                      ? Text(
-                          subtitle!,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.mutedText,
-                          ),
-                        )
-                      : const SizedBox.shrink()),
-            ],
-          ),
-        );
-    }
-  }
-}
-
 class _SalesTrendChart extends StatelessWidget {
   final List<CashPoint> cash;
+  final String selectedPeriod;
 
-  const _SalesTrendChart({required this.cash});
+  const _SalesTrendChart({
+    required this.cash,
+    required this.selectedPeriod,
+  });
+
+  String get _caption {
+    if (selectedPeriod == '7d') {
+      return 'How your sales moved this week';
+    } else if (selectedPeriod == '30d') {
+      return 'How your sales moved this month';
+    }
+    return 'How your sales moved today';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -673,7 +546,7 @@ class _SalesTrendChart extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Sales trend',
+            'Sales by date',
             style: TextStyle(
               fontFamily: AppTextStyles.fontBody,
               fontSize: 15,
@@ -681,6 +554,8 @@ class _SalesTrendChart extends StatelessWidget {
               color: AppColors.text,
             ),
           ),
+          const SizedBox(height: 2),
+          Text(_caption, style: AppTextStyles.hint),
           const SizedBox(height: 16),
           SizedBox(
             height: 180,
@@ -693,18 +568,11 @@ class _SalesTrendChart extends StatelessWidget {
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) => const FlLine(
-                    color: AppColors.divider,
-                    strokeWidth: 1,
-                  ),
+                  getDrawingHorizontalLine: (value) => const FlLine(color: AppColors.divider, strokeWidth: 1),
                 ),
                 titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -719,13 +587,7 @@ class _SalesTrendChart extends StatelessWidget {
                         } else {
                           label = '₹${value.toInt()}';
                         }
-                        return Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.mutedText,
-                          ),
-                        );
+                        return Text(label, style: const TextStyle(fontSize: 10, color: AppColors.mutedText));
                       },
                     ),
                   ),
@@ -743,10 +605,7 @@ class _SalesTrendChart extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(
                             cash[idx].label,
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              color: AppColors.mutedText,
-                            ),
+                            style: const TextStyle(fontSize: 10.5, color: AppColors.mutedText),
                           ),
                         );
                       },
@@ -758,16 +617,49 @@ class _SalesTrendChart extends StatelessWidget {
                   LineChartBarData(
                     spots: spots,
                     isCurved: true,
-                    color: AppColors.primary,
-                    barWidth: 3,
+                    curveSmoothness: 0.35,
+                    color: AppColors.mutedText,
+                    barWidth: 2.5,
                     isStrokeCapRound: true,
-                    dotData: const FlDotData(show: false),
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) {
+                        return FlDotCirclePainter(
+                          radius: 3,
+                          color: AppColors.mutedText,
+                          strokeWidth: 2,
+                          strokeColor: Colors.white,
+                        );
+                      },
+                    ),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: AppColors.primaryTint,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppColors.mutedText.withValues(alpha: 0.12),
+                          AppColors.mutedText.withValues(alpha: 0.01),
+                        ],
+                      ),
                     ),
                   ),
                 ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => AppColors.text,
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        final idx = spot.x.toInt();
+                        final valPaise = idx < cash.length ? cash[idx].income : 0;
+                        return LineTooltipItem(
+                          CurrencyFormatter.format(valPaise),
+                          const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
               ),
             ),
           ),
@@ -777,15 +669,75 @@ class _SalesTrendChart extends StatelessWidget {
   }
 }
 
-class _OrderStatusDonut extends StatelessWidget {
-  final int completed;
-  final int todo;
+class _OrdersMovingDonutChart extends StatelessWidget {
+  final List<Order> allOrders;
 
-  const _OrderStatusDonut({required this.completed, required this.todo});
+  const _OrdersMovingDonutChart({required this.allOrders});
 
   @override
   Widget build(BuildContext context) {
-    if (completed == 0 && todo == 0) return const SizedBox.shrink();
+    if (allOrders.isEmpty) return const SizedBox.shrink();
+
+    int pendingCount = 0;
+    int inProgressCount = 0;
+    int completedCount = 0;
+
+    for (final order in allOrders) {
+      if (order.isPending) {
+        pendingCount++;
+      } else if (order.isInProgress || order.isReady) {
+        inProgressCount++;
+      } else if (order.isDelivered) {
+        completedCount++;
+      } else {
+        pendingCount++;
+      }
+    }
+
+    final total = pendingCount + inProgressCount + completedCount;
+    final sections = <PieChartSectionData>[];
+
+    if (total == 0) {
+      sections.add(
+        PieChartSectionData(
+          value: 1,
+          color: AppColors.border,
+          radius: 12,
+          showTitle: false,
+        ),
+      );
+    } else {
+      if (pendingCount > 0) {
+        sections.add(
+          PieChartSectionData(
+            value: pendingCount.toDouble(),
+            color: AppColors.neutralText,
+            radius: 12,
+            showTitle: false,
+          ),
+        );
+      }
+      if (inProgressCount > 0) {
+        sections.add(
+          PieChartSectionData(
+            value: inProgressCount.toDouble(),
+            color: AppColors.primary,
+            radius: 12,
+            showTitle: false,
+          ),
+        );
+      }
+      if (completedCount > 0) {
+        sections.add(
+          PieChartSectionData(
+            value: completedCount.toDouble(),
+            color: AppColors.success,
+            radius: 12,
+            showTitle: false,
+          ),
+        );
+      }
+    }
 
     return AppCard(
       padding: const EdgeInsets.all(16),
@@ -793,7 +745,7 @@ class _OrderStatusDonut extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Order status',
+            'How orders are moving',
             style: TextStyle(
               fontFamily: AppTextStyles.fontBody,
               fontSize: 15,
@@ -801,50 +753,42 @@ class _OrderStatusDonut extends StatelessWidget {
               color: AppColors.text,
             ),
           ),
+          const SizedBox(height: 2),
+          const Text('Where your orders stand right now', style: AppTextStyles.hint),
           const SizedBox(height: 16),
           Row(
             children: [
               SizedBox(
-                width: 120,
-                height: 120,
+                width: 90,
+                height: 90,
                 child: PieChart(
                   PieChartData(
-                    sectionsSpace: 3,
-                    centerSpaceRadius: 36,
-                    sections: [
-                      if (completed > 0)
-                        PieChartSectionData(
-                          value: completed.toDouble(),
-                          color: AppColors.success,
-                          radius: 22,
-                          showTitle: false,
-                        ),
-                      if (todo > 0)
-                        PieChartSectionData(
-                          value: todo.toDouble(),
-                          color: AppColors.warning,
-                          radius: 22,
-                          showTitle: false,
-                        ),
-                    ],
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 28,
+                    sections: sections,
                   ),
                 ),
               ),
               const SizedBox(width: 24),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _buildLegendItem(
+                      color: AppColors.neutralText,
+                      label: 'Pending',
+                      count: pendingCount,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildLegendItem(
+                      color: AppColors.primary,
+                      label: 'In progress',
+                      count: inProgressCount,
+                    ),
+                    const SizedBox(height: 10),
                     _buildLegendItem(
                       color: AppColors.success,
                       label: 'Completed',
-                      count: completed,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildLegendItem(
-                      color: AppColors.warning,
-                      label: 'To finish',
-                      count: todo,
+                      count: completedCount,
                     ),
                   ],
                 ),
@@ -864,24 +808,21 @@ class _OrderStatusDonut extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
-          ),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.text,
-            ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: AppTextStyles.fontBody,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.text,
           ),
         ),
+        const Spacer(),
         Text(
           '$count',
           style: const TextStyle(
@@ -928,6 +869,8 @@ class _SalesByServiceChart extends StatelessWidget {
               color: AppColors.text,
             ),
           ),
+          const SizedBox(height: 2),
+          const Text('Your busiest services this period', style: AppTextStyles.hint),
           const SizedBox(height: 16),
           SizedBox(
             height: chartHeight,
@@ -939,15 +882,9 @@ class _SalesByServiceChart extends StatelessWidget {
                 gridData: const FlGridData(show: false),
                 borderData: FlBorderData(show: false),
                 titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -974,14 +911,13 @@ class _SalesByServiceChart extends StatelessWidget {
                   ),
                 ),
                 barGroups: List.generate(serviceMix.length, (i) {
-                  final amountInRupees =
-                      (serviceMix[i].amount / 100).toDouble();
+                  final amountInRupees = (serviceMix[i].amount / 100).toDouble();
                   return BarChartGroupData(
                     x: i,
                     barRods: [
                       BarChartRodData(
                         toY: amountInRupees,
-                        color: AppColors.primary,
+                        color: AppColors.mutedText,
                         width: 14,
                         borderRadius: BorderRadius.circular(4),
                         label: BarChartRodLabel(
@@ -999,245 +935,6 @@ class _SalesByServiceChart extends StatelessWidget {
                   );
                 }),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CashBreakdownChart extends StatelessWidget {
-  final List<CashPoint> cash;
-
-  const _CashBreakdownChart({required this.cash});
-
-  @override
-  Widget build(BuildContext context) {
-    if (cash.isEmpty) return const SizedBox.shrink();
-
-    double maxVal = 0;
-    for (final cp in cash) {
-      final inc = (cp.income / 100).toDouble();
-      final exp = (cp.expenses / 100).toDouble();
-      if (inc > maxVal) maxVal = inc;
-      if (exp > maxVal) maxVal = exp;
-    }
-    if (maxVal == 0) maxVal = 100;
-
-    final xInterval = (cash.length / 4).ceil().toDouble();
-
-    return AppCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Cash breakdown',
-                style: TextStyle(
-                  fontFamily: AppTextStyles.fontBody,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              Row(
-                children: [
-                  _buildLegendDot(AppColors.success, 'Income'),
-                  const SizedBox(width: 12),
-                  _buildLegendDot(AppColors.danger, 'Expenses'),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 190,
-            child: BarChart(
-              BarChartData(
-                maxY: maxVal * 1.2,
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) => const FlLine(
-                    color: AppColors.divider,
-                    strokeWidth: 1,
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 42,
-                      getTitlesWidget: (value, meta) {
-                        if (value == meta.max || value == meta.min) {
-                          return const SizedBox.shrink();
-                        }
-                        String label;
-                        if (value >= 1000) {
-                          label = '₹${(value / 1000).toStringAsFixed(1)}k';
-                        } else {
-                          label = '₹${value.toInt()}';
-                        }
-                        return Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.mutedText,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 26,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        final step = xInterval > 0 ? xInterval.toInt() : 1;
-                        if (idx < 0 || idx >= cash.length || idx % step != 0) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: SizedBox(
-                            width: 56,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                cash[idx].label,
-                                maxLines: 1,
-                                softWrap: false,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.mutedText,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                barGroups: List.generate(cash.length, (i) {
-                  final cp = cash[i];
-                  return BarChartGroupData(
-                    x: i,
-                    barRods: [
-                      BarChartRodData(
-                        toY: (cp.income / 100).toDouble(),
-                        color: AppColors.success,
-                        width: 10,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      BarChartRodData(
-                        toY: (cp.expenses / 100).toDouble(),
-                        color: AppColors.danger,
-                        width: 10,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ],
-                  );
-                }),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLegendDot(Color color, String label) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 11, color: AppColors.mutedText),
-        ),
-      ],
-    );
-  }
-}
-
-class _DashboardOrderCard extends StatelessWidget {
-  final Order order;
-  final VoidCallback onTap;
-
-  const _DashboardOrderCard({required this.order, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(14),
-      onTap: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    Text(
-                      order.orderCode,
-                      style: const TextStyle(
-                        fontFamily: AppTextStyles.fontDisplay,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    StatusPill.fromStatus(order.status),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  order.name.isNotEmpty ? order.name : 'Walk-in Customer',
-                  style: const TextStyle(
-                    fontFamily: AppTextStyles.fontBody,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Due ${DateFormatter.formatShort(order.due)}',
-                  style: AppTextStyles.hint,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            CurrencyFormatter.format(order.totalAmount),
-            style: const TextStyle(
-              fontFamily: AppTextStyles.fontDisplay,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: AppColors.text,
             ),
           ),
         ],
