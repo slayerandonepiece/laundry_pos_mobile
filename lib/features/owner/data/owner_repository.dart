@@ -105,6 +105,22 @@ class OwnerRepository {
     );
   }
 
+  /// Updates staff member details
+  Future<StaffMember> updateStaff({
+    required String employeeId,
+    required String name,
+    required String username,
+  }) async {
+    final response = await apiClient.patch(
+      ApiEndpoints.employeeDetail(employeeId),
+      body: {
+        'name': name.trim(),
+        'username': username.trim(),
+      },
+    );
+    return StaffMember.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
   /// Lists store payment methods
   Future<List<StorePaymentMethod>> listPaymentMethods() async {
     final response = await apiClient.get(ApiEndpoints.paymentMethods);
@@ -128,6 +144,31 @@ class OwnerRepository {
     );
   }
 
+  /// Creates a new payment method
+  Future<StorePaymentMethod> createPaymentMethod({required String name}) async {
+    final response = await apiClient.post(
+      ApiEndpoints.paymentMethods,
+      body: {'name': name.trim()},
+    );
+    return StorePaymentMethod.fromJson(
+      Map<String, dynamic>.from(response as Map),
+    );
+  }
+
+  /// Renames an existing payment method
+  Future<StorePaymentMethod> renamePaymentMethod({
+    required String id,
+    required String name,
+  }) async {
+    final response = await apiClient.patch(
+      ApiEndpoints.paymentMethodDetail(id),
+      body: {'name': name.trim()},
+    );
+    return StorePaymentMethod.fromJson(
+      Map<String, dynamic>.from(response as Map),
+    );
+  }
+
   /// Fetches store profile (customer-facing info)
   Future<StoreProfile> getStoreProfile() async {
     final response = await apiClient.get(ApiEndpoints.profile);
@@ -142,6 +183,8 @@ class OwnerRepository {
     required String storeName,
     required String address,
     required String phone,
+    required String name,
+    required String email,
   }) async {
     final response = await apiClient.patch(
       ApiEndpoints.profile,
@@ -149,6 +192,8 @@ class OwnerRepository {
         'storeName': storeName.trim(),
         'address': address.trim(),
         'phone': phone.trim(),
+        'name': name.trim(),
+        'email': email.trim(),
       },
     );
     return StoreProfile.fromJson(Map<String, dynamic>.from(response as Map));
@@ -172,6 +217,8 @@ class OwnerRepository {
     required String unit,
     required int price,
     List<Map<String, dynamic>> slabs = const [],
+    bool? active,
+    int? extra,
   }) async {
     final response = await apiClient.post(
       ApiEndpoints.products,
@@ -181,6 +228,8 @@ class OwnerRepository {
         'unit': unit,
         'price': price,
         if (slabs.isNotEmpty) 'slabs': slabs,
+        'active': ?active,
+        'extra': ?extra,
       },
     );
     return Product.fromJson(Map<String, dynamic>.from(response as Map));
@@ -194,6 +243,8 @@ class OwnerRepository {
     required String unit,
     required int price,
     List<Map<String, dynamic>> slabs = const [],
+    bool? active,
+    int? extra,
   }) async {
     final response = await apiClient.patch(
       '${ApiEndpoints.products}/$id',
@@ -203,6 +254,8 @@ class OwnerRepository {
         'unit': unit,
         'price': price,
         'slabs': slabs,
+        'active': ?active,
+        'extra': ?extra,
       },
     );
     return Product.fromJson(Map<String, dynamic>.from(response as Map));

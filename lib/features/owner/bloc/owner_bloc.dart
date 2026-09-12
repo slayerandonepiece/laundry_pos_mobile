@@ -18,8 +18,11 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     on<LoadStaffEvent>(_onLoadStaff);
     on<AddStaffEvent>(_onAddStaff);
     on<ToggleStaffActiveEvent>(_onToggleStaffActive);
+    on<UpdateStaffEvent>(_onUpdateStaff);
     on<LoadPaymentMethodsEvent>(_onLoadPaymentMethods);
     on<TogglePaymentMethodEvent>(_onTogglePaymentMethod);
+    on<AddPaymentMethodEvent>(_onAddPaymentMethod);
+    on<RenamePaymentMethodEvent>(_onRenamePaymentMethod);
     on<LoadStoreProfileEvent>(_onLoadStoreProfile);
     on<UpdateStoreProfileEvent>(_onUpdateStoreProfile);
     on<ChangePasswordSubmittedEvent>(_onChangePasswordSubmitted);
@@ -177,6 +180,36 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     }
   }
 
+  Future<void> _onUpdateStaff(
+    UpdateStaffEvent event,
+    Emitter<OwnerState> emit,
+  ) async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      await ownerRepository.updateStaff(
+        employeeId: event.employeeId,
+        name: event.name,
+        username: event.username,
+      );
+      final updated = await ownerRepository.listStaff();
+      emit(
+        state.copyWith(
+          isLoading: false,
+          staff: updated,
+          actionMessage: 'Staff member updated successfully',
+        ),
+      );
+    } catch (e) {
+      AppLogger.log(_tag, 'update staff failed', error: e);
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Could not update staff — try again',
+        ),
+      );
+    }
+  }
+
   Future<void> _onLoadPaymentMethods(
     LoadPaymentMethodsEvent event,
     Emitter<OwnerState> emit,
@@ -212,6 +245,61 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     }
   }
 
+  Future<void> _onAddPaymentMethod(
+    AddPaymentMethodEvent event,
+    Emitter<OwnerState> emit,
+  ) async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      await ownerRepository.createPaymentMethod(name: event.name);
+      final updated = await ownerRepository.listPaymentMethods();
+      emit(
+        state.copyWith(
+          isLoading: false,
+          paymentMethods: updated,
+          actionMessage: 'Payment method added',
+        ),
+      );
+    } catch (e) {
+      AppLogger.log(_tag, 'add payment method failed', error: e);
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Could not add payment method — try again',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onRenamePaymentMethod(
+    RenamePaymentMethodEvent event,
+    Emitter<OwnerState> emit,
+  ) async {
+    emit(state.copyWith(isLoading: true, error: null));
+    try {
+      await ownerRepository.renamePaymentMethod(
+        id: event.id,
+        name: event.name,
+      );
+      final updated = await ownerRepository.listPaymentMethods();
+      emit(
+        state.copyWith(
+          isLoading: false,
+          paymentMethods: updated,
+          actionMessage: 'Payment method renamed',
+        ),
+      );
+    } catch (e) {
+      AppLogger.log(_tag, 'rename payment method failed', error: e);
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Could not rename payment method — try again',
+        ),
+      );
+    }
+  }
+
   Future<void> _onLoadStoreProfile(
     LoadStoreProfileEvent event,
     Emitter<OwnerState> emit,
@@ -241,6 +329,8 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         storeName: event.storeName,
         address: event.address,
         phone: event.phone,
+        name: event.name,
+        email: event.email,
       );
       emit(
         state.copyWith(

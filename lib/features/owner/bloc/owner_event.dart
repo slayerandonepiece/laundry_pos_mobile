@@ -51,6 +51,18 @@ class ToggleStaffActiveEvent extends OwnerEvent {
   ToggleStaffActiveEvent(this.employeeId);
 }
 
+class UpdateStaffEvent extends OwnerEvent {
+  final String employeeId;
+  final String name;
+  final String username;
+
+  UpdateStaffEvent({
+    required this.employeeId,
+    required this.name,
+    required this.username,
+  });
+}
+
 class LoadPaymentMethodsEvent extends OwnerEvent {}
 
 class TogglePaymentMethodEvent extends OwnerEvent {
@@ -60,17 +72,34 @@ class TogglePaymentMethodEvent extends OwnerEvent {
   TogglePaymentMethodEvent({required this.id, required this.active});
 }
 
+class AddPaymentMethodEvent extends OwnerEvent {
+  final String name;
+
+  AddPaymentMethodEvent(this.name);
+}
+
+class RenamePaymentMethodEvent extends OwnerEvent {
+  final String id;
+  final String name;
+
+  RenamePaymentMethodEvent({required this.id, required this.name});
+}
+
 class LoadStoreProfileEvent extends OwnerEvent {}
 
 class UpdateStoreProfileEvent extends OwnerEvent {
   final String storeName;
   final String address;
   final String phone;
+  final String name;
+  final String email;
 
   UpdateStoreProfileEvent({
     required this.storeName,
     required this.address,
     required this.phone,
+    required this.name,
+    required this.email,
   });
 }
 
