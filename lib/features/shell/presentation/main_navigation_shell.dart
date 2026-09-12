@@ -8,6 +8,7 @@ import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/presentation/orders_list_screen.dart';
 import 'package:myshop/features/owner/presentation/more_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
+import 'package:myshop/features/owner/presentation/owner_orders_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/shared/widgets/bottom_nav.dart';
@@ -30,13 +31,13 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     // Orders now has its own "start new order" FAB, so New Sale is no
     // longer a separate screen at all.
     // Employee: [OrdersListScreen] — the only screen, no bottom bar needed.
-    // Owner: [OwnerDashboardScreen, OrdersListScreen, MoreScreen]
+    // Owner: [OwnerDashboardScreen, OwnerOrdersScreen, MoreScreen]
     final List<Widget> screens = isOwner
         ? [
             OwnerDashboardScreen(
               onOrdersTabPressed: () => setState(() => _currentIndex = 1),
             ),
-            const OrdersListScreen(),
+            const OwnerOrdersScreen(),
             const MoreScreen(),
           ]
         : [const OrdersListScreen()];
