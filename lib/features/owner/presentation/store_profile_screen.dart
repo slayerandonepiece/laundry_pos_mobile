@@ -145,6 +145,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                       storeName: name,
                       address: address,
                       phone: phone,
+                      name: state.storeProfile?.name ?? '',
+                      email: state.storeProfile?.email ?? '',
                     ),
                   );
                 },

@@ -19,6 +19,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _showPasswords = false;
   String? _error;
 
   @override
@@ -109,7 +110,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               AppTextField(
                 label: 'CURRENT PASSWORD',
                 hint: 'Enter your current password',
-                obscureText: true,
+                obscureText: !_showPasswords,
                 controller: _currentPasswordController,
               ),
               const SizedBox(height: 14),
@@ -117,7 +118,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               AppTextField(
                 label: 'NEW PASSWORD',
                 hint: 'At least 8 characters',
-                obscureText: true,
+                obscureText: !_showPasswords,
                 controller: _newPasswordController,
               ),
               const SizedBox(height: 14),
@@ -125,8 +126,40 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               AppTextField(
                 label: 'CONFIRM NEW PASSWORD',
                 hint: 'Re-enter new password',
-                obscureText: true,
+                obscureText: !_showPasswords,
                 controller: _confirmPasswordController,
+              ),
+              const SizedBox(height: 12),
+
+              // Show passwords toggle
+              Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: _showPasswords,
+                      activeColor: AppColors.primary,
+                      onChanged: (val) {
+                        setState(() => _showPasswords = val ?? false);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () {
+                      setState(() => _showPasswords = !_showPasswords);
+                    },
+                    child: const Text(
+                      'Show passwords',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 14,
+                        color: AppColors.text,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
 
