@@ -48,6 +48,7 @@ dependencies:
   connectivity_plus: ^6.1.5
   package_info_plus: ^10.2.1
   dio: ^5.11.1
+  fl_chart: ^1.2.0
 
 dev_dependencies:
   flutter_test:
