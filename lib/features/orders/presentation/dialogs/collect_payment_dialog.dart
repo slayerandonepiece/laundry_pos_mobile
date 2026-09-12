@@ -42,7 +42,11 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
 
     return BlocConsumer<OrdersBloc, OrdersState>(
       listener: (context, state) {
-        if (state.actionSuccessMessage != null) {
+        // Guard by orderCode: actionSuccessMessage/selectedOrder are shared
+        // bloc-wide state, so only pop this dialog for its own order's
+        // success, not any other order's action reaching the same bloc.
+        if (state.actionSuccessMessage != null &&
+            state.selectedOrder?.orderCode == widget.order.orderCode) {
           Navigator.pop(context);
         } else if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -1,5 +1,8 @@
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
@@ -27,6 +30,20 @@ import 'package:myshop/shared/widgets/blocked_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    AppLogger.log(
+      'FLUTTER_ERROR',
+      '${details.exceptionAsString()}${details.stack != null ? '\n${details.stack}' : ''}',
+      error: details.exception,
+    );
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    AppLogger.log('PLATFORM_ERROR', '$error\n$stack', error: error);
+    return true;
+  };
 
   // Initialize Hive local cache (without adapters or code-gen)
   await LocalCacheService.init();

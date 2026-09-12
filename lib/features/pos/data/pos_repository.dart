@@ -1,4 +1,5 @@
 import 'package:myshop/core/constants/api_endpoints.dart';
+import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
@@ -9,6 +10,8 @@ import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 
 import 'models/product_model.dart';
+
+const _tag = 'POS_SYNC';
 
 class PosRepository {
   final ApiClient _apiClient;
@@ -71,8 +74,9 @@ class PosRepository {
             'Offline · using cached catalogue',
           );
         } else {
+          AppLogger.log(_tag, 'refresh catalogue failed', error: e);
           SyncManager.instance.setError(
-            'Could not refresh catalogue — showing cached data ($e)',
+            'Could not refresh catalogue — showing cached data',
           );
         }
         return products;
@@ -234,24 +238,15 @@ class PosRepository {
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
-    final pendingCount = _localCache.getPendingSyncQueue().length;
-    // Local-first write — always saved locally regardless of connectivity.
-    // Only report the banner as "Offline" if we're actually offline; if
-    // we're online this will sync momentarily via the trigger() below, so
-    // reflect that as "pending" instead of the misleading offline label.
-    // Uses the cached, already-known flag (never the probing
-    // checkIsOffline()) so this local-first write never blocks on a network
-    // round trip just to pick which banner label to show.
-    final reallyOffline = ConnectivityService.instance.isOffline;
-    if (reallyOffline) {
-      SyncManager.instance.setOffline(pendingCount, 'Saved locally · syncing…');
-    } else {
-      SyncManager.instance.setPendingOnline(
-        pendingCount,
-        'Saved locally · syncing…',
-      );
-    }
-
+    // Don't set the banner here — SyncEngine.trigger() below runs its own
+    // _runSync() synchronously up to its first await, so it already reports
+    // the correct state (offline vs. pending) immediately. Setting a
+    // "Saved locally · syncing…" message here first, only to have trigger()
+    // overwrite it with its own message in the very same tick (or shortly
+    // after), was producing a visible flicker between two different banner
+    // texts for the same event. SyncEngine is now the single source of
+    // truth for banner state.
+    //
     // Fire-and-forget: the caller (already showing the order) doesn't wait
     // on this, and SyncEngine's own mutex means it's safe to call even if a
     // sync is already running elsewhere.

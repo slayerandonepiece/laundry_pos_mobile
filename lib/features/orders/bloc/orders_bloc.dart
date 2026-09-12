@@ -1,9 +1,12 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../data/orders_repository.dart';
 import 'orders_event.dart';
 import 'orders_state.dart';
+
+const _tag = 'ORDERS_BLOC';
 
 class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   final OrdersRepository ordersRepository;
@@ -80,7 +83,13 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       final order = await ordersRepository.getOrderDetail(event.orderCode);
       emit(state.copyWith(isLoading: false, selectedOrder: order));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      AppLogger.log(_tag, 'getOrderDetail(${event.orderCode}) failed', error: e);
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Could not load order details — try again',
+        ),
+      );
     }
   }
 
@@ -111,7 +120,17 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       // Fire-and-forget — UI has already moved on.
       SyncEngine.instance.trigger();
     } catch (e) {
-      emit(state.copyWith(isUpdatingStatus: false, error: e.toString()));
+      AppLogger.log(
+        _tag,
+        'updateStatus(${event.orderCode}, ${event.nextStatus}) failed',
+        error: e,
+      );
+      emit(
+        state.copyWith(
+          isUpdatingStatus: false,
+          error: 'Could not update status — try again',
+        ),
+      );
     }
   }
 
@@ -170,7 +189,17 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
 
       SyncEngine.instance.trigger();
     } catch (e) {
-      emit(state.copyWith(isCollectingPayment: false, error: e.toString()));
+      AppLogger.log(
+        _tag,
+        'recordPayment/updateStatus(${event.orderCode}) failed',
+        error: e,
+      );
+      emit(
+        state.copyWith(
+          isCollectingPayment: false,
+          error: 'Could not collect payment — try again',
+        ),
+      );
     }
   }
 
@@ -223,7 +252,13 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
 
       SyncEngine.instance.trigger();
     } catch (e) {
-      emit(state.copyWith(isUpdatingStatus: false, error: e.toString()));
+      AppLogger.log(_tag, 'handover(${event.orderCode}) failed', error: e);
+      emit(
+        state.copyWith(
+          isUpdatingStatus: false,
+          error: 'Could not hand over order — try again',
+        ),
+      );
     }
   }
 
@@ -239,7 +274,12 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           .toList();
       emit(state.copyWith(selectedOrder: refreshed, allOrders: updatedList));
     } catch (e) {
-      emit(state.copyWith(error: e.toString()));
+      AppLogger.log(
+        _tag,
+        'refreshInvoice(${event.orderCode}) failed',
+        error: e,
+      );
+      emit(state.copyWith(error: 'Could not refresh invoice — try again'));
     }
   }
 }

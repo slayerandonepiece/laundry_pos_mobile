@@ -189,6 +189,7 @@ class SyncEngine {
   /// ever touching the network.
   Future<void> retryNow() async {
     _failureStreak = 0;
+    await _ordersRepository.reviveDeadLetterQueue();
     await ConnectivityService.instance.checkIsOffline();
     return trigger();
   }

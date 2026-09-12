@@ -168,7 +168,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
       AppLogger.log(_tag, 'share failed', error: e);
       messenger?.showSnackBar(
         SnackBar(
-          content: Text('Could not share bill: $e'),
+          content: const Text('Could not share bill — try again'),
           backgroundColor: AppColors.danger,
           behavior: SnackBarBehavior.floating,
         ),

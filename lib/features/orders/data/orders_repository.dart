@@ -22,6 +22,17 @@ class OrdersRepository {
   // request comfortably under that timeout.
   static const int _bulkSyncBatchSize = 5;
 
+  // After this many failed attempts, an action stops being retried
+  // silently on every sync cycle and is parked in the dead-letter queue —
+  // otherwise one permanently-broken action (bad data, a stale validation
+  // rule) would keep the sync banner stuck on "paused" forever even though
+  // the rest of the queue is healthy. Higher than SyncEngine's
+  // _maxSilentFailures (3) so the user sees "paused" and gets a chance to
+  // notice/retry before the action is given up on automatically.
+  static const int _deadLetterThreshold = 5;
+
+  Future<bool>? _pendingSyncInFlight;
+
   OrdersRepository({ApiClient? apiClient, LocalCacheService? localCache})
     : _apiClient = apiClient ?? ApiClient(),
       _localCache = localCache ?? LocalCacheService();
@@ -166,7 +177,10 @@ class OrdersRepository {
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
-    await _reportLocalWritePending();
+    // Banner state is left to SyncEngine.trigger(), which the caller always
+    // invokes right after this returns. Setting it here too, only to have
+    // trigger() immediately overwrite it with its own message, was producing
+    // a visible flicker between two different banner texts for one event.
 
     return Order.fromJson(updatedJson);
   }
@@ -200,32 +214,11 @@ class OrdersRepository {
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
-    await _reportLocalWritePending();
+    // Banner state is left to SyncEngine.trigger(), which the caller always
+    // invokes right after this returns — see the matching note in
+    // updateStatus() above.
 
     return Order.fromJson(updatedJson);
-  }
-
-  /// Reports the banner state after a local-first optimistic write
-  /// (updateStatus/recordPayment/createOrderOptimistic). These writes always
-  /// succeed locally regardless of connectivity, so the banner should only
-  /// say "Offline" when the device is actually offline — otherwise these
-  /// changes are about to sync momentarily, so "pending" is the accurate
-  /// state to show instead of the misleading offline label.
-  Future<void> _reportLocalWritePending() async {
-    final pendingCount = _localCache.getPendingSyncQueue().length;
-    // Use the cached, already-known connectivity flag here, never the
-    // probing checkIsOffline() — this only picks a banner label, so it must
-    // never block the local-first write path on a network round trip (up
-    // to checkIsOffline()'s probe timeout) just to decide what to display.
-    final reallyOffline = ConnectivityService.instance.isOffline;
-    if (reallyOffline) {
-      SyncManager.instance.setOffline(pendingCount, 'Saved locally · syncing…');
-    } else {
-      SyncManager.instance.setPendingOnline(
-        pendingCount,
-        'Saved locally · syncing…',
-      );
-    }
   }
 
   /// Applies [mutate] to the cached order matching [orderCode] and persists
@@ -337,7 +330,21 @@ class OrdersRepository {
   /// has confirmed it 'success'; 'skipped' and 'failed' actions are kept
   /// queued for the next attempt — offline data is never discarded just
   /// because a sync attempt didn't fully succeed.
-  Future<bool> processPendingSyncQueue() async {
+  /// Safe to call concurrently — overlapping callers share the one run
+  /// already in flight instead of both reading/writing the local queue at
+  /// once. (SyncEngine already guarantees single-flight via its own
+  /// `_inFlight` guard; this is a second, independent guard directly on
+  /// the repository so the method stays safe for any future caller too.)
+  Future<bool> processPendingSyncQueue() {
+    final existing = _pendingSyncInFlight;
+    if (existing != null) return existing;
+    final future = _processPendingSyncQueueImpl();
+    _pendingSyncInFlight = future;
+    future.whenComplete(() => _pendingSyncInFlight = null);
+    return future;
+  }
+
+  Future<bool> _processPendingSyncQueueImpl() async {
     final queue = _localCache.getPendingSyncQueue();
     if (queue.isEmpty) return true;
 
@@ -399,7 +406,17 @@ class OrdersRepository {
       await _localCache.setPendingSyncQueue([...dueNow, ...otherStore]);
     }
 
-    final cached = _localCache.getCachedOrders() ?? [];
+    // Confirmed order results from this run, keyed by whatever code the
+    // action targeted (a placeholder for create_order, the real orderCode
+    // for update_status/record_payment). Deliberately NOT applied to a
+    // `cached` list snapshot held across the whole run — this run can now
+    // span several sequential batch requests, and another writer
+    // (PosRepository.createOrderOptimistic(), _applyLocalUpdate() from a
+    // concurrent updateStatus/recordPayment) can insert or change an order
+    // in the local cache while this is still in flight. Applied to a fresh
+    // read of the cache at the very end instead, so that write isn't
+    // silently discarded.
+    final confirmedOrders = <String, Map<String, dynamic>>{};
     final completedIds = <String>{};
     final lastErrorById = <String, String>{};
     final failCountById = <String, int>{};
@@ -442,45 +459,57 @@ class OrdersRepository {
 
         for (final action in batch) {
           final clientActionId = action['clientActionId']?.toString();
-          final result = clientActionId != null
-              ? resultsById[clientActionId]
-              : null;
+          try {
+            final result = clientActionId != null
+                ? resultsById[clientActionId]
+                : null;
 
-          if (result == null || result['status'] != 'success') {
+            if (result == null || result['status'] != 'success') {
+              if (clientActionId != null) {
+                final currentFailCount =
+                    (action['failCount'] as num?)?.toInt() ?? 0;
+                failCountById[clientActionId] = currentFailCount + 1;
+                if (result != null && result['error'] != null) {
+                  lastErrorById[clientActionId] = result['error'].toString();
+                }
+              }
+              continue;
+            }
+            if (clientActionId != null) completedIds.add(clientActionId);
+
+            final orderJson = result['order'];
+            if (orderJson is Map) {
+              final confirmedOrder = Order.fromJson(
+                Map<String, dynamic>.from(orderJson),
+              );
+              final placeholderCode = action['type'] == 'create_order'
+                  ? (action['offlineCode'] as String? ?? '')
+                  : (action['orderCode'] as String? ?? '');
+              if (placeholderCode.isNotEmpty) {
+                confirmedOrders[placeholderCode] = confirmedOrder.toJson();
+              }
+
+              if (action['type'] == 'create_order' &&
+                  placeholderCode.isNotEmpty) {
+                createdPlaceholders[placeholderCode] = confirmedOrder.id;
+              }
+            }
+          } catch (e) {
+            // The HTTP request itself succeeded — this is a client-side bug
+            // processing this one action's result (unexpected payload
+            // shape), not a network/connectivity failure. Count just this
+            // action as failed rather than letting it look like the whole
+            // batch/request failed.
+            AppLogger.log(
+              _tag,
+              'processPendingSyncQueue(): failed to process result for '
+              'action $clientActionId',
+              error: e,
+            );
             if (clientActionId != null) {
               final currentFailCount =
                   (action['failCount'] as num?)?.toInt() ?? 0;
               failCountById[clientActionId] = currentFailCount + 1;
-              if (result != null && result['error'] != null) {
-                lastErrorById[clientActionId] = result['error'].toString();
-              }
-            }
-            continue;
-          }
-          if (clientActionId != null) completedIds.add(clientActionId);
-
-          final orderJson = result['order'];
-          if (orderJson is Map) {
-            final confirmedOrder = Order.fromJson(
-              Map<String, dynamic>.from(orderJson),
-            );
-            final placeholderCode = action['type'] == 'create_order'
-                ? (action['offlineCode'] as String? ?? '')
-                : (action['orderCode'] as String? ?? '');
-            final idx = cached.indexWhere(
-              (c) =>
-                  c['id'] == placeholderCode ||
-                  c['orderCode'] == placeholderCode,
-            );
-            if (idx != -1) {
-              cached[idx] = confirmedOrder.toJson();
-            } else {
-              cached.insert(0, confirmedOrder.toJson());
-            }
-
-            if (action['type'] == 'create_order' &&
-                placeholderCode.isNotEmpty) {
-              createdPlaceholders[placeholderCode] = confirmedOrder.id;
             }
           }
         }
@@ -525,9 +554,29 @@ class OrdersRepository {
       }
     }
 
-    await _localCache.setCachedOrders(
-      LocalCacheService.dedupeOrdersById(cached),
-    );
+    // Merge this run's confirmed results into a *fresh* read of the cache,
+    // not the `cached` list captured before any of the network calls above —
+    // this run can span several sequential batch requests, during which
+    // another writer (a new order, a concurrent status/payment update) can
+    // have already changed the cache. Reading fresh here and merging with
+    // no `await` in between keeps this atomic from the event loop's
+    // perspective, so that other write can't land in the gap and get lost.
+    if (confirmedOrders.isNotEmpty) {
+      final freshCached = _localCache.getCachedOrders() ?? [];
+      for (final entry in confirmedOrders.entries) {
+        final idx = freshCached.indexWhere(
+          (c) => c['id'] == entry.key || c['orderCode'] == entry.key,
+        );
+        if (idx != -1) {
+          freshCached[idx] = entry.value;
+        } else {
+          freshCached.insert(0, entry.value);
+        }
+      }
+      await _localCache.setCachedOrders(
+        LocalCacheService.dedupeOrdersById(freshCached),
+      );
+    }
 
     // Re-read the queue rather than writing back the `dueNow`/`otherStore`
     // snapshot taken at the top of this call — another action (e.g. a
@@ -535,7 +584,7 @@ class OrdersRepository {
     // been enqueued in the meantime, and blindly overwriting with the
     // stale snapshot would silently discard it.
     final currentQueue = _localCache.getPendingSyncQueue();
-    final remaining = currentQueue
+    final updatedQueue = currentQueue
         .map((a) {
           var updated = a;
           final id = a['clientActionId']?.toString();
@@ -561,9 +610,55 @@ class OrdersRepository {
           return id == null || !completedIds.contains(id);
         })
         .toList();
+
+    // Actions that have now failed _deadLetterThreshold times in a row stop
+    // being retried on every sync cycle — parked in a separate queue so
+    // they stop counting toward "is anything still stuck?" for the banner.
+    final remaining = <Map<String, dynamic>>[];
+    final newlyDeadLettered = <Map<String, dynamic>>[];
+    for (final a in updatedQueue) {
+      final failCount = (a['failCount'] as num?)?.toInt() ?? 0;
+      if (failCount >= _deadLetterThreshold) {
+        newlyDeadLettered.add(a);
+      } else {
+        remaining.add(a);
+      }
+    }
     await _localCache.setPendingSyncQueue(remaining);
+    if (newlyDeadLettered.isNotEmpty) {
+      AppLogger.log(
+        _tag,
+        'processPendingSyncQueue(): moving ${newlyDeadLettered.length} '
+        'action(s) to dead-letter queue after $_deadLetterThreshold failed '
+        'attempts',
+      );
+      final currentDeadLetter = _localCache.getDeadLetterQueue();
+      await _localCache.setDeadLetterQueue([
+        ...currentDeadLetter,
+        ...newlyDeadLettered,
+      ]);
+    }
 
     return allBatchesOk;
+  }
+
+  /// Gives every dead-lettered action one fresh attempt. Only called from a
+  /// deliberate user "Sync now"/"Retry" tap — whatever caused an action to
+  /// be parked (bad data, a since-fixed server bug) may no longer apply,
+  /// but only an explicit user action should pay the cost of re-attempting
+  /// something that already failed repeatedly, not every silent background
+  /// sync.
+  Future<void> reviveDeadLetterQueue() async {
+    final deadLetter = _localCache.getDeadLetterQueue();
+    if (deadLetter.isEmpty) return;
+    AppLogger.log(
+      _tag,
+      'reviveDeadLetterQueue(): reviving ${deadLetter.length} action(s)',
+    );
+    final revived = deadLetter.map((a) => {...a, 'failCount': 0}).toList();
+    final pending = _localCache.getPendingSyncQueue();
+    await _localCache.setPendingSyncQueue([...pending, ...revived]);
+    await _localCache.setDeadLetterQueue([]);
   }
 
   /// Pulls remote changes since the last successful sync, in pages, and
@@ -608,108 +703,122 @@ class OrdersRepository {
             (a) => a['type'] == 'create_order',
           );
           for (final raw in rawOrders) {
-            final json = Map<String, dynamic>.from(raw as Map);
-            final deleted = json['deleted'] == true;
-            final orderId = json['id']?.toString() ?? '';
-            final orderCode = json['orderCode']?.toString() ?? orderId;
-            final idx = cached.indexWhere((c) => c['id'] == orderId);
-            if (deleted) {
-              if (idx != -1) cached.removeAt(idx);
-              // Target order was deleted/cancelled server-side.
-              // Drop all pending actions targeting this order (server state wins).
+            try {
+              final json = Map<String, dynamic>.from(raw as Map);
+              final deleted = json['deleted'] == true;
+              final orderId = json['id']?.toString() ?? '';
+              final orderCode = json['orderCode']?.toString() ?? orderId;
+              final idx = cached.indexWhere((c) => c['id'] == orderId);
+              if (deleted) {
+                if (idx != -1) cached.removeAt(idx);
+                // Target order was deleted/cancelled server-side.
+                // Drop all pending actions targeting this order (server state wins).
+                for (final action in pendingSnapshot) {
+                  final ref = action['orderCode']?.toString();
+                  if (ref != null && (ref == orderId || ref == orderCode)) {
+                    final id = action['clientActionId']?.toString();
+                    if (id != null && id.isNotEmpty)
+                      droppedClientActionIds.add(id);
+                  }
+                }
+                continue;
+              }
+              if (idx != -1) {
+                cached[idx] = json;
+              } else if (!hasPendingCreates) {
+                cached.add(json);
+              }
+
+              // Reconcile pending actions targeting this order.
+              // Server data wins: if server state already satisfies what the
+              // action intended, drop it from the queue so it stops retrying.
+              final serverStatus = json['status']?.toString();
+              final serverPayments =
+                  (json['payments'] as List?)
+                      ?.whereType<Map>()
+                      .map((p) => Map<String, dynamic>.from(p))
+                      .toList() ??
+                  [];
+              final matchedServerPaymentIds = <String>{};
+
               for (final action in pendingSnapshot) {
+                final actionId = action['clientActionId']?.toString();
+                if (actionId == null || actionId.isEmpty) continue;
+                if (droppedClientActionIds.contains(actionId)) continue;
+
                 final ref = action['orderCode']?.toString();
-                if (ref != null && (ref == orderId || ref == orderCode)) {
-                  final id = action['clientActionId']?.toString();
-                  if (id != null && id.isNotEmpty)
-                    droppedClientActionIds.add(id);
-                }
-              }
-              continue;
-            }
-            if (idx != -1) {
-              cached[idx] = json;
-            } else if (!hasPendingCreates) {
-              cached.add(json);
-            }
+                if (ref == null || (ref != orderId && ref != orderCode))
+                  continue;
 
-            // Reconcile pending actions targeting this order.
-            // Server data wins: if server state already satisfies what the
-            // action intended, drop it from the queue so it stops retrying.
-            final serverStatus = json['status']?.toString();
-            final serverPayments =
-                (json['payments'] as List?)
-                    ?.whereType<Map>()
-                    .map((p) => Map<String, dynamic>.from(p))
-                    .toList() ??
-                [];
-            final matchedServerPaymentIds = <String>{};
-
-            for (final action in pendingSnapshot) {
-              final actionId = action['clientActionId']?.toString();
-              if (actionId == null || actionId.isEmpty) continue;
-              if (droppedClientActionIds.contains(actionId)) continue;
-
-              final ref = action['orderCode']?.toString();
-              if (ref == null || (ref != orderId && ref != orderCode)) continue;
-
-              final type = action['type'];
-              if (type == 'update_status') {
-                final actionStatus = action['status']?.toString();
-                if (actionStatus != null && actionStatus == serverStatus) {
-                  droppedClientActionIds.add(actionId);
-                }
-              } else if (type == 'record_payment') {
-                final actionAmount = (action['amount'] as num?)?.toInt();
-                final actionMethod = action['method']
-                    ?.toString()
-                    .trim()
-                    .toLowerCase();
-                final actionQueuedAt = action['queuedAt']?.toString();
-
-                if (actionAmount != null && actionMethod != null) {
-                  // Strategy 1 (Preferred): Match payment identifier echoed back by server.
-                  final exactMatch = serverPayments.firstWhere((p) {
-                    final pId = p['id']?.toString() ?? '';
-                    if (matchedServerPaymentIds.contains(pId)) return false;
-                    return p['clientActionId']?.toString() == actionId ||
-                        pId == actionId;
-                  }, orElse: () => <String, dynamic>{});
-
-                  if (exactMatch.isNotEmpty) {
-                    final pId = exactMatch['id']?.toString() ?? actionId;
-                    matchedServerPaymentIds.add(pId);
+                final type = action['type'];
+                if (type == 'update_status') {
+                  final actionStatus = action['status']?.toString();
+                  if (actionStatus != null && actionStatus == serverStatus) {
                     droppedClientActionIds.add(actionId);
-                    continue;
                   }
+                } else if (type == 'record_payment') {
+                  final actionAmount = (action['amount'] as num?)?.toInt();
+                  final actionMethod = action['method']
+                      ?.toString()
+                      .trim()
+                      .toLowerCase();
+                  final actionQueuedAt = action['queuedAt']?.toString();
 
-                  // Strategy 2 (Fallback): Strict 1-to-1 match on amount + method +
-                  // date proximity (<= 1 calendar day to account for IST vs UTC timezone).
-                  final candidateMatch = serverPayments.firstWhere((p) {
-                    final pId = p['id']?.toString() ?? '';
-                    if (matchedServerPaymentIds.contains(pId)) return false;
-                    final pAmount = (p['amount'] as num?)?.toInt();
-                    final pMethod = p['method']
-                        ?.toString()
-                        .trim()
-                        .toLowerCase();
-                    if (pAmount != actionAmount || pMethod != actionMethod)
-                      return false;
-                    return _isPaymentDateClose(
-                      p['date']?.toString(),
-                      actionQueuedAt,
-                    );
-                  }, orElse: () => <String, dynamic>{});
+                  if (actionAmount != null && actionMethod != null) {
+                    // Strategy 1 (Preferred): Match payment identifier echoed back by server.
+                    final exactMatch = serverPayments.firstWhere((p) {
+                      final pId = p['id']?.toString() ?? '';
+                      if (matchedServerPaymentIds.contains(pId)) return false;
+                      return p['clientActionId']?.toString() == actionId ||
+                          pId == actionId;
+                    }, orElse: () => <String, dynamic>{});
 
-                  if (candidateMatch.isNotEmpty) {
-                    final pId = candidateMatch['id']?.toString() ?? '';
-                    if (pId.isNotEmpty) {
+                    if (exactMatch.isNotEmpty) {
+                      final pId = exactMatch['id']?.toString() ?? actionId;
                       matchedServerPaymentIds.add(pId);
+                      droppedClientActionIds.add(actionId);
+                      continue;
                     }
-                    droppedClientActionIds.add(actionId);
+
+                    // Strategy 2 (Fallback): Strict 1-to-1 match on amount + method +
+                    // date proximity (<= 1 calendar day to account for IST vs UTC timezone).
+                    final candidateMatch = serverPayments.firstWhere((p) {
+                      final pId = p['id']?.toString() ?? '';
+                      if (matchedServerPaymentIds.contains(pId)) return false;
+                      final pAmount = (p['amount'] as num?)?.toInt();
+                      final pMethod = p['method']
+                          ?.toString()
+                          .trim()
+                          .toLowerCase();
+                      if (pAmount != actionAmount || pMethod != actionMethod)
+                        return false;
+                      return _isPaymentDateClose(
+                        p['date']?.toString(),
+                        actionQueuedAt,
+                      );
+                    }, orElse: () => <String, dynamic>{});
+
+                    if (candidateMatch.isNotEmpty) {
+                      final pId = candidateMatch['id']?.toString() ?? '';
+                      if (pId.isNotEmpty) {
+                        matchedServerPaymentIds.add(pId);
+                      }
+                      droppedClientActionIds.add(actionId);
+                    }
                   }
                 }
               }
+            } catch (e) {
+              // The GET itself succeeded — this is a client-side bug
+              // processing one order's payload (unexpected shape, bad
+              // date, etc.), not a network failure. Don't let it abort the
+              // whole delta pull or get reported as "unreachable"; just
+              // skip this one order and keep reconciling the rest.
+              AppLogger.log(
+                _tag,
+                'syncOrdersDelta(): failed to process one order in the page',
+                error: e,
+              );
             }
           }
           await _localCache.setCachedOrders(

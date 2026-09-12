@@ -1,10 +1,13 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/core/utils/idempotency.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 
 import 'cart_event.dart';
 import 'cart_state.dart';
+
+const _tag = 'CART_BLOC';
 
 class CartBloc extends Bloc<CartEvent, CartState> {
   final PosRepository posRepository;
@@ -41,7 +44,13 @@ class CartBloc extends Bloc<CartEvent, CartState> {
       final products = await posRepository.listProducts();
       emit(state.copyWith(isLoading: false, allProducts: products));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      AppLogger.log(_tag, 'load catalog failed', error: e);
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Could not load products — try again',
+        ),
+      );
     }
   }
 
@@ -55,7 +64,13 @@ class CartBloc extends Bloc<CartEvent, CartState> {
       final products = await posRepository.listProducts();
       emit(state.copyWith(isLoading: false, allProducts: products));
     } catch (e) {
-      emit(state.copyWith(isLoading: false, error: e.toString()));
+      AppLogger.log(_tag, 'refresh catalog failed', error: e);
+      emit(
+        state.copyWith(
+          isLoading: false,
+          error: 'Could not refresh products — try again',
+        ),
+      );
     }
   }
 
@@ -173,8 +188,14 @@ class CartBloc extends Bloc<CartEvent, CartState> {
 
       emit(state.copyWith(isSubmitting: false, placedOrder: order));
     } catch (e) {
+      AppLogger.log(_tag, 'submit order failed', error: e);
       // NOTE: Preserves existing idempotencyKey so subsequent retries send the exact same key!
-      emit(state.copyWith(isSubmitting: false, submissionError: e.toString()));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          submissionError: 'Could not place order — try again',
+        ),
+      );
     }
   }
 

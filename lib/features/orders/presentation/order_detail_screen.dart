@@ -151,7 +151,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             ),
           );
           if (state.actionSuccessMessage == 'Status updated to Ready' &&
-              state.selectedOrder != null) {
+              state.selectedOrder != null &&
+              state.selectedOrder!.orderCode == widget.initialOrder.orderCode) {
             // StatusDialog listens on this same bloc and pops itself on this
             // same state change. Its listener runs after this one, so
             // pushing the notify dialog synchronously here would land it on

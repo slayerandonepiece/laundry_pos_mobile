@@ -1,10 +1,13 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
 
 import 'auth_event.dart';
 import 'auth_state.dart';
+
+const _tag = 'AUTH_BLOC';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository authRepository;
@@ -208,8 +211,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await authRepository.setPassword(event.newPassword);
       add(CheckAuthStatusEvent());
     } catch (e) {
+      AppLogger.log(_tag, 'set password failed', error: e);
       emit(
-        MustChangePasswordState(user: current.user, errorMessage: e.toString()),
+        MustChangePasswordState(
+          user: current.user,
+          errorMessage: 'Could not set password — try again',
+        ),
       );
     }
   }

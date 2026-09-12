@@ -177,6 +177,23 @@ class LocalCacheService {
       _box.put(keyPendingSyncQueue, queue);
   Future<void> clearPendingSyncQueue() => _box.delete(keyPendingSyncQueue);
 
+  // Actions that failed enough times in a row to stop being retried
+  // silently on every sync cycle — parked here instead of the main queue so
+  // one permanently-broken action can't keep the sync banner stuck on
+  // "paused" forever. A manual "Sync now"/"Retry" tap moves them back into
+  // the pending queue for one fresh attempt.
+  static const String keyDeadLetterQueue = 'dead_letter_queue_list';
+  List<Map<String, dynamic>> getDeadLetterQueue() {
+    final raw = _box.get(keyDeadLetterQueue);
+    if (raw is List) {
+      return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
+    }
+    return [];
+  }
+
+  Future<void> setDeadLetterQueue(List<Map<String, dynamic>> queue) =>
+      _box.put(keyDeadLetterQueue, queue);
+
   // Generic key-value helpers for offline storage
   dynamic get(String key) => _box.get(key);
   Future<void> put(String key, dynamic value) => _box.put(key, value);

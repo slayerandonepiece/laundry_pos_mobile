@@ -1,5 +1,14 @@
 import '../data/models/order_model.dart';
 
+/// Deliberately has no `==`/`hashCode` override (no Equatable, no manual
+/// implementation). `error` and `actionSuccessMessage` are one-shot signals,
+/// not durable state — Bloc's `emit()` skips a new state that `==` an
+/// existing one, so if two of the same error/message in a row are ever
+/// possible, adding equality here would silently drop the second emission
+/// and the listener that's supposed to react to it (e.g. a dialog closing,
+/// a SnackBar showing) would never fire. Don't add Equatable/copyWith-based
+/// equality to this class without first ensuring one-shot fields are always
+/// cleared after being consumed.
 class OrdersState {
   final bool isLoading;
   final String? error;
