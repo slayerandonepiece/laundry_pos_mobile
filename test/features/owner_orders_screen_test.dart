@@ -158,22 +158,21 @@ void main() {
       await tester.pumpWidget(createScreen());
       await tester.pumpAndSettle();
 
-      // Today orders placed are ORD-101 (₹200, balance ₹50) and ORD-102 (₹300, balance ₹0).
-      // Order value = ₹500, matching orders = 2
-      // Collected = ₹450 (₹150 + ₹300)
-      // To collect = ₹50 (₹50 + ₹0)
-      expect(find.text('₹500'), findsOneWidget);
-      expect(find.text('2 matching orders'), findsOneWidget);
+      // Default period is 'This month', so today's and yesterday's orders
+      // all match: order value = ₹600, collected = ₹450, to collect = ₹150
+      expect(find.text('Sales summary'), findsOneWidget);
+      expect(find.text('Total order value'), findsOneWidget);
+      expect(find.text('₹600'), findsOneWidget);
+      expect(find.text('3 orders'), findsOneWidget);
+      expect(find.text('Collected'), findsOneWidget);
       expect(find.text('₹450'), findsOneWidget);
-      expect(find.text('₹50'), findsOneWidget);
+      expect(find.text('To collect'), findsOneWidget);
+      expect(find.text('₹150'), findsOneWidget);
 
-      // Both orders are visible in the list
+      // All three orders are visible in the list
       expect(find.text('ORD-101'), findsOneWidget);
       expect(find.text('ORD-102'), findsOneWidget);
-      expect(
-        find.text('ORD-103'),
-        findsNothing,
-      ); // ORD-103 was placed yesterday
+      expect(find.text('ORD-103'), findsOneWidget);
     });
 
     testWidgets(
@@ -187,10 +186,11 @@ void main() {
         await tester.pumpWidget(createScreen());
         await tester.pumpAndSettle();
 
-        // Default: 'Selected dates' is active
+        // Default: 'Selected dates' is active, period defaults to 'This month'
+        // so all three orders (today + yesterday) match.
         expect(find.text('ORD-101'), findsOneWidget);
         expect(find.text('ORD-102'), findsOneWidget);
-        expect(find.text('ORD-103'), findsNothing);
+        expect(find.text('ORD-103'), findsOneWidget);
 
         // Tap 'Late'
         await tester.tap(find.text('Late'));
@@ -204,7 +204,7 @@ void main() {
         // Stats for Late: order value ₹100, collected ₹0, to collect ₹100, 1 matching order
         // (₹100 appears in Order value stat card, To collect stat card, and ORD-103 card total)
         expect(find.text('₹100'), findsNWidgets(3));
-        expect(find.text('1 matching order'), findsOneWidget);
+        expect(find.text('1 order'), findsOneWidget);
         expect(find.text('₹0'), findsOneWidget); // Collected
 
         // Tap 'Due today'
@@ -221,7 +221,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('ORD-101'), findsOneWidget);
         expect(find.text('ORD-102'), findsOneWidget);
-        expect(find.text('ORD-103'), findsNothing);
+        expect(find.text('ORD-103'), findsOneWidget);
       },
     );
 
@@ -235,7 +235,7 @@ void main() {
 
       expect(find.text('ORD-102'), findsOneWidget);
       expect(find.text('ORD-101'), findsNothing);
-      expect(find.text('1 matching order'), findsOneWidget);
+      expect(find.text('1 order'), findsOneWidget);
 
       // Search by phone '987654'
       await tester.enterText(find.byType(TextField), '987654');
@@ -283,7 +283,7 @@ void main() {
     );
 
     testWidgets(
-      'Work status and payment status dropdown filters work as expected',
+      'Work status and payment status dropdown filters work as expected with Part-paid',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -293,19 +293,20 @@ void main() {
         await tester.pumpWidget(createScreen());
         await tester.pumpAndSettle();
 
-        // Initially ORD-101 (Pending, Partial) and ORD-102 (Ready, Paid) are visible
+        // Initially ORD-101 (Pending, Partial/Part-paid) and ORD-102 (Ready, Paid) are visible
         expect(find.text('ORD-101'), findsOneWidget);
         expect(find.text('ORD-102'), findsOneWidget);
 
-        // Filter by payment status: Paid
+        // Filter by payment status: Part-paid (replaces 'Partial')
         await tester.tap(find.text('All payment statuses'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Paid').last);
+        expect(find.text('Part-paid'), findsWidgets);
+        await tester.tap(find.text('Part-paid').last);
         await tester.pumpAndSettle();
 
-        // Only ORD-102 is paid
-        expect(find.text('ORD-102'), findsOneWidget);
-        expect(find.text('ORD-101'), findsNothing);
+        // Only ORD-101 is part-paid
+        expect(find.text('ORD-101'), findsOneWidget);
+        expect(find.text('ORD-102'), findsNothing);
 
         // Filter by work status: Ready
         await tester.tap(find.text('All work statuses'));
@@ -313,7 +314,68 @@ void main() {
         await tester.tap(find.text('Ready').last);
         await tester.pumpAndSettle();
 
+        // Neither matches (ORD-101 is part-paid but Pending, ORD-102 is Ready but Paid)
+        expect(find.text('ORD-101'), findsNothing);
+        expect(find.text('ORD-102'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Persistent Clear button resets filters to default',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(createScreen());
+        await tester.pumpAndSettle();
+
+        // The Clear button is always visible
+        final clearBtn = find.text('Clear');
+        expect(clearBtn, findsOneWidget);
+
+        // Apply a quick filter
+        await tester.tap(find.text('Late'));
+        await tester.pumpAndSettle();
+        expect(find.text('ORD-101'), findsNothing);
+
+        // Tap Clear button
+        await tester.tap(clearBtn);
+        await tester.pumpAndSettle();
+
+        // Both orders visible again
+        expect(find.text('ORD-101'), findsOneWidget);
         expect(find.text('ORD-102'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Period selector supports This quarter and Custom dates with inline pickers',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(createScreen());
+        await tester.pumpAndSettle();
+
+        // Switch to "This quarter"
+        await tester.tap(find.text('This month'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('This quarter').last);
+        await tester.pumpAndSettle();
+
+        // Switch to "Custom dates"
+        await tester.tap(find.text('This quarter'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Custom dates').last);
+        await tester.pumpAndSettle();
+
+        // Inline FROM / TO selectors appear
+        expect(find.text('FROM'), findsOneWidget);
+        expect(find.text('TO'), findsOneWidget);
       },
     );
   });

@@ -151,7 +151,7 @@ class ConnectivityService {
         _isOffline = true;
         var count = 0;
         try {
-          count = _localCache.getPendingSyncQueue().length;
+          count = _localCache.getTotalPendingCount();
         } catch (_) {}
         AppLogger.log(
           _tag,

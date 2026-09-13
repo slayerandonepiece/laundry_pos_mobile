@@ -22,6 +22,15 @@ class MainNavigationShell extends StatefulWidget {
 
 class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
+  final ValueNotifier<int> _dashboardResetSignal = ValueNotifier<int>(0);
+  final ValueNotifier<int> _ordersResetSignal = ValueNotifier<int>(0);
+
+  @override
+  void dispose() {
+    _dashboardResetSignal.dispose();
+    _ordersResetSignal.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,9 +44,15 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     final List<Widget> screens = isOwner
         ? [
             OwnerDashboardScreen(
-              onOrdersTabPressed: () => setState(() => _currentIndex = 1),
+              resetSignal: _dashboardResetSignal,
+              onOrdersTabPressed: () {
+                if (_currentIndex == 0) {
+                  _dashboardResetSignal.value++;
+                }
+                setState(() => _currentIndex = 1);
+              },
             ),
-            const OwnerOrdersScreen(),
+            OwnerOrdersScreen(resetSignal: _ordersResetSignal),
             const MoreScreen(),
           ]
         : [const OrdersListScreen()];
@@ -63,9 +78,16 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             ? AppBottomNav(
                 currentIndex: _currentIndex,
                 onTap: (index) {
-                  setState(() {
-                    _currentIndex = index;
-                  });
+                  if (index != _currentIndex) {
+                    if (_currentIndex == 0) {
+                      _dashboardResetSignal.value++;
+                    } else if (_currentIndex == 1) {
+                      _ordersResetSignal.value++;
+                    }
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                  }
                   // Reload orders whenever the user switches to the Orders
                   // tab so offline-placed orders appear immediately.
                   const ordersTabIndex = 1;

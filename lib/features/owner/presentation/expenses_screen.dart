@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
+import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
@@ -14,6 +15,7 @@ import 'package:myshop/shared/widgets/centred_dialog.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
+import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -24,7 +26,9 @@ class ExpensesScreen extends StatefulWidget {
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
   final TextEditingController _searchController = TextEditingController();
-  String _selectedPeriod = '30d'; // 'today' | '7d' | '30d'
+  String _selectedPeriod = '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
+  DateTime? _customFrom;
+  DateTime? _customTo;
   String _activeFilter = 'all'; // 'all' | 'unpaid' | 'recurring'
   String _searchQuery = '';
 
@@ -47,6 +51,142 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     return DateTime.tryParse(dateStr.trim());
   }
 
+  Future<void> _pickCustomDate({required bool isFrom}) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isFrom
+          ? (_customFrom ?? now)
+          : (_customTo ?? _customFrom ?? now),
+      firstDate: DateTime(2020),
+      lastDate: now,
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primary,
+            onPrimary: Colors.white,
+            onSurface: AppColors.text,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isFrom) {
+        _customFrom = picked;
+        if (_customTo != null && _customTo!.isBefore(_customFrom!)) {
+          _customTo = _customFrom;
+        }
+      } else {
+        _customTo = picked;
+        if (_customFrom != null && _customFrom!.isAfter(_customTo!)) {
+          _customFrom = _customTo;
+        }
+      }
+    });
+  }
+
+  Widget _buildCustomDateSelector() {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.selectedSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => _pickCustomDate(isFrom: true),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 14,
+                    color: AppColors.mutedText,
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'FROM',
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fontBody,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: AppColors.mutedText,
+                        ),
+                      ),
+                      Text(
+                        _customFrom != null
+                            ? DateFormatter.formatShort(_customFrom!)
+                            : 'Pick date',
+                        style: const TextStyle(
+                          fontFamily: AppTextStyles.fontBody,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(width: 1, height: 26, color: AppColors.border),
+          const SizedBox(width: 14),
+          Expanded(
+            child: InkWell(
+              onTap: () => _pickCustomDate(isFrom: false),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 14,
+                    color: AppColors.mutedText,
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'TO',
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fontBody,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: AppColors.mutedText,
+                        ),
+                      ),
+                      Text(
+                        _customTo != null
+                            ? DateFormatter.formatShort(_customTo!)
+                            : 'Pick date',
+                        style: const TextStyle(
+                          fontFamily: AppTextStyles.fontBody,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   bool _matchesPeriod(DateTime targetDate, String period, DateTime todayStart) {
     final d = _startOfDay(targetDate);
     final tomorrowStart = todayStart.add(const Duration(days: 1));
@@ -63,6 +203,30 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         final isThisMonth =
             d.year == todayStart.year && d.month == todayStart.month;
         return isLast30d || isThisMonth;
+      case 'quarter':
+        final quarterStart = DateTime(
+          todayStart.year,
+          ((todayStart.month - 1) ~/ 3) * 3 + 1,
+          1,
+        );
+        final nextQuarterStart = DateTime(
+          todayStart.year,
+          ((todayStart.month - 1) ~/ 3) * 3 + 4,
+          1,
+        );
+        return !d.isBefore(quarterStart) && d.isBefore(nextQuarterStart);
+      case 'custom':
+        if (_customFrom == null || _customTo == null) {
+          final start30d = todayStart.subtract(const Duration(days: 29));
+          final isLast30d = !d.isBefore(start30d) && d.isBefore(tomorrowStart);
+          final isThisMonth =
+              d.year == todayStart.year && d.month == todayStart.month;
+          return isLast30d || isThisMonth;
+        }
+        final fromDate = _startOfDay(_customFrom!);
+        final toDateTomorrow =
+            _startOfDay(_customTo!).add(const Duration(days: 1));
+        return !d.isBefore(fromDate) && d.isBefore(toDateTomorrow);
       default:
         return true;
     }
@@ -108,10 +272,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BlocProvider.value(
-          value: bloc,
-          child: const AddExpenseScreen(),
-        ),
+        builder: (_) =>
+            BlocProvider.value(value: bloc, child: const AddExpenseScreen()),
       ),
     );
   }
@@ -160,8 +322,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           return _expenseMatchesPeriod(e, _selectedPeriod, todayStart);
         }).toList();
 
-        final unpaidCountInPeriod =
-            periodExpenses.where((e) => !e.isPaid).length;
+        final unpaidCountInPeriod = periodExpenses
+            .where((e) => !e.isPaid)
+            .length;
 
         // 3. Filter by search query and category/status chips
         final displayedExpenses = periodExpenses.where((e) {
@@ -177,11 +340,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           return true;
         }).toList();
 
-        final recurringShownCount =
-            displayedExpenses.where((e) => e.monthly).length;
+        final recurringShownCount = displayedExpenses
+            .where((e) => e.monthly)
+            .length;
 
-        final totalPeriodAmount =
-            periodExpenses.fold(0, (sum, e) => sum + e.amount);
+        final totalPeriodAmount = periodExpenses.fold(
+          0,
+          (sum, e) => sum + e.amount,
+        );
 
         return Scaffold(
           backgroundColor: AppColors.surface,
@@ -213,6 +379,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               ],
             ),
             actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  color: AppColors.mutedText,
+                  size: 20,
+                ),
+                tooltip: 'Refresh',
+                onPressed: () {
+                  context.read<OwnerBloc>().add(LoadExpensesEvent());
+                },
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: 16),
                 child: IconButton(
@@ -234,335 +411,366 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               child: Container(color: AppColors.border, height: 1),
             ),
           ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              context.read<OwnerBloc>().add(LoadExpensesEvent());
-            },
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                // 1. Period selector row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Expense overview',
-                      style: TextStyle(
-                        fontFamily: AppTextStyles.fontDisplay,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    _PeriodSelector(
-                      selectedPeriod: _selectedPeriod,
-                      onPeriodChanged: (val) {
-                        setState(() => _selectedPeriod = val);
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // 2. Stats row
-                // Headline primary card: Paid in selected period
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          body: Column(
+            children: [
+              SyncStatusBar(
+                onSyncNow: () {
+                  context.read<OwnerBloc>().add(LoadExpensesEvent());
+                },
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    context.read<OwnerBloc>().add(LoadExpensesEvent());
+                  },
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(20),
                     children: [
-                      const Text(
-                        'Paid in selected period',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFD9E7FF),
-                        ),
-                      ),
-                      const SizedBox(height: 9),
-                      Text(
-                        CurrencyFormatter.format(paidInPeriod),
-                        style: const TextStyle(
-                          fontFamily: AppTextStyles.fontDisplay,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Two secondary cards: Unpaid bills in period & Recurring bills shown
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppCard(
-                        padding: const EdgeInsets.all(15),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Unpaid bills in period',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.mutedText,
-                              ),
+                      // 1. Period selector row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Expense overview',
+                            style: TextStyle(
+                              fontFamily: AppTextStyles.fontDisplay,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text,
                             ),
-                            const SizedBox(height: 9),
-                            Text(
-                              CurrencyFormatter.format(unpaidInPeriod),
-                              style: TextStyle(
-                                fontFamily: AppTextStyles.fontDisplay,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: unpaidInPeriod > 0
-                                    ? AppColors.danger
-                                    : AppColors.text,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: AppCard(
-                        padding: const EdgeInsets.all(15),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Recurring bills shown',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.mutedText,
-                              ),
-                            ),
-                            const SizedBox(height: 9),
-                            Text(
-                              '$recurringShownCount',
-                              style: const TextStyle(
-                                fontFamily: AppTextStyles.fontDisplay,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.text,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // 3. Search box
-                Container(
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    border: Border.all(color: AppColors.controlBorder),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 13),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.search,
-                        size: 19,
-                        color: AppColors.mutedText,
-                      ),
-                      const SizedBox(width: 9),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          style: const TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 14,
-                            color: AppColors.text,
                           ),
-                          decoration: const InputDecoration(
-                            hintText: 'Search bills or categories...',
-                            hintStyle: TextStyle(
-                              fontFamily: AppTextStyles.fontBody,
-                              fontSize: 14,
-                              color: AppColors.faintText,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: (val) {
-                            setState(() => _searchQuery = val);
-                          },
-                        ),
-                      ),
-                      if (_searchController.text.isNotEmpty)
-                        InkWell(
-                          onTap: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
-                          child: const Icon(
-                            Icons.close,
-                            size: 18,
-                            color: AppColors.mutedText,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // 4. Filter chips
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      AppFilterChip(
-                        label: 'All',
-                        isSelected: _activeFilter == 'all',
-                        onTap: () => setState(() => _activeFilter = 'all'),
-                      ),
-                      const SizedBox(width: 8),
-                      AppFilterChip(
-                        label: 'Unpaid $unpaidCountInPeriod',
-                        isSelected: _activeFilter == 'unpaid',
-                        onTap: () => setState(() => _activeFilter = 'unpaid'),
-                      ),
-                      const SizedBox(width: 8),
-                      AppFilterChip(
-                        label: 'Recurring',
-                        isSelected: _activeFilter == 'recurring',
-                        onTap: () =>
-                            setState(() => _activeFilter = 'recurring'),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // 5. Ledger list or Empty state
-                if (displayedExpenses.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 30),
-                    child: EmptyState(
-                      icon: allExpenses.isEmpty
-                          ? Icons.receipt_long_outlined
-                          : Icons.search_off_outlined,
-                      title: allExpenses.isEmpty
-                          ? 'No expenses yet'
-                          : 'No expenses match your filters',
-                      subtitle: allExpenses.isEmpty
-                          ? 'Add an expense using the + button above.'
-                          : 'Try changing your period, search query, or filters.',
-                      actionLabel: allExpenses.isEmpty
-                          ? 'Add expense'
-                          : 'Clear filters',
-                      onAction: allExpenses.isEmpty
-                          ? () => _showAddExpenseDialog(context)
-                          : () {
-                              _searchController.clear();
+                          _PeriodSelector(
+                            selectedPeriod: _selectedPeriod,
+                            customFrom: _customFrom,
+                            customTo: _customTo,
+                            onPeriodChanged: (val) {
                               setState(() {
-                                _searchQuery = '';
-                                _activeFilter = 'all';
+                                _selectedPeriod = val;
+                                if (val != 'custom') {
+                                  _customFrom = null;
+                                  _customTo = null;
+                                }
                               });
                             },
-                    ),
-                  )
-                else
-                  ...displayedExpenses.map((expense) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 11),
-                      child: AppCard(
-                        padding: const EdgeInsets.all(14),
-                        onTap: !expense.isPaid
-                            ? () => _showMarkPaidDialog(context, expense)
-                            : null,
-                        child: Row(
+                          ),
+                        ],
+                      ),
+                      if (_selectedPeriod == 'custom')
+                        _buildCustomDateSelector(),
+                      const SizedBox(height: 12),
+
+                      // 2. Stats row
+                      // Headline primary card: Paid in selected period
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
+                            const Text(
+                              'Paid in selected period',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFD9E7FF),
+                              ),
+                            ),
+                            const SizedBox(height: 9),
+                            Text(
+                              CurrencyFormatter.format(paidInPeriod),
+                              style: const TextStyle(
+                                fontFamily: AppTextStyles.fontDisplay,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Two secondary cards: Unpaid bills in period & Recurring bills shown
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AppCard(
+                              padding: const EdgeInsets.all(15),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        expense.title,
-                                        style: const TextStyle(
-                                          fontFamily: AppTextStyles.fontBody,
-                                          fontSize: 14.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.text,
-                                        ),
-                                      ),
-                                      if (expense.monthly) ...[
-                                        const SizedBox(width: 7),
-                                        const StatusPill(
-                                          label: 'Monthly',
-                                          variant: PillVariant.inProgress,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${expense.category} · Due ${expense.due}',
-                                    style: AppTextStyles.hint,
-                                  ),
-                                  if (expense.isPaid &&
-                                      expense.paid != null &&
-                                      expense.paid!.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Paid ${expense.paid}',
-                                      style: const TextStyle(
-                                        fontFamily: AppTextStyles.fontBody,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.success,
-                                      ),
+                                  const Text(
+                                    'Unpaid bills in period',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.mutedText,
                                     ),
-                                  ],
+                                  ),
+                                  const SizedBox(height: 9),
+                                  Text(
+                                    CurrencyFormatter.format(unpaidInPeriod),
+                                    style: TextStyle(
+                                      fontFamily: AppTextStyles.fontDisplay,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                      color: unpaidInPeriod > 0
+                                          ? AppColors.danger
+                                          : AppColors.text,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  CurrencyFormatter.format(expense.amount),
-                                  style: const TextStyle(
-                                    fontFamily: AppTextStyles.fontDisplay,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.text,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: AppCard(
+                              padding: const EdgeInsets.all(15),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Recurring bills shown',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.mutedText,
+                                    ),
                                   ),
+                                  const SizedBox(height: 9),
+                                  Text(
+                                    '$recurringShownCount',
+                                    style: const TextStyle(
+                                      fontFamily: AppTextStyles.fontDisplay,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.text,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 3. Search box
+                      Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          border: Border.all(color: AppColors.controlBorder),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 13),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.search,
+                              size: 19,
+                              color: AppColors.mutedText,
+                            ),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                style: const TextStyle(
+                                  fontFamily: AppTextStyles.fontBody,
+                                  fontSize: 14,
+                                  color: AppColors.text,
                                 ),
-                                const SizedBox(height: 5),
-                                StatusPill(
-                                  label: expense.isPaid ? 'Paid' : 'Unpaid',
-                                  variant: expense.isPaid
-                                      ? PillVariant.paid
-                                      : PillVariant.ready,
+                                decoration: const InputDecoration(
+                                  hintText: 'Search bills or categories...',
+                                  hintStyle: TextStyle(
+                                    fontFamily: AppTextStyles.fontBody,
+                                    fontSize: 14,
+                                    color: AppColors.faintText,
+                                  ),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
                                 ),
-                              ],
+                                onChanged: (val) {
+                                  setState(() => _searchQuery = val);
+                                },
+                              ),
+                            ),
+                            if (_searchController.text.isNotEmpty)
+                              InkWell(
+                                onTap: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: AppColors.mutedText,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 4. Filter chips
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            AppFilterChip(
+                              label: 'All',
+                              isSelected: _activeFilter == 'all',
+                              onTap: () =>
+                                  setState(() => _activeFilter = 'all'),
+                            ),
+                            const SizedBox(width: 8),
+                            AppFilterChip(
+                              label: 'Unpaid $unpaidCountInPeriod',
+                              isSelected: _activeFilter == 'unpaid',
+                              onTap: () =>
+                                  setState(() => _activeFilter = 'unpaid'),
+                            ),
+                            const SizedBox(width: 8),
+                            AppFilterChip(
+                              label: 'Recurring',
+                              isSelected: _activeFilter == 'recurring',
+                              onTap: () =>
+                                  setState(() => _activeFilter = 'recurring'),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  }),
-              ],
-            ),
+                      const SizedBox(height: 16),
+
+                      // 5. Ledger list or Empty state
+                      if (displayedExpenses.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 30),
+                          child: EmptyState(
+                            icon: allExpenses.isEmpty
+                                ? Icons.receipt_long_outlined
+                                : Icons.search_off_outlined,
+                            title: allExpenses.isEmpty
+                                ? 'No expenses yet'
+                                : 'No expenses match your filters',
+                            subtitle: allExpenses.isEmpty
+                                ? 'Add an expense using the + button above.'
+                                : 'Try changing your period, search query, or filters.',
+                            actionLabel: allExpenses.isEmpty
+                                ? 'Add expense'
+                                : 'Clear filters',
+                            onAction: allExpenses.isEmpty
+                                ? () => _showAddExpenseDialog(context)
+                                : () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchQuery = '';
+                                      _activeFilter = 'all';
+                                    });
+                                  },
+                          ),
+                        )
+                      else
+                        ...displayedExpenses.map((expense) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 11),
+                            child: AppCard(
+                              padding: const EdgeInsets.all(14),
+                              onTap: !expense.isPaid
+                                  ? () => _showMarkPaidDialog(context, expense)
+                                  : null,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              expense.title,
+                                              style: const TextStyle(
+                                                fontFamily:
+                                                    AppTextStyles.fontBody,
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.text,
+                                              ),
+                                            ),
+                                            if (expense.monthly) ...[
+                                              const SizedBox(width: 7),
+                                              const StatusPill(
+                                                label: 'Monthly',
+                                                variant: PillVariant.inProgress,
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '${expense.category} · Due ${expense.due}',
+                                          style: AppTextStyles.hint,
+                                        ),
+                                        if (expense.isPaid &&
+                                            expense.paid != null &&
+                                            expense.paid!.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Paid ${expense.paid}',
+                                            style: const TextStyle(
+                                              fontFamily:
+                                                  AppTextStyles.fontBody,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.success,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        CurrencyFormatter.format(
+                                          expense.amount,
+                                        ),
+                                        style: const TextStyle(
+                                          fontFamily: AppTextStyles.fontDisplay,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.text,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      StatusPill(
+                                        label: expense.isPaid
+                                            ? 'Paid'
+                                            : 'Unpaid',
+                                        variant: expense.isPaid
+                                            ? PillVariant.paid
+                                            : PillVariant.ready,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -660,7 +868,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             AppTextField(
               label: 'AMOUNT (₹)',
               hint: 'e.g. 5000',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               controller: _amountController,
             ),
             const SizedBox(height: 14),
@@ -684,14 +894,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 'Utilities',
                 'Maintenance',
                 'Other',
-              ]
-                  .map(
-                    (c) => DropdownMenuItem(
-                      value: c,
-                      child: Text(c),
-                    ),
-                  )
-                  .toList(),
+              ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
               onChanged: (v) {
                 if (v != null) {
                   setState(() => _category = v);
@@ -741,10 +944,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               ),
             ],
             const SizedBox(height: 24),
-            PrimaryButton(
-              label: 'Save expense',
-              onPressed: _handleSave,
-            ),
+            PrimaryButton(label: 'Save expense', onPressed: _handleSave),
           ],
         ),
       ),
@@ -754,17 +954,23 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
 class _PeriodSelector extends StatelessWidget {
   final String selectedPeriod;
+  final DateTime? customFrom;
+  final DateTime? customTo;
   final ValueChanged<String> onPeriodChanged;
 
   const _PeriodSelector({
     required this.selectedPeriod,
+    this.customFrom,
+    this.customTo,
     required this.onPeriodChanged,
   });
 
   static const _labels = {
     'today': 'Today',
-    '7d': 'Last 7 days',
+    '7d': 'This week',
     '30d': 'This month',
+    'quarter': 'This quarter',
+    'custom': 'Custom dates',
   };
 
   @override
@@ -795,6 +1001,27 @@ class _PeriodSelector extends StatelessWidget {
             if (val != null) {
               onPeriodChanged(val);
             }
+          },
+          selectedItemBuilder: (context) {
+            return _labels.entries.map((e) {
+              String labelText = e.value;
+              if (e.key == 'custom' && customFrom != null && customTo != null) {
+                labelText =
+                    '${DateFormatter.formatShort(customFrom!)} – ${DateFormatter.formatShort(customTo!)}';
+              }
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  labelText,
+                  style: const TextStyle(
+                    fontFamily: AppTextStyles.fontBody,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.text,
+                  ),
+                ),
+              );
+            }).toList();
           },
           items: _labels.entries.map((e) {
             return DropdownMenuItem<String>(value: e.key, child: Text(e.value));

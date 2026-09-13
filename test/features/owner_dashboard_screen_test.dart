@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/shared/widgets/app_card.dart';
+import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
@@ -23,7 +25,13 @@ class FakeDashboardOwnerRepository implements OwnerRepository {
   FakeDashboardOwnerRepository({required this.metrics});
 
   @override
-  Future<DashboardMetrics> getDashboardMetrics({String? from, String? to}) async => metrics;
+  Future<DashboardMetrics> getDashboardMetrics({
+    String? from,
+    String? to,
+  }) async => metrics;
+
+  @override
+  DashboardMetrics? getCachedDashboardMetricsSync() => null;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -49,8 +57,10 @@ class MockAuthBloc extends Bloc<AuthEvent, AuthState> implements AuthBloc {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class MockOrdersBloc extends Bloc<OrdersEvent, OrdersState> implements OrdersBloc {
-  MockOrdersBloc([List<Order> orders = const []]) : super(OrdersState(allOrders: orders)) {
+class MockOrdersBloc extends Bloc<OrdersEvent, OrdersState>
+    implements OrdersBloc {
+  MockOrdersBloc([List<Order> orders = const []])
+    : super(OrdersState(allOrders: orders)) {
     on<LoadOrdersEvent>((event, emit) {});
   }
 
@@ -141,7 +151,9 @@ void main() {
 
     Widget buildTestWidget() {
       return MultiRepositoryProvider(
-        providers: [RepositoryProvider<OrdersRepository>.value(value: mockOrdersRepo)],
+        providers: [
+          RepositoryProvider<OrdersRepository>.value(value: mockOrdersRepo),
+        ],
         child: MultiBlocProvider(
           providers: [
             BlocProvider<OwnerBloc>.value(value: ownerBloc),
@@ -160,60 +172,60 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('1. Two hero money cards render correct values and "Sales today" card is visually distinguished', (
+    testWidgets(
+      '1. Two hero money cards render correct values and "Sales today" card is visually distinguished',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        expect(find.byType(CustomScrollView), findsOneWidget);
+        expect(find.byType(AppBar), findsOneWidget);
+
+        // Eyebrow and expanded title
+        expect(find.text('MYSHOP WORKSPACE'), findsOneWidget);
+        expect(find.text('Dashboard'), findsOneWidget);
+
+        // Card 1: "Sales today"
+        expect(find.text('Sales today'), findsOneWidget);
+        expect(find.text('₹500'), findsOneWidget);
+        expect(find.text('2 orders'), findsOneWidget);
+
+        // Assert "Sales today" is a solid-primary-fill hero card with white text
+        final todayValueText = tester.widget<Text>(find.text('₹500'));
+        expect(todayValueText.style?.color, Colors.white);
+        final todayCardContainer = tester.widget<Container>(
+          find
+              .ancestor(of: find.text('₹500'), matching: find.byType(Container))
+              .first,
+        );
+        expect(
+          (todayCardContainer.decoration as BoxDecoration).color,
+          AppColors.primary,
+        );
+        expect(todayValueText.style?.fontSize, 28);
+        expect(todayValueText.style?.fontWeight, FontWeight.w500);
+
+        // Card 2: "Sales this month" (default period is now '30d')
+        expect(find.text('Sales this month'), findsOneWidget);
+        expect(find.text('₹1,200'), findsOneWidget);
+        expect(find.text('5 orders'), findsOneWidget);
+
+        // Assert period sales value is styled with AppColors.text (not accent)
+        final periodValueText = tester.widget<Text>(find.text('₹1,200'));
+        expect(periodValueText.style?.color, AppColors.text);
+        expect(periodValueText.style?.fontSize, 28);
+        expect(periodValueText.style?.fontWeight, FontWeight.w500);
+      },
+    );
+
+    testWidgets('2. Compact 3-chip row shows correct operational counts', (
       tester,
     ) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(buildTestWidget());
-      await pumpDashboard(tester);
-
-      expect(find.byType(CustomScrollView), findsOneWidget);
-      expect(find.byType(SliverAppBar), findsOneWidget);
-
-      // Eyebrow and expanded title
-      expect(find.text('MYSHOP WORKSPACE'), findsOneWidget);
-      expect(find.text('Dashboard'), findsOneWidget);
-
-      // Card 1: "Sales today"
-      expect(find.text('Sales today'), findsOneWidget);
-      expect(find.text('₹500'), findsOneWidget);
-      expect(find.text('2 orders'), findsOneWidget);
-
-      // Assert "Sales today" is a solid-primary-fill hero card with white text
-      final todayValueText = tester.widget<Text>(find.text('₹500'));
-      expect(todayValueText.style?.color, Colors.white);
-      final todayCardContainer = tester.widget<Container>(
-        find
-            .ancestor(
-              of: find.text('₹500'),
-              matching: find.byType(Container),
-            )
-            .first,
-      );
-      expect(
-        (todayCardContainer.decoration as BoxDecoration).color,
-        AppColors.primary,
-      );
-      expect(todayValueText.style?.fontSize, 28);
-      expect(todayValueText.style?.fontWeight, FontWeight.w500);
-
-      // Card 2: "Sales yesterday" (when 'today' selected)
-      expect(find.text('Sales yesterday'), findsOneWidget);
-      expect(find.text('₹1,200'), findsOneWidget);
-      expect(find.text('5 orders'), findsOneWidget);
-
-      // Assert period sales value is styled with AppColors.text (not accent)
-      final periodValueText = tester.widget<Text>(find.text('₹1,200'));
-      expect(periodValueText.style?.color, AppColors.text);
-      expect(periodValueText.style?.fontSize, 28);
-      expect(periodValueText.style?.fontWeight, FontWeight.w500);
-    });
-
-    testWidgets('2. Compact 3-chip row shows correct operational counts', (tester) async {
       tester.view.physicalSize = const Size(800, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -233,65 +245,71 @@ void main() {
       expect(find.text('2'), findsWidgets); // metrics.dueToday: 2
     });
 
-    testWidgets('3. Period selector pill displays current selection and changes on selection', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets(
+      '3. Period selector pill displays current selection and changes on selection',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(buildTestWidget());
-      await pumpDashboard(tester);
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
 
-      // Initial period is 'today', rendered as 'Today'
-      expect(find.text('Today'), findsOneWidget);
+        // Initial period defaults to '30d', rendered as 'This month'
+        expect(find.text('This month'), findsOneWidget);
 
-      // Tap period pill to open menu
-      await tester.tap(find.text('Today'));
-      await tester.pumpAndSettle();
+        // Tap period pill to open menu
+        await tester.tap(find.text('This month'));
+        await tester.pumpAndSettle();
 
-      // PopupMenu shows all 3 options
-      expect(find.text('This week'), findsOneWidget);
-      expect(find.text('This month'), findsOneWidget);
+        // PopupMenu shows all 3 options
+        expect(find.text('Today'), findsWidgets);
+        expect(find.text('This week'), findsOneWidget);
 
-      // Tap 'This week'
-      await tester.tap(find.text('This week').last);
-      await pumpDashboard(tester);
+        // Tap 'Today'
+        await tester.tap(find.text('Today').last);
+        await pumpDashboard(tester);
 
-      // Pill label updates to 'This week'
-      expect(find.text('This week'), findsOneWidget);
+        // Pill label updates to 'Today'
+        expect(find.text('Today'), findsOneWidget);
 
-      // Card 2 title updates to 'Sales this week'
-      expect(find.text('Sales this week'), findsOneWidget);
-    });
-
-    testWidgets('4. "Sales by date" trend chart renders with muted color and empty-guard works', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(buildTestWidget());
-      await pumpDashboard(tester);
-
-      expect(find.text('Sales by date'), findsOneWidget);
-      expect(find.text('How your sales moved today'), findsOneWidget);
-      expect(find.byType(LineChart), findsOneWidget);
-
-      // Check line color matches app theme (AppColors.primary)
-      final lineChart = tester.widget<LineChart>(find.byType(LineChart));
-      expect(lineChart.data.lineBarsData.first.color, AppColors.primary);
-
-      // Empty cash case
-      fakeOwnerRepo.metrics = DashboardMetrics(todaySales: 10000, cash: []);
-      ownerBloc.add(LoadDashboardEvent());
-      await pumpDashboard(tester);
-
-      expect(find.text('Sales by date'), findsNothing);
-      expect(find.byType(LineChart), findsNothing);
-    });
+        // Card 2 title updates to 'Sales yesterday'
+        expect(find.text('Sales yesterday'), findsOneWidget);
+      },
+    );
 
     testWidgets(
-      '5. "How orders are moving" donut/legend has exactly 3 buckets summing to allOrders.length with StatusPill matching colors',
+      '4. "Sales by date" trend chart renders with muted color and empty-guard works',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        expect(find.text('Sales by date'), findsOneWidget);
+        expect(find.text('How your sales moved this month'), findsOneWidget);
+        expect(find.byType(LineChart), findsOneWidget);
+
+        // Check line color matches app theme (AppColors.primary)
+        final lineChart = tester.widget<LineChart>(find.byType(LineChart));
+        expect(lineChart.data.lineBarsData.first.color, AppColors.primary);
+
+        // Empty cash case
+        fakeOwnerRepo.metrics = DashboardMetrics(todaySales: 10000, cash: []);
+        ownerBloc.add(LoadDashboardEvent());
+        await pumpDashboard(tester);
+
+        expect(find.text('Sales by date'), findsNothing);
+        expect(find.byType(LineChart), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '5. "How orders are moving" donut/legend has exactly 4 buckets summing to allOrders.length with StatusPill matching colors',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -305,123 +323,291 @@ void main() {
         expect(find.text('Where your orders stand right now'), findsOneWidget);
         expect(find.byType(PieChart), findsOneWidget);
 
-        // 3 buckets derived from mockOrdersRepo (4 orders total: 1 Pending, 1 Ready, 1 Delivered, 1 In Progress)
-        // Ready + In Progress = 2 in 'In progress'
+        // 4 buckets derived from mockOrdersRepo (4 orders total: 1 Pending, 1 In Progress, 1 Ready, 1 Delivered)
         expect(find.text('Pending'), findsOneWidget);
         expect(find.text('In progress'), findsOneWidget);
-        expect(find.text('Completed'), findsWidgets);
+        expect(find.text('Ready'), findsOneWidget);
+        expect(find.text('Delivered'), findsOneWidget);
 
         // Check PieChart sections count, sum, and matching colors
         final pieChart = tester.widget<PieChart>(find.byType(PieChart));
         final sections = pieChart.data.sections;
-        expect(sections.length, 3);
+        expect(sections.length, 4);
 
         // Pending: value 1, color AppColors.neutralText
         expect(sections[0].value, 1.0);
         expect(sections[0].color, AppColors.neutralText);
 
-        // In progress: value 2, color AppColors.primary
-        expect(sections[1].value, 2.0);
+        // In progress: value 1, color AppColors.primary
+        expect(sections[1].value, 1.0);
         expect(sections[1].color, AppColors.primary);
 
-        // Completed: value 1, color AppColors.success
+        // Ready: value 1, color AppColors.warning
         expect(sections[2].value, 1.0);
-        expect(sections[2].color, AppColors.success);
+        expect(sections[2].color, AppColors.warning);
 
-        // Sum of counts equals mockOrdersRepo.cachedOrders.length (1 + 2 + 1 = 4)
-        final totalOrderCount = sections.fold<double>(0, (sum, s) => sum + s.value);
+        // Delivered: value 1, color AppColors.success
+        expect(sections[3].value, 1.0);
+        expect(sections[3].color, AppColors.success);
+
+        // Sum of counts equals mockOrdersRepo.cachedOrders.length (1 + 1 + 1 + 1 = 4)
+        final totalOrderCount = sections.fold<double>(
+          0,
+          (sum, s) => sum + s.value,
+        );
         expect(totalOrderCount.toInt(), mockOrdersRepo.cachedOrders.length);
       },
     );
 
-    testWidgets('6. When allOrders is empty, "How orders are moving" section is not rendered', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets(
+      '6. When allOrders is empty, "How orders are moving" section is not rendered',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      final emptyOrdersBloc = MockOrdersBloc([]);
+        final emptyOrdersBloc = MockOrdersBloc([]);
 
-      await tester.pumpWidget(
-        MultiRepositoryProvider(
-          providers: [RepositoryProvider<OrdersRepository>.value(value: mockOrdersRepo)],
-          child: MultiBlocProvider(
+        await tester.pumpWidget(
+          MultiRepositoryProvider(
             providers: [
-              BlocProvider<OwnerBloc>.value(value: ownerBloc),
-              BlocProvider<OrdersBloc>.value(value: emptyOrdersBloc),
-              BlocProvider<AuthBloc>.value(value: authBloc),
+              RepositoryProvider<OrdersRepository>.value(value: mockOrdersRepo),
             ],
-            child: const MaterialApp(home: OwnerDashboardScreen()),
+            child: MultiBlocProvider(
+              providers: [
+                BlocProvider<OwnerBloc>.value(value: ownerBloc),
+                BlocProvider<OrdersBloc>.value(value: emptyOrdersBloc),
+                BlocProvider<AuthBloc>.value(value: authBloc),
+              ],
+              child: const MaterialApp(home: OwnerDashboardScreen()),
+            ),
           ),
-        ),
-      );
-      await pumpDashboard(tester);
+        );
+        await pumpDashboard(tester);
 
-      expect(find.text('How orders are moving'), findsNothing);
-      expect(find.byType(PieChart), findsNothing);
-    });
+        expect(find.text('How orders are moving'), findsNothing);
+        expect(find.byType(PieChart), findsNothing);
+      },
+    );
 
-    testWidgets('7. "Sales by service" chart renders with muted bar color and empty-guard works', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets(
+      '7. "Sales by service" chart renders with muted bar color and empty-guard works',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(buildTestWidget());
-      await pumpDashboard(tester);
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
 
-      expect(find.text('Sales by service'), findsOneWidget);
-      expect(find.byType(BarChart), findsOneWidget);
+        expect(find.text('Sales by service'), findsOneWidget);
+        // Bars are plain proportional Containers now (no fl_chart BarChart in Sales by service),
+        // so they can't overlap their own value labels the way rod labels did.
+        expect(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text('Sales by service'),
+              matching: find.byType(AppCard),
+            ),
+            matching: find.byType(BarChart),
+          ),
+          findsNothing,
+        );
+        expect(find.text('Wash & Fold'), findsOneWidget);
 
-      final barChart = tester.widget<BarChart>(find.byType(BarChart));
-      expect(barChart.data.barGroups.first.barRods.first.color, AppColors.primary);
+        // Empty serviceMix
+        fakeOwnerRepo.metrics = DashboardMetrics(
+          todaySales: 10000,
+          serviceMix: [],
+        );
+        ownerBloc.add(LoadDashboardEvent());
+        await pumpDashboard(tester);
 
-      // Empty serviceMix
-      fakeOwnerRepo.metrics = DashboardMetrics(todaySales: 10000, serviceMix: []);
-      ownerBloc.add(LoadDashboardEvent());
-      await pumpDashboard(tester);
+        expect(find.text('Sales by service'), findsNothing);
+      },
+    );
 
-      expect(find.text('Sales by service'), findsNothing);
-      expect(find.byType(BarChart), findsNothing);
-    });
+    testWidgets(
+      '8. "Orders to finish" section is completely removed from widget tree',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-    testWidgets('8. "Orders to finish" section is completely removed from widget tree', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
 
-      await tester.pumpWidget(buildTestWidget());
-      await pumpDashboard(tester);
+        // Neither section header nor "View all" exists
+        expect(find.text('Orders to finish'), findsNothing);
+        expect(find.text('View all'), findsNothing);
 
-      // Neither section header nor "View all" exists
-      expect(find.text('Orders to finish'), findsNothing);
-      expect(find.text('View all'), findsNothing);
+        // Order cards are not present on dashboard
+        expect(find.text('Bob Jones'), findsNothing);
+        expect(find.text('Alice Smith'), findsNothing);
+      },
+    );
 
-      // Order cards are not present on dashboard
-      expect(find.text('Bob Jones'), findsNothing);
-      expect(find.text('Alice Smith'), findsNothing);
-    });
+    testWidgets(
+      '9. Plain AppBar title stays fixed in place on scroll, matching every other owner screen',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 500);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-    testWidgets('9. Custom SliverAppBar collapses on scroll and reveals avatar + title in toolbar', (tester) async {
-      tester.view.physicalSize = const Size(400, 500);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
 
-      await tester.pumpWidget(buildTestWidget());
-      await pumpDashboard(tester);
+        // Drag up to scroll the body — the AppBar title never moves or changes.
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+        await tester.pumpAndSettle();
 
-      // Drag up to scroll down and trigger collapse
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
-      await tester.pumpAndSettle();
+        expect(find.byType(AppBar), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('Dashboard'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
 
-      // Collapsed toolbar row shows store initials avatar
-      expect(find.text('MY'), findsOneWidget); // Initials of MyShop
-      expect(
-        find.byWidgetPredicate((w) => w is Text && w.data == 'Dashboard' && w.style?.fontSize == 18),
-        findsOneWidget,
-      );
-    });
+    testWidgets(
+      '10. Manual refresh icon button in SliverAppBar triggers dashboard reload',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        final refreshBtn = find.byTooltip('Refresh');
+        expect(refreshBtn, findsOneWidget);
+
+        fakeOwnerRepo.metrics = DashboardMetrics(
+          todaySales: 99000,
+          todayCount: 5,
+          periodSales: 200000,
+          periodOrders: 10,
+        );
+
+        await tester.tap(refreshBtn);
+        await pumpDashboard(tester);
+
+        expect(find.text('₹990'), findsOneWidget);
+        expect(find.text('5 orders'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '11. App bar shows retry sync button before refresh button when sync is paused or has error',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        SyncManager.instance.completeSync();
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        // In synced state, no retry button
+        expect(find.byTooltip('Retry sync'), findsNothing);
+        expect(find.byTooltip('Refresh'), findsOneWidget);
+
+        // Set sync error
+        SyncManager.instance.setError('Network error');
+        await tester.pump();
+
+        // Now retry button appears before refresh button
+        expect(find.byTooltip('Retry sync'), findsOneWidget);
+        expect(find.byIcon(Icons.sync_problem_rounded), findsOneWidget);
+        expect(find.byTooltip('Refresh'), findsOneWidget);
+
+        // Clean up back to synced
+        SyncManager.instance.completeSync();
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.byTooltip('Retry sync'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '11. "Money in & expenses" net cash-flow chart renders net total, received/spent, and grouped BarChart',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        expect(find.text('Money in & expenses'), findsOneWidget);
+        expect(find.text('Received minus spent'), findsOneWidget);
+        expect(find.byType(BarChart), findsOneWidget);
+
+        // cash fixture: income: 300+500+400 = 1200 (₹1,200), expenses: 100+200+150 = 450 (₹450), net = 750 (₹750)
+        expect(find.text('₹750'), findsOneWidget);
+        expect(find.text('₹1,200 received'), findsOneWidget);
+        expect(find.text('₹450 spent'), findsOneWidget);
+
+        final barChart = tester.widget<BarChart>(find.byType(BarChart));
+        expect(barChart.data.barGroups.length, 3);
+        expect(barChart.data.barGroups.first.barRods.length, 2);
+        expect(
+          barChart.data.barGroups.first.barRods[0].color,
+          AppColors.primary,
+        );
+        expect(
+          barChart.data.barGroups.first.barRods[1].color,
+          AppColors.warning,
+        );
+      },
+    );
+
+    testWidgets(
+      '12. Selecting "This quarter" and "Custom dates" in period selector pill',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        // Tap period selector pill
+        await tester.tap(find.text('This month'));
+        await tester.pumpAndSettle();
+
+        // Check options
+        expect(find.text('This quarter'), findsOneWidget);
+        expect(find.text('Custom dates'), findsOneWidget);
+
+        // Tap This quarter
+        await tester.tap(find.text('This quarter'));
+        await pumpDashboard(tester);
+
+        expect(find.text('This quarter'), findsOneWidget);
+        expect(find.text('Sales this quarter'), findsOneWidget);
+
+        // Tap period selector pill again and select Custom dates
+        await tester.tap(find.text('This quarter'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Custom dates'));
+        await pumpDashboard(tester);
+
+        // Inline From / To selector appears
+        expect(find.text('FROM'), findsOneWidget);
+        expect(find.text('TO'), findsOneWidget);
+      },
+    );
   });
 }

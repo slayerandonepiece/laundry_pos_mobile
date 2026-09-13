@@ -37,6 +37,7 @@ class MoreScreen extends StatelessWidget {
     }
 
     final initials = _getInitials(storeName);
+    final planBadge = _buildPlanStatusBadge(authState);
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -70,34 +71,40 @@ class MoreScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        storeName,
-                        style: const TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.text,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            storeName,
+                            style: const TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                      if (hasMultipleStores) ...[
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.expand_more,
-                          size: 16,
-                          color: AppColors.mutedText,
-                        ),
+                        if (hasMultipleStores) ...[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.expand_more,
+                            size: 16,
+                            color: AppColors.mutedText,
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(ownerSubtitle, style: AppTextStyles.hint),
-                ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(ownerSubtitle, style: AppTextStyles.hint),
+                  ],
+                ),
               ),
+              if (planBadge != null) ...[const SizedBox(width: 8), planBadge],
             ],
           ),
         ),
@@ -113,18 +120,6 @@ class MoreScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              const Text(
-                'More',
-                style: TextStyle(
-                  fontFamily: AppTextStyles.fontDisplay,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.6,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 16),
-
               // STORE SECTION
               const SectionHeader(title: 'STORE'),
               const SizedBox(height: 8),
@@ -352,6 +347,53 @@ class MoreScreen extends StatelessWidget {
 
   void _confirmSignOut(BuildContext context) {
     LogoutDialog.show(context);
+  }
+
+  Widget? _buildPlanStatusBadge(AuthState authState) {
+    if (authState is! AuthenticatedState) return null;
+    final paidThroughDate = authState.currentStore.paidThroughDate;
+    if (paidThroughDate == null) return null;
+
+    final parsedDate = DateTime.tryParse(paidThroughDate);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final isNearOrPast =
+        parsedDate == null || parsedDate.difference(today).inDays <= 7;
+
+    final Color bgColor;
+    final Color textColor;
+    final Color borderColor;
+    final String label;
+
+    if (isNearOrPast) {
+      bgColor = AppColors.warningNoticeBg;
+      textColor = AppColors.warning;
+      borderColor = AppColors.warningBorder;
+      label = 'Renews soon';
+    } else {
+      bgColor = AppColors.successBg;
+      textColor = AppColors.success;
+      borderColor = AppColors.success.withValues(alpha: 0.3);
+      label = 'Active plan';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: AppTextStyles.fontBody,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: textColor,
+        ),
+      ),
+    );
   }
 
   String _getInitials(String name) {

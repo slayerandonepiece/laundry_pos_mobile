@@ -9,6 +9,7 @@ import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
+import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class PaymentMethodsScreen extends StatefulWidget {
   const PaymentMethodsScreen({super.key});
@@ -84,147 +85,176 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                 color: AppColors.text,
               ),
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  color: AppColors.mutedText,
+                  size: 20,
+                ),
+                tooltip: 'Refresh',
+                onPressed: () {
+                  context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),
               child: Container(color: AppColors.border, height: 1),
             ),
           ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
-            },
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                // Existing payment methods list
-                if (methods.isNotEmpty) ...[
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: methods.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 11),
-                    itemBuilder: (context, index) {
-                      final method = methods[index];
-                      return AppCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            Icon(
-                              method.type.toUpperCase() == 'UPI'
-                                  ? Icons.qr_code_scanner_outlined
-                                  : Icons.payments_outlined,
-                              size: 24,
-                              color: method.active
-                                  ? AppColors.primary
-                                  : AppColors.mutedText,
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+          body: Column(
+            children: [
+              SyncStatusBar(
+                onSyncNow: () {
+                  context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                },
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                  },
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      // Existing payment methods list
+                      if (methods.isNotEmpty) ...[
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: methods.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 11),
+                          itemBuilder: (context, index) {
+                            final method = methods[index];
+                            return AppCard(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    method.name,
-                                    style: const TextStyle(
-                                      fontFamily: AppTextStyles.fontBody,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.text,
-                                    ),
+                                  Icon(
+                                    method.type.toUpperCase() == 'UPI'
+                                        ? Icons.qr_code_scanner_outlined
+                                        : Icons.payments_outlined,
+                                    size: 24,
+                                    color: method.active
+                                        ? AppColors.primary
+                                        : AppColors.mutedText,
                                   ),
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        method.type,
-                                        style: AppTextStyles.hint,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      TextButton(
-                                        onPressed: () =>
-                                            _showRenameMethodDialog(
-                                              context,
-                                              method,
-                                            ),
-                                        style: TextButton.styleFrom(
-                                          padding: EdgeInsets.zero,
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        child: const Text(
-                                          'Rename',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.primary,
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          method.name,
+                                          style: const TextStyle(
+                                            fontFamily: AppTextStyles.fontBody,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.text,
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              method.type,
+                                              style: AppTextStyles.hint,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            TextButton(
+                                              onPressed: () =>
+                                                  _showRenameMethodDialog(
+                                                    context,
+                                                    method,
+                                                  ),
+                                              style: TextButton.styleFrom(
+                                                padding: EdgeInsets.zero,
+                                                minimumSize: Size.zero,
+                                                tapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                              ),
+                                              child: const Text(
+                                                'Rename',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.primary,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: method.active,
+                                    activeThumbColor: AppColors.primary,
+                                    onChanged: (val) {
+                                      context.read<OwnerBloc>().add(
+                                        TogglePaymentMethodEvent(
+                                          id: method.id,
+                                          active: val,
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Inline "Add payment method" card matching web
+                      AppCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Add payment method',
+                              style: TextStyle(
+                                fontFamily: AppTextStyles.fontDisplay,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.text,
+                              ),
                             ),
-                            Switch(
-                              value: method.active,
-                              activeThumbColor: AppColors.primary,
-                              onChanged: (val) {
+                            const SizedBox(height: 12),
+                            AppTextField(
+                              label: 'METHOD NAME',
+                              hint: 'e.g. PhonePe QR or Card Machine',
+                              controller: _newMethodController,
+                            ),
+                            const SizedBox(height: 14),
+                            PrimaryButton(
+                              label: 'Add method',
+                              isLoading: state.isLoading,
+                              onPressed: () {
+                                final name = _newMethodController.text.trim();
+                                if (name.isEmpty) return;
                                 context.read<OwnerBloc>().add(
-                                  TogglePaymentMethodEvent(
-                                    id: method.id,
-                                    active: val,
-                                  ),
+                                  AddPaymentMethodEvent(name),
                                 );
+                                _newMethodController.clear();
                               },
                             ),
                           ],
                         ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                ],
-
-                // Inline "Add payment method" card matching web
-                AppCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Add payment method',
-                        style: TextStyle(
-                          fontFamily: AppTextStyles.fontDisplay,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      AppTextField(
-                        label: 'METHOD NAME',
-                        hint: 'e.g. PhonePe QR or Card Machine',
-                        controller: _newMethodController,
-                      ),
-                      const SizedBox(height: 14),
-                      PrimaryButton(
-                        label: 'Add method',
-                        isLoading: state.isLoading,
-                        onPressed: () {
-                          final name = _newMethodController.text.trim();
-                          if (name.isEmpty) return;
-                          context.read<OwnerBloc>().add(
-                            AddPaymentMethodEvent(name),
-                          );
-                          _newMethodController.clear();
-                        },
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -266,10 +296,7 @@ class _RenamePaymentMethodScreenState extends State<RenamePaymentMethodScreen> {
     }
 
     context.read<OwnerBloc>().add(
-      RenamePaymentMethodEvent(
-        id: widget.method.id,
-        name: name,
-      ),
+      RenamePaymentMethodEvent(id: widget.method.id, name: name),
     );
     Navigator.pop(context);
   }
@@ -333,10 +360,7 @@ class _RenamePaymentMethodScreenState extends State<RenamePaymentMethodScreen> {
               controller: _nameController,
             ),
             const SizedBox(height: 24),
-            PrimaryButton(
-              label: 'Save changes',
-              onPressed: _save,
-            ),
+            PrimaryButton(label: 'Save changes', onPressed: _save),
           ],
         ),
       ),

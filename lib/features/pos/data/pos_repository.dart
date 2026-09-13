@@ -23,9 +23,13 @@ class PosRepository {
 
   /// Reads products from the local cache only — no network call.
   List<Product> getCachedProductsList() {
-    final cached = _localCache.getCachedProducts();
-    if (cached == null || cached.isEmpty) return [];
-    return cached.map((p) => Product.fromJson(p)).toList();
+    try {
+      final cached = _localCache.getCachedProducts();
+      if (cached == null || cached.isEmpty) return [];
+      return cached.map((p) => Product.fromJson(p)).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Fetches product catalogue for current active store with local cache
@@ -35,7 +39,7 @@ class PosRepository {
       final cached = _localCache.getCachedProducts();
       if (cached != null && cached.isNotEmpty) {
         final products = cached.map((p) => Product.fromJson(p)).toList();
-        final pendingCount = _localCache.getPendingSyncQueue().length;
+        final pendingCount = _localCache.getTotalPendingCount();
         SyncManager.instance.setOffline(
           pendingCount,
           'Offline · using cached catalogue',
@@ -46,7 +50,7 @@ class PosRepository {
     }
 
     try {
-      SyncManager.instance.startSync('Syncing products...');
+      SyncManager.instance.startSync('Fetching latest from cloud...');
       final response = await _apiClient.get(ApiEndpoints.products);
       if (response is List) {
         final products = response
@@ -67,7 +71,7 @@ class PosRepository {
       final cached = _localCache.getCachedProducts();
       if (cached != null && cached.isNotEmpty) {
         final products = cached.map((p) => Product.fromJson(p)).toList();
-        final pendingCount = _localCache.getPendingSyncQueue().length;
+        final pendingCount = _localCache.getTotalPendingCount();
         if (reallyOffline) {
           SyncManager.instance.setOffline(
             pendingCount,

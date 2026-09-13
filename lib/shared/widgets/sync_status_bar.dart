@@ -103,15 +103,49 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
                         child: Row(
                           children: [
                             if (isSyncing) ...[
-                              const SizedBox(
-                                width: 13,
-                                height: 13,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.0,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppColors.primary,
-                                  ),
-                                ),
+                              Builder(
+                                builder: (context) {
+                                  final msg = (state.message ?? '')
+                                      .toLowerCase();
+                                  final isPush =
+                                      msg.contains('saving') ||
+                                      msg.contains('offline changes') ||
+                                      msg.contains('push');
+                                  final isPull =
+                                      msg.contains('fetching') ||
+                                      msg.contains('latest') ||
+                                      msg.contains('pull');
+                                  IconData? dirIcon;
+                                  if (isPush) {
+                                    dirIcon = Icons.cloud_upload_rounded;
+                                  } else if (isPull || msg.contains('cloud')) {
+                                    dirIcon = Icons.cloud_download_rounded;
+                                  }
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (dirIcon != null) ...[
+                                        Icon(
+                                          dirIcon,
+                                          size: 15,
+                                          color: AppColors.primary,
+                                        ),
+                                        const SizedBox(width: 6),
+                                      ],
+                                      const SizedBox(
+                                        width: 13,
+                                        height: 13,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.0,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                AppColors.primary,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                               const SizedBox(width: 8),
                               Expanded(

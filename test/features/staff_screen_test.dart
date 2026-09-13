@@ -54,10 +54,7 @@ class FakeOwnerRepository extends OwnerRepository {
     };
     final index = staff.indexWhere((m) => m.id == employeeId);
     if (index >= 0) {
-      final updated = staff[index].copyWith(
-        name: name,
-        username: username,
-      );
+      final updated = staff[index].copyWith(name: name, username: username);
       staff[index] = updated;
       return updated;
     }
@@ -147,9 +144,7 @@ void main() {
       );
     });
 
-    testWidgets('Search box filters by name and username', (
-      tester,
-    ) async {
+    testWidgets('Search box filters by name and username', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await pumpStaff(tester);
 

@@ -7,6 +7,7 @@ import '../storage/local_cache.dart';
 import 'connectivity_service.dart';
 import 'sync_manager.dart';
 import '../../features/orders/data/orders_repository.dart';
+import '../../features/owner/data/owner_repository.dart';
 
 const _tag = 'SYNC';
 
@@ -20,12 +21,15 @@ class SyncEngine {
   @visibleForTesting
   SyncEngine.internal({
     OrdersRepository? ordersRepository,
+    OwnerRepository? ownerRepository,
     LocalCacheService? localCache,
   }) : _ordersRepository = ordersRepository ?? OrdersRepository(),
+       _ownerRepository = ownerRepository ?? OwnerRepository(),
        _localCache = localCache ?? LocalCacheService();
 
   SyncEngine._()
     : _ordersRepository = OrdersRepository(),
+      _ownerRepository = OwnerRepository(),
       _localCache = LocalCacheService();
 
   static SyncEngine _instance = SyncEngine._();
@@ -36,6 +40,7 @@ class SyncEngine {
   static const int _maxSilentFailures = 3;
 
   final OrdersRepository _ordersRepository;
+  final OwnerRepository _ownerRepository;
   final LocalCacheService _localCache;
 
   Future<void>? _inFlight;
@@ -90,7 +95,7 @@ class SyncEngine {
     if (ConnectivityService.instance.isOffline) {
       var count = 0;
       try {
-        count = _localCache.getPendingSyncQueue().length;
+        count = _localCache.getTotalPendingCount();
       } catch (_) {}
       AppLogger.log(
         _tag,
@@ -106,13 +111,20 @@ class SyncEngine {
     // sync attempt", never crash whatever called trigger().
     var ok = false;
     try {
+      if (_localCache.getTotalPendingCount() > 0) {
+        SyncManager.instance.startSync('Saving changes to cloud...');
+      }
       final pushOk = await _ordersRepository.processPendingSyncQueue();
       AppLogger.log(_tag, '_runSync(): push outcome=$pushOk');
       // Only attempt to pull remote changes if push reached the server —
       // otherwise we're offline/unreachable and a pull would just fail too.
       final pullOk = pushOk ? await _ordersRepository.syncOrdersDelta() : true;
       AppLogger.log(_tag, '_runSync(): pull outcome=$pullOk');
-      ok = pushOk && pullOk;
+
+      final ownerOk = await _ownerRepository.processPendingOwnerActions();
+      AppLogger.log(_tag, '_runSync(): owner actions drain outcome=$ownerOk');
+
+      ok = pushOk && pullOk && ownerOk;
     } catch (e) {
       AppLogger.log(_tag, '_runSync(): unexpected error during sync', error: e);
       ok = false;
@@ -125,7 +137,7 @@ class SyncEngine {
     // to sync, instead of getting stuck on a stale offline/paused state.
     var pendingCount = 0;
     try {
-      pendingCount = _localCache.getPendingSyncQueue().length;
+      pendingCount = _localCache.getTotalPendingCount();
     } catch (_) {
       // ignore — best-effort count for the banner text only
     }
@@ -145,9 +157,18 @@ class SyncEngine {
         _retryMissingInvoicesInBackground();
       } else {
         final currentQueue = _localCache.getPendingSyncQueue();
-        final hasExhaustedFailures = currentQueue.any(
-          (a) => ((a['failCount'] as num?)?.toInt() ?? 0) >= _maxSilentFailures,
-        );
+        final currentOwnerQueue = _localCache.getPendingOwnerActionsQueue();
+        final hasExhaustedFailures =
+            currentQueue.any(
+              (a) =>
+                  ((a['failCount'] as num?)?.toInt() ?? 0) >=
+                  _maxSilentFailures,
+            ) ||
+            currentOwnerQueue.any(
+              (a) =>
+                  ((a['failCount'] as num?)?.toInt() ?? 0) >=
+                  _maxSilentFailures,
+            );
         if (hasExhaustedFailures) {
           AppLogger.log(
             _tag,
@@ -190,6 +211,7 @@ class SyncEngine {
   Future<void> retryNow() async {
     _failureStreak = 0;
     await _ordersRepository.reviveDeadLetterQueue();
+    await _ownerRepository.reviveDeadLetterQueue();
     await ConnectivityService.instance.checkIsOffline();
     return trigger();
   }

@@ -147,11 +147,7 @@ void main() {
 
       ownerBloc = OwnerBloc(ownerRepository: fakeRepo);
 
-      final user = User(
-        id: 'usr-1',
-        name: 'John Doe',
-        username: 'johndoe',
-      );
+      final user = User(id: 'usr-1', name: 'John Doe', username: 'johndoe');
       final store = StoreSummary(
         storeId: 'store-1',
         storeName: 'Express Laundry Demo',
@@ -239,6 +235,10 @@ void main() {
         await pumpAsync(tester);
 
         expect(find.text('Store profile'), findsOneWidget);
+        expect(
+          find.text('Currency: INR · Timezone: Asia/Kolkata'),
+          findsOneWidget,
+        );
 
         final textFields = find.byType(TextField);
         expect(textFields, findsNWidgets(3));
@@ -308,31 +308,27 @@ void main() {
       },
     );
 
-    testWidgets(
-      '4. Adding a payment method dispatches AddPaymentMethodEvent',
-      (tester) async {
-        await tester.pumpWidget(wrapScreen(const PaymentMethodsScreen()));
-        await pumpAsync(tester);
+    testWidgets('4. Adding a payment method dispatches AddPaymentMethodEvent', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrapScreen(const PaymentMethodsScreen()));
+      await pumpAsync(tester);
 
-        final addField = find.widgetWithText(
-          TextField,
-          'e.g. PhonePe QR or Card Machine',
-        );
-        expect(addField, findsOneWidget);
+      final addField = find.widgetWithText(
+        TextField,
+        'e.g. PhonePe QR or Card Machine',
+      );
+      expect(addField, findsOneWidget);
 
-        await tester.enterText(addField, 'PhonePe QR Counter');
-        await tester.pumpAndSettle();
+      await tester.enterText(addField, 'PhonePe QR Counter');
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Add method'));
-        await pumpAsync(tester);
+      await tester.tap(find.text('Add method'));
+      await pumpAsync(tester);
 
-        expect(
-          fakeRepo.lastCreatedPaymentMethodName,
-          'PhonePe QR Counter',
-        );
-        expect(find.text('PhonePe QR Counter'), findsOneWidget);
-      },
-    );
+      expect(fakeRepo.lastCreatedPaymentMethodName, 'PhonePe QR Counter');
+      expect(find.text('PhonePe QR Counter'), findsOneWidget);
+    });
 
     testWidgets(
       '5. "Show passwords" checkbox in ChangePasswordScreen toggles obscureText on all 3 fields',
@@ -342,9 +338,7 @@ void main() {
 
         // 3 password text fields
         List<TextField> getTextFields() {
-          return tester
-              .widgetList<TextField>(find.byType(TextField))
-              .toList();
+          return tester.widgetList<TextField>(find.byType(TextField)).toList();
         }
 
         var fields = getTextFields();

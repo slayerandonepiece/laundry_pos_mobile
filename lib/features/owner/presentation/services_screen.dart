@@ -21,6 +21,7 @@ class ServicesScreen extends StatefulWidget {
 class _ServicesScreenState extends State<ServicesScreen> {
   List<Product> _products = [];
   bool _isLoading = false;
+  bool _isGridView = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
@@ -37,9 +38,15 @@ class _ServicesScreenState extends State<ServicesScreen> {
   }
 
   Future<void> _loadServices() async {
-    setState(() => _isLoading = true);
+    final posRepository = context.read<PosRepository>();
+    final cached = posRepository.getCachedProductsList();
+    if (cached.isNotEmpty) {
+      setState(() => _products = cached);
+    } else {
+      setState(() => _isLoading = true);
+    }
     try {
-      final list = await context.read<PosRepository>().listProducts();
+      final list = await posRepository.listProducts();
       if (!mounted) return;
       setState(() {
         _products = list;
@@ -149,64 +156,156 @@ class _ServicesScreenState extends State<ServicesScreen> {
             )
           : Column(
               children: [
-                // Search bar
+                // Search bar and view toggle
                 Container(
                   color: AppColors.surface,
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-                  child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      border: Border.all(color: AppColors.controlBorder),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 13),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.search,
-                          size: 19,
-                          color: AppColors.mutedText,
-                        ),
-                        const SizedBox(width: 9),
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            style: const TextStyle(
-                              fontFamily: AppTextStyles.fontBody,
-                              fontSize: 14,
-                              color: AppColors.text,
-                            ),
-                            decoration: const InputDecoration(
-                              hintText: 'Search by service or category...',
-                              hintStyle: TextStyle(
-                                fontFamily: AppTextStyles.fontBody,
-                                fontSize: 14,
-                                color: AppColors.faintText,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            border: Border.all(color: AppColors.controlBorder),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 13),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.search,
+                                size: 19,
+                                color: AppColors.mutedText,
                               ),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            onChanged: (val) {
-                              setState(() => _searchQuery = val);
-                            },
+                              const SizedBox(width: 9),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchController,
+                                  style: const TextStyle(
+                                    fontFamily: AppTextStyles.fontBody,
+                                    fontSize: 14,
+                                    color: AppColors.text,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    hintText:
+                                        'Search by service or category...',
+                                    hintStyle: TextStyle(
+                                      fontFamily: AppTextStyles.fontBody,
+                                      fontSize: 14,
+                                      color: AppColors.faintText,
+                                    ),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  onChanged: (val) {
+                                    setState(() => _searchQuery = val);
+                                  },
+                                ),
+                              ),
+                              if (_searchController.text.isNotEmpty)
+                                InkWell(
+                                  onTap: () {
+                                    _searchController.clear();
+                                    setState(() => _searchQuery = '');
+                                  },
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: AppColors.mutedText,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                        if (_searchController.text.isNotEmpty)
-                          InkWell(
-                            onTap: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                            child: const Icon(
-                              Icons.close,
-                              size: 18,
-                              color: AppColors.mutedText,
+                      ),
+                      const SizedBox(width: 10),
+                      // Grid/List segmented toggle
+                      Container(
+                        height: 44,
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: AppColors.inset,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                if (_isGridView) {
+                                  setState(() => _isGridView = false);
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(7),
+                              child: Container(
+                                width: 36,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: !_isGridView
+                                      ? AppColors.surface
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(7),
+                                  boxShadow: !_isGridView
+                                      ? [
+                                          const BoxShadow(
+                                            color: Color(0x10000000),
+                                            blurRadius: 3,
+                                            offset: Offset(0, 1),
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                                child: Icon(
+                                  Icons.view_list_rounded,
+                                  size: 20,
+                                  color: !_isGridView
+                                      ? AppColors.primary
+                                      : AppColors.mutedText,
+                                ),
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
+                            const SizedBox(width: 2),
+                            InkWell(
+                              onTap: () {
+                                if (!_isGridView) {
+                                  setState(() => _isGridView = true);
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(7),
+                              child: Container(
+                                width: 36,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: _isGridView
+                                      ? AppColors.surface
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(7),
+                                  boxShadow: _isGridView
+                                      ? [
+                                          const BoxShadow(
+                                            color: Color(0x10000000),
+                                            blurRadius: 3,
+                                            offset: Offset(0, 1),
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                                child: Icon(
+                                  Icons.grid_view_rounded,
+                                  size: 18,
+                                  color: _isGridView
+                                      ? AppColors.primary
+                                      : AppColors.mutedText,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(
@@ -227,24 +326,132 @@ class _ServicesScreenState extends State<ServicesScreen> {
                               ),
                             ],
                           )
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final product = filtered[index];
-                              return _ServiceCard(
-                                product: product,
-                                onEdit: () =>
-                                    _showEditServiceDialog(context, product),
-                              );
-                            },
-                          ),
+                        : _isGridView
+                            ? GridView.builder(
+                                padding:
+                                    const EdgeInsets.fromLTRB(20, 6, 20, 24),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: 1.15,
+                                ),
+                                itemCount: filtered.length,
+                                itemBuilder: (context, index) {
+                                  final product = filtered[index];
+                                  return _ServiceGridCard(
+                                    product: product,
+                                    onEdit: () => _showEditServiceDialog(
+                                      context,
+                                      product,
+                                    ),
+                                  );
+                                },
+                              )
+                            : ListView.separated(
+                                padding:
+                                    const EdgeInsets.fromLTRB(20, 6, 20, 24),
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, _) =>
+                                    const SizedBox(height: 12),
+                                itemBuilder: (context, index) {
+                                  final product = filtered[index];
+                                  return _ServiceCard(
+                                    product: product,
+                                    onEdit: () => _showEditServiceDialog(
+                                      context,
+                                      product,
+                                    ),
+                                  );
+                                },
+                              ),
                   ),
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _ServiceGridCard extends StatelessWidget {
+  final Product product;
+  final VoidCallback onEdit;
+
+  const _ServiceGridCard({required this.product, required this.onEdit});
+
+  String get _startingPriceLabel {
+    if (product.isWeight) {
+      if (product.slabs.isNotEmpty) {
+        return 'From ${CurrencyFormatter.format(product.slabs.first.price)}';
+      } else if (product.extra > 0) {
+        return '${CurrencyFormatter.format(product.extra)} / kg';
+      }
+      return 'Weight pricing';
+    }
+    return '${CurrencyFormatter.format(product.price)} / pc';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(12),
+      onTap: onEdit,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  StatusPill(
+                    label: product.active ? 'Active' : 'Inactive',
+                    variant: product.active
+                        ? PillVariant.delivered
+                        : PillVariant.neutral,
+                  ),
+                  const Icon(
+                    Icons.north_east,
+                    size: 14,
+                    color: AppColors.mutedText,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.fontBody,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                product.category.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.hint.copyWith(fontSize: 10),
+              ),
+            ],
+          ),
+          Text(
+            _startingPriceLabel,
+            style: const TextStyle(
+              fontFamily: AppTextStyles.fontDisplay,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -658,323 +865,307 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-                    // Service name
-                    AppTextField(
-                      label: 'SERVICE NAME',
-                      hint: 'e.g. Silk Saree Dry Clean',
-                      controller: _nameController,
-                    ),
-                    const SizedBox(height: 14),
+            // Service name
+            AppTextField(
+              label: 'SERVICE NAME',
+              hint: 'e.g. Silk Saree Dry Clean',
+              controller: _nameController,
+            ),
+            const SizedBox(height: 14),
 
-                    // Category and Unit Type
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _category,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: 'CATEGORY',
-                              labelStyle: AppTextStyles.fieldLabel,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 14,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
+            // Category and Unit Type
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _category,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'CATEGORY',
+                      labelStyle: AppTextStyles.fieldLabel,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    items: _categoryOptions
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(
+                              c.toUpperCase(),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            items: _categoryOptions
-                                .map(
-                                  (c) => DropdownMenuItem(
-                                    value: c,
-                                    child: Text(
-                                      c.toUpperCase(),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onTap: () => FocusScope.of(context).unfocus(),
-                            onChanged: (v) {
-                              if (v != null) {
-                                setState(() => _category = v);
-                              }
-                            },
+                          ),
+                        )
+                        .toList(),
+                    onTap: () => FocusScope.of(context).unfocus(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() => _category = v);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _unit,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'UNIT TYPE',
+                      labelStyle: AppTextStyles.fieldLabel,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'PIECE',
+                        child: Text(
+                          'Per piece',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'WEIGHT',
+                        child: Text('Per kg', overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                    onTap: () => FocusScope.of(context).unfocus(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() => _unit = v);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // Status Switch (Active / Inactive)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.inset,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Service status',
+                          style: TextStyle(
+                            fontFamily: AppTextStyles.fontBody,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.text,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _unit,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: 'UNIT TYPE',
-                              labelStyle: AppTextStyles.fieldLabel,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 14,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'PIECE',
-                                child: Text(
-                                  'Per piece',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              DropdownMenuItem(
-                                value: 'WEIGHT',
-                                child: Text(
-                                  'Per kg',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                            onTap: () => FocusScope.of(context).unfocus(),
-                            onChanged: (v) {
-                              if (v != null) {
-                                setState(() => _unit = v);
-                              }
-                            },
-                          ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _active
+                              ? 'Active · Available for new orders'
+                              : 'Inactive · Hidden from new orders',
+                          style: AppTextStyles.hint,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
+                  ),
+                  const SizedBox(width: 8),
+                  Switch(
+                    value: _active,
+                    activeThumbColor: AppColors.primary,
+                    onChanged: (v) => setState(() => _active = v),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
 
-                    // Status Switch (Active / Inactive)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.inset,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Service status',
-                                  style: TextStyle(
-                                    fontFamily: AppTextStyles.fontBody,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.text,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  _active
-                                      ? 'Active · Available for new orders'
-                                      : 'Inactive · Hidden from new orders',
-                                  style: AppTextStyles.hint,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Switch(
-                            value: _active,
-                            activeThumbColor: AppColors.primary,
-                            onChanged: (v) => setState(() => _active = v),
-                          ),
-                        ],
+            // Unit specific pricing section
+            if (_unit == 'PIECE') ...[
+              AppTextField(
+                label: 'PRICE PER PIECE (₹)',
+                hint: 'e.g. 150',
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                controller: _priceController,
+              ),
+            ] else ...[
+              // Weight Pricing Tiers
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'PRICING TIERS',
+                    style: TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.mutedText,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _tiers.add(_TierEntry());
+                      });
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_scrollController.hasClients) {
+                          _scrollController.animateTo(
+                            _scrollController.position.maxScrollExtent,
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOut,
+                          );
+                        }
+                      });
+                    },
+                    icon: const Icon(
+                      Icons.add,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                    label: const Text(
+                      'Add tier',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
 
-                    // Unit specific pricing section
-                    if (_unit == 'PIECE') ...[
-                      AppTextField(
-                        label: 'PRICE PER PIECE (₹)',
-                        hint: 'e.g. 150',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        controller: _priceController,
-                      ),
-                    ] else ...[
-                      // Weight Pricing Tiers
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'PRICING TIERS',
-                            style: TextStyle(
-                              fontFamily: AppTextStyles.fontBody,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.mutedText,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                _tiers.add(_TierEntry());
-                              });
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (_scrollController.hasClients) {
-                                  _scrollController.animateTo(
-                                    _scrollController.position.maxScrollExtent,
-                                    duration: const Duration(milliseconds: 250),
-                                    curve: Curves.easeOut,
-                                  );
-                                }
-                              });
-                            },
-                            icon: const Icon(
-                              Icons.add,
-                              size: 16,
-                              color: AppColors.primary,
-                            ),
-                            label: const Text(
-                              'Add tier',
-                              style: TextStyle(
-                                fontFamily: AppTextStyles.fontBody,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Table header for tiers
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 2),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 5,
-                              child: Text(
-                                'UP TO (KG)',
-                                style: AppTextStyles.label,
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              flex: 5,
-                              child: Text(
-                                'PRICE (₹)',
-                                style: AppTextStyles.label,
-                              ),
-                            ),
-                            SizedBox(width: 36),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Editable tier rows
-                      ..._tiers.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final tier = entry.value;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 5,
-                                child: AppTextField(
-                                  hint: 'e.g. 4',
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                        decimal: true,
-                                      ),
-                                  controller: tier.limitController,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                flex: 5,
-                                child: AppTextField(
-                                  hint: 'e.g. 200',
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                        decimal: true,
-                                      ),
-                                  controller: tier.priceController,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              IconButton(
-                                constraints: const BoxConstraints(
-                                  minWidth: 36,
-                                  minHeight: 36,
-                                ),
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                icon: const Icon(
-                                  Icons.remove_circle_outline,
-                                  color: AppColors.danger,
-                                  size: 22,
-                                ),
-                                tooltip: 'Remove tier',
-                                onPressed: _tiers.length > 1
-                                    ? () {
-                                        setState(() {
-                                          final removed = _tiers.removeAt(
-                                            index,
-                                          );
-                                          removed.dispose();
-                                        });
-                                      }
-                                    : null,
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 8),
-
-                      // Extra per kg field
-                      AppTextField(
-                        label: 'EXTRA RATE PER KG (₹)',
-                        hint: 'e.g. 40 (rate above final slab)',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        controller: _extraController,
-                      ),
-                    ],
-
-                    if (_errorMessage != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.danger,
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 20),
-                    PrimaryButton(
-                      label: _isEditing ? 'Save changes' : 'Create service',
-                      isLoading: _isSaving,
-                      onPressed: _isSaving ? null : _handleSave,
+              // Table header for tiers
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: Text('UP TO (KG)', style: AppTextStyles.label),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(width: 8),
+                    Expanded(
+                      flex: 5,
+                      child: Text('PRICE (₹)', style: AppTextStyles.label),
+                    ),
+                    SizedBox(width: 36),
                   ],
                 ),
               ),
+              const SizedBox(height: 6),
+
+              // Editable tier rows
+              ..._tiers.asMap().entries.map((entry) {
+                final index = entry.key;
+                final tier = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: AppTextField(
+                          hint: 'e.g. 4',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          controller: tier.limitController,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 5,
+                        child: AppTextField(
+                          hint: 'e.g. 200',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          controller: tier.priceController,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        constraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
+                        ),
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.remove_circle_outline,
+                          color: AppColors.danger,
+                          size: 22,
+                        ),
+                        tooltip: 'Remove tier',
+                        onPressed: _tiers.length > 1
+                            ? () {
+                                setState(() {
+                                  final removed = _tiers.removeAt(index);
+                                  removed.dispose();
+                                });
+                              }
+                            : null,
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+
+              // Extra per kg field
+              AppTextField(
+                label: 'EXTRA RATE PER KG (₹)',
+                hint: 'e.g. 40 (rate above final slab)',
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                controller: _extraController,
+              ),
+            ],
+
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.fontBody,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.danger,
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+            PrimaryButton(
+              label: _isEditing ? 'Save changes' : 'Create service',
+              isLoading: _isSaving,
+              onPressed: _isSaving ? null : _handleSave,
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -104,6 +104,60 @@ class LocalCacheService {
     List<Map<String, dynamic>> storesList,
   ) => _box.put(keyCachedAvailableStores, storesList);
 
+  // Cached Dashboard Metrics
+  static const String keyCachedDashboardMetrics =
+      'cached_dashboard_metrics_json';
+  Map<String, dynamic>? getCachedDashboardMetrics() {
+    final raw = _box.get(keyCachedDashboardMetrics);
+    if (raw is Map) {
+      return deepCopy(raw) as Map<String, dynamic>;
+    }
+    return null;
+  }
+
+  Future<void> setCachedDashboardMetrics(Map<String, dynamic> metrics) =>
+      _box.put(keyCachedDashboardMetrics, metrics);
+
+  // Cached Expenses List
+  static const String keyCachedExpenses = 'cached_expenses_list';
+  List<Map<String, dynamic>>? getCachedExpenses() {
+    final raw = _box.get(keyCachedExpenses);
+    if (raw is List) {
+      return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
+    }
+    return null;
+  }
+
+  Future<void> setCachedExpenses(List<Map<String, dynamic>> expensesList) =>
+      _box.put(keyCachedExpenses, expensesList);
+
+  // Cached Staff List
+  static const String keyCachedStaff = 'cached_staff_list';
+  List<Map<String, dynamic>>? getCachedStaff() {
+    final raw = _box.get(keyCachedStaff);
+    if (raw is List) {
+      return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
+    }
+    return null;
+  }
+
+  Future<void> setCachedStaff(List<Map<String, dynamic>> staffList) =>
+      _box.put(keyCachedStaff, staffList);
+
+  // Cached Payment Methods List
+  static const String keyCachedPaymentMethods = 'cached_payment_methods_list';
+  List<Map<String, dynamic>>? getCachedPaymentMethods() {
+    final raw = _box.get(keyCachedPaymentMethods);
+    if (raw is List) {
+      return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
+    }
+    return null;
+  }
+
+  Future<void> setCachedPaymentMethods(
+    List<Map<String, dynamic>> methodsList,
+  ) => _box.put(keyCachedPaymentMethods, methodsList);
+
   // Cached Products List
   static const String keyCachedProducts = 'cached_products_list';
   List<Map<String, dynamic>>? getCachedProducts() {
@@ -193,6 +247,48 @@ class LocalCacheService {
 
   Future<void> setDeadLetterQueue(List<Map<String, dynamic>> queue) =>
       _box.put(keyDeadLetterQueue, queue);
+
+  // Offline Pending Owner Actions Queue (Owner-only writes)
+  static const String keyPendingOwnerActionsQueue =
+      'pending_owner_actions_queue_list';
+  List<Map<String, dynamic>> getPendingOwnerActionsQueue() {
+    final raw = _box.get(keyPendingOwnerActionsQueue);
+    if (raw is List) {
+      return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
+    }
+    return [];
+  }
+
+  Future<void> enqueueOwnerAction(Map<String, dynamic> action) async {
+    final current = getPendingOwnerActionsQueue();
+    current.add(action);
+    await _box.put(keyPendingOwnerActionsQueue, current);
+  }
+
+  Future<void> setPendingOwnerActionsQueue(List<Map<String, dynamic>> queue) =>
+      _box.put(keyPendingOwnerActionsQueue, queue);
+  Future<void> clearPendingOwnerActionsQueue() =>
+      _box.delete(keyPendingOwnerActionsQueue);
+
+  // Dead letter queue for permanently failing owner actions
+  static const String keyDeadLetterOwnerActionsQueue =
+      'dead_letter_owner_actions_queue_list';
+  List<Map<String, dynamic>> getDeadLetterOwnerActionsQueue() {
+    final raw = _box.get(keyDeadLetterOwnerActionsQueue);
+    if (raw is List) {
+      return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
+    }
+    return [];
+  }
+
+  Future<void> setDeadLetterOwnerActionsQueue(
+    List<Map<String, dynamic>> queue,
+  ) => _box.put(keyDeadLetterOwnerActionsQueue, queue);
+
+  /// Combined count of orders pending sync and owner actions pending sync.
+  int getTotalPendingCount() {
+    return getPendingSyncQueue().length + getPendingOwnerActionsQueue().length;
+  }
 
   // Generic key-value helpers for offline storage
   dynamic get(String key) => _box.get(key);

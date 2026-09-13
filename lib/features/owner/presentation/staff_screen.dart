@@ -10,6 +10,7 @@ import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
+import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class StaffScreen extends StatefulWidget {
   const StaffScreen({super.key});
@@ -39,10 +40,8 @@ class _StaffScreenState extends State<StaffScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BlocProvider.value(
-          value: bloc,
-          child: const AddStaffScreen(),
-        ),
+        builder: (_) =>
+            BlocProvider.value(value: bloc, child: const AddStaffScreen()),
       ),
     );
   }
@@ -113,6 +112,17 @@ class _StaffScreenState extends State<StaffScreen> {
               ],
             ),
             actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  color: AppColors.mutedText,
+                  size: 20,
+                ),
+                tooltip: 'Refresh',
+                onPressed: () {
+                  context.read<OwnerBloc>().add(LoadStaffEvent());
+                },
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: 16),
                 child: IconButton(
@@ -134,224 +144,237 @@ class _StaffScreenState extends State<StaffScreen> {
               child: Container(color: AppColors.border, height: 1),
             ),
           ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              context.read<OwnerBloc>().add(LoadStaffEvent());
-            },
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                // 1. Subtitle matching web
-                const Text(
-                  'Employees can use Sales and manage Orders.',
-                  style: TextStyle(
-                    fontFamily: AppTextStyles.fontBody,
-                    fontSize: 13.5,
-                    color: AppColors.mutedText,
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // 2. Search box
-                Container(
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    border: Border.all(color: AppColors.controlBorder),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 13),
-                  child: Row(
+          body: Column(
+            children: [
+              SyncStatusBar(
+                onSyncNow: () {
+                  context.read<OwnerBloc>().add(LoadStaffEvent());
+                },
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    context.read<OwnerBloc>().add(LoadStaffEvent());
+                  },
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(20),
                     children: [
-                      const Icon(
-                        Icons.search,
-                        size: 19,
-                        color: AppColors.mutedText,
-                      ),
-                      const SizedBox(width: 9),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          style: const TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 14,
-                            color: AppColors.text,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'Search name or username...',
-                            hintStyle: TextStyle(
-                              fontFamily: AppTextStyles.fontBody,
-                              fontSize: 14,
-                              color: AppColors.faintText,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: (val) {
-                            setState(() => _searchQuery = val);
-                          },
+                      // 1. Subtitle matching web
+                      const Text(
+                        'Employees can use Sales and manage Orders.',
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fontBody,
+                          fontSize: 13.5,
+                          color: AppColors.mutedText,
                         ),
                       ),
-                      if (_searchController.text.isNotEmpty)
-                        InkWell(
-                          onTap: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
+                      const SizedBox(height: 14),
+
+                      // 2. Search box
+                      Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          border: Border.all(color: AppColors.controlBorder),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 13),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.search,
+                              size: 19,
+                              color: AppColors.mutedText,
+                            ),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                style: const TextStyle(
+                                  fontFamily: AppTextStyles.fontBody,
+                                  fontSize: 14,
+                                  color: AppColors.text,
+                                ),
+                                decoration: const InputDecoration(
+                                  hintText: 'Search name or username...',
+                                  hintStyle: TextStyle(
+                                    fontFamily: AppTextStyles.fontBody,
+                                    fontSize: 14,
+                                    color: AppColors.faintText,
+                                  ),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                onChanged: (val) {
+                                  setState(() => _searchQuery = val);
+                                },
+                              ),
+                            ),
+                            if (_searchController.text.isNotEmpty)
+                              InkWell(
+                                onTap: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                                child: const Padding(
+                                  padding: EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: AppColors.mutedText,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 3. Employee cards or empty state
+                      if (staff.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: EmptyState(
+                            icon: Icons.people_outline,
+                            title: 'No staff members yet',
+                            subtitle: 'Add employees to take sales and manage orders.',
+                          ),
+                        )
+                      else if (filteredStaff.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 40),
+                          child: EmptyState(
+                            icon: Icons.search_off,
+                            title: 'No staff found',
+                            subtitle: 'No members match "$_searchQuery".',
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: filteredStaff.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 11),
+                          itemBuilder: (context, index) {
+                            final member = filteredStaff[index];
+                            return AppCard(
+                              padding: const EdgeInsets.all(14),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: member.active
+                                          ? AppColors.primaryTint
+                                          : AppColors.neutralBg,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        member.name.isNotEmpty
+                                            ? member.name[0].toUpperCase()
+                                            : 'S',
+                                        style: TextStyle(
+                                          fontFamily: AppTextStyles.fontDisplay,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w800,
+                                          color: member.active
+                                              ? AppColors.primary
+                                              : AppColors.mutedText,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 13),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          member.name,
+                                          style: const TextStyle(
+                                            fontFamily: AppTextStyles.fontBody,
+                                            fontSize: 14.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.text,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '@${member.username} · Employee',
+                                          style: AppTextStyles.hint,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: () =>
+                                        _showEditStaffDialog(context, member),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      side: const BorderSide(
+                                        color: AppColors.controlBorder,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Edit',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Switch(
+                                    value: member.active,
+                                    activeThumbColor: AppColors.primary,
+                                    onChanged: (val) {
+                                      context.read<OwnerBloc>().add(
+                                        ToggleStaffActiveEvent(member.id),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
                           },
-                          child: const Padding(
-                            padding: EdgeInsets.all(4),
-                            child: Icon(
-                              Icons.close,
-                              size: 16,
+                        ),
+
+                      // 4. Footer note matching web
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Center(
+                          child: Text(
+                            'Deactivated employees cannot sign in until reactivated.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 12.5,
                               color: AppColors.mutedText,
                             ),
                           ),
                         ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                // 3. Employee cards or empty state
-                if (staff.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 40),
-                    child: EmptyState(
-                      icon: Icons.people_outline,
-                      title: 'No staff members yet',
-                      subtitle:
-                          'Add employees to take sales and manage orders.',
-                    ),
-                  )
-                else if (filteredStaff.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 40),
-                    child: EmptyState(
-                      icon: Icons.search_off,
-                      title: 'No staff found',
-                      subtitle: 'No members match "$_searchQuery".',
-                    ),
-                  )
-                else
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredStaff.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 11),
-                    itemBuilder: (context, index) {
-                      final member = filteredStaff[index];
-                      return AppCard(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: member.active
-                                    ? AppColors.primaryTint
-                                    : AppColors.neutralBg,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  member.name.isNotEmpty
-                                      ? member.name[0].toUpperCase()
-                                      : 'S',
-                                  style: TextStyle(
-                                    fontFamily: AppTextStyles.fontDisplay,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    color: member.active
-                                        ? AppColors.primary
-                                        : AppColors.mutedText,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 13),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    member.name,
-                                    style: const TextStyle(
-                                      fontFamily: AppTextStyles.fontBody,
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.text,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '@${member.username} · Employee',
-                                    style: AppTextStyles.hint,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            OutlinedButton(
-                              onPressed: () =>
-                                  _showEditStaffDialog(context, member),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                side: const BorderSide(
-                                  color: AppColors.controlBorder,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
-                              child: const Text(
-                                'Edit',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Switch(
-                              value: member.active,
-                              activeThumbColor: AppColors.primary,
-                              onChanged: (val) {
-                                context.read<OwnerBloc>().add(
-                                  ToggleStaffActiveEvent(member.id),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-
-                // 4. Footer note matching web
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Center(
-                    child: Text(
-                      'Deactivated employees cannot sign in until reactivated.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: AppTextStyles.fontBody,
-                        fontSize: 12.5,
-                        color: AppColors.mutedText,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -399,11 +422,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
     }
 
     context.read<OwnerBloc>().add(
-      AddStaffEvent(
-        name: name,
-        username: username,
-        password: password,
-      ),
+      AddStaffEvent(name: name, username: username, password: password),
     );
     Navigator.pop(context);
   }
@@ -480,10 +499,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
               controller: _passwordController,
             ),
             const SizedBox(height: 24),
-            PrimaryButton(
-              label: 'Create staff account',
-              onPressed: _save,
-            ),
+            PrimaryButton(label: 'Create staff account', onPressed: _save),
           ],
         ),
       ),
@@ -609,10 +625,7 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
               controller: _usernameController,
             ),
             const SizedBox(height: 24),
-            PrimaryButton(
-              label: 'Save changes',
-              onPressed: _save,
-            ),
+            PrimaryButton(label: 'Save changes', onPressed: _save),
           ],
         ),
       ),

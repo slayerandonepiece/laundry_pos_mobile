@@ -8,6 +8,7 @@ import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_inset.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
+import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class StoreProfileScreen extends StatefulWidget {
   const StoreProfileScreen({super.key});
@@ -76,80 +77,126 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 color: AppColors.text,
               ),
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  color: AppColors.mutedText,
+                  size: 20,
+                ),
+                tooltip: 'Refresh',
+                onPressed: () {
+                  _isInitialized = false;
+                  context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),
               child: Container(color: AppColors.border, height: 1),
             ),
           ),
-          body: ListView(
-            padding: const EdgeInsets.all(20),
+          body: Column(
             children: [
-              AppInset(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.receipt_long_outlined,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'This information appears at the top of all printed and digital customer invoices.',
-                        style: AppTextStyles.hint.copyWith(
-                          color: AppColors.text,
+              SyncStatusBar(
+                onSyncNow: () {
+                  _isInitialized = false;
+                  context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                },
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    _isInitialized = false;
+                    context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                  },
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      AppInset(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.receipt_long_outlined,
+                              size: 20,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'This information appears at the top of all printed and digital customer invoices.',
+                                style: AppTextStyles.hint.copyWith(
+                                  color: AppColors.text,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+
+                      AppTextField(
+                        label: 'STORE NAME',
+                        hint: 'e.g. Chinnappanahalli Laundry',
+                        controller: _nameController,
+                      ),
+                      const SizedBox(height: 14),
+
+                      AppTextField(
+                        label: 'STORE ADDRESS',
+                        hint: 'No. 12, Main Road, Bengaluru',
+                        controller: _addressController,
+                      ),
+                      const SizedBox(height: 14),
+
+                      AppTextField(
+                        label: 'STORE PHONE',
+                        hint: '+91 80 4123 9900',
+                        keyboardType: TextInputType.phone,
+                        controller: _phoneController,
+                      ),
+                      const SizedBox(height: 24),
+
+                      PrimaryButton(
+                        label: 'Save profile',
+                        isLoading: state.isLoading,
+                        onPressed: () {
+                          final name = _nameController.text.trim();
+                          final address = _addressController.text.trim();
+                          final phone = _phoneController.text.trim();
+
+                          if (name.isEmpty) return;
+
+                          context.read<OwnerBloc>().add(
+                            UpdateStoreProfileEvent(
+                              storeName: name,
+                              address: address,
+                              phone: phone,
+                              name: state.storeProfile?.name ?? '',
+                              email: state.storeProfile?.email ?? '',
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      const Center(
+                        child: Text(
+                          'Currency: INR · Timezone: Asia/Kolkata',
+                          style: TextStyle(
+                            fontFamily: AppTextStyles.fontBody,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.mutedText,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-
-              AppTextField(
-                label: 'STORE NAME',
-                hint: 'e.g. Chinnappanahalli Laundry',
-                controller: _nameController,
-              ),
-              const SizedBox(height: 14),
-
-              AppTextField(
-                label: 'STORE ADDRESS',
-                hint: 'No. 12, Main Road, Bengaluru',
-                controller: _addressController,
-              ),
-              const SizedBox(height: 14),
-
-              AppTextField(
-                label: 'STORE PHONE',
-                hint: '+91 80 4123 9900',
-                keyboardType: TextInputType.phone,
-                controller: _phoneController,
-              ),
-              const SizedBox(height: 24),
-
-              PrimaryButton(
-                label: 'Save profile',
-                isLoading: state.isLoading,
-                onPressed: () {
-                  final name = _nameController.text.trim();
-                  final address = _addressController.text.trim();
-                  final phone = _phoneController.text.trim();
-
-                  if (name.isEmpty) return;
-
-                  context.read<OwnerBloc>().add(
-                    UpdateStoreProfileEvent(
-                      storeName: name,
-                      address: address,
-                      phone: phone,
-                      name: state.storeProfile?.name ?? '',
-                      email: state.storeProfile?.email ?? '',
-                    ),
-                  );
-                },
               ),
             ],
           ),

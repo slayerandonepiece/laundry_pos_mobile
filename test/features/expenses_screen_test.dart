@@ -167,10 +167,10 @@ void main() {
       expect(find.text('Recurring bills shown'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
 
-      // Switch period to '7d' (Last 7 days)
+      // Switch period to '7d' (This week)
       await tester.tap(find.text('This month'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Last 7 days').last);
+      await tester.tap(find.text('This week').last);
       await tester.pumpAndSettle();
 
       // In 7d:
@@ -178,11 +178,14 @@ void main() {
       // Unpaid: exp-2 (₹1,000) = ₹1,000
       // Recurring: exp-2 = 1
       expect(find.text('₹800'), findsOneWidget);
-      expect(find.text('₹1,000'), findsNWidgets(2)); // Unpaid stat card + exp-2 amount
+      expect(
+        find.text('₹1,000'),
+        findsNWidgets(2),
+      ); // Unpaid stat card + exp-2 amount
       expect(find.text('1'), findsOneWidget); // Recurring count
 
       // Switch period to 'today' (Today)
-      await tester.tap(find.text('Last 7 days'));
+      await tester.tap(find.text('This week'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Today').last);
       await tester.pumpAndSettle();
@@ -191,9 +194,30 @@ void main() {
       // Paid: exp-1 (₹500) = ₹500
       // Unpaid: exp-2 (₹1,000) = ₹1,000
       // Recurring: exp-2 = 1
-      expect(find.text('₹500'), findsNWidgets(2)); // Paid stat card + exp-1 amount
+      expect(
+        find.text('₹500'),
+        findsNWidgets(2),
+      ); // Paid stat card + exp-1 amount
       expect(find.text('₹1,000'), findsNWidgets(2));
       expect(find.text('1'), findsOneWidget);
+
+      // Switch period to 'quarter' (This quarter)
+      await tester.tap(find.text('Today'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('This quarter').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Paid in selected period'), findsOneWidget);
+
+      // Switch period to 'custom' (Custom dates)
+      await tester.tap(find.text('This quarter'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Custom dates').last);
+      await tester.pumpAndSettle();
+
+      // Inline From / To selectors appear
+      expect(find.text('FROM'), findsOneWidget);
+      expect(find.text('TO'), findsOneWidget);
     });
 
     testWidgets('Search filters expenses by title and category', (
@@ -208,10 +232,7 @@ void main() {
       await pumpExpenses(tester);
 
       // Search by title 'Detergent'
-      await tester.enterText(
-        find.byType(TextField),
-        'Detergent',
-      );
+      await tester.enterText(find.byType(TextField), 'Detergent');
       await tester.pumpAndSettle();
 
       expect(find.text('Detergent Supplies'), findsOneWidget);
@@ -219,20 +240,14 @@ void main() {
       expect(find.text('Shop Rent'), findsNothing);
 
       // Search by category 'Utilities'
-      await tester.enterText(
-        find.byType(TextField),
-        'Utilities',
-      );
+      await tester.enterText(find.byType(TextField), 'Utilities');
       await tester.pumpAndSettle();
 
       expect(find.text('Electricity'), findsOneWidget);
       expect(find.text('Detergent Supplies'), findsNothing);
 
       // Non-matching query
-      await tester.enterText(
-        find.byType(TextField),
-        'nonexistent',
-      );
+      await tester.enterText(find.byType(TextField), 'nonexistent');
       await tester.pumpAndSettle();
 
       expect(find.text('No expenses match your filters'), findsOneWidget);
@@ -282,30 +297,31 @@ void main() {
       expect(fakeRepo.lastCreatedExpense!['amount'], 150000); // 1500 * 100
     });
 
-    testWidgets('Marking an expense paid still works via CentredDialog confirmation', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets(
+      'Marking an expense paid still works via CentredDialog confirmation',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(buildTestWidget());
-      await pumpExpenses(tester);
+        await tester.pumpWidget(buildTestWidget());
+        await pumpExpenses(tester);
 
-      // Tap on unpaid expense 'Shop Rent'
-      await tester.tap(find.text('Shop Rent'));
-      await tester.pumpAndSettle();
+        // Tap on unpaid expense 'Shop Rent'
+        await tester.tap(find.text('Shop Rent'));
+        await tester.pumpAndSettle();
 
-      // Confirmation dialog opens
-      expect(find.byType(CentredDialog), findsOneWidget);
-      expect(find.text('Mark expense paid?'), findsOneWidget);
+        // Confirmation dialog opens
+        expect(find.byType(CentredDialog), findsOneWidget);
+        expect(find.text('Mark expense paid?'), findsOneWidget);
 
-      // Tap confirm button 'Mark paid'
-      await tester.tap(find.text('Mark paid'));
-      await pumpExpenses(tester);
+        // Tap confirm button 'Mark paid'
+        await tester.tap(find.text('Mark paid'));
+        await pumpExpenses(tester);
 
-      expect(fakeRepo.lastMarkedPaidId, 'exp-2');
-    });
+        expect(fakeRepo.lastMarkedPaidId, 'exp-2');
+      },
+    );
   });
 }

@@ -83,7 +83,11 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       final order = await ordersRepository.getOrderDetail(event.orderCode);
       emit(state.copyWith(isLoading: false, selectedOrder: order));
     } catch (e) {
-      AppLogger.log(_tag, 'getOrderDetail(${event.orderCode}) failed', error: e);
+      AppLogger.log(
+        _tag,
+        'getOrderDetail(${event.orderCode}) failed',
+        error: e,
+      );
       emit(
         state.copyWith(
           isLoading: false,

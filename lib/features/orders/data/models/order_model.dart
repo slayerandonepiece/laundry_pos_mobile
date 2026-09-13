@@ -87,7 +87,7 @@ class OrderHistoryEvent {
     );
   }
 
-  DateTime get timestamp => DateTime.tryParse(at) ?? DateTime.now();
+  DateTime get timestamp => DateTime.tryParse(at)?.toLocal() ?? DateTime.now();
   String get actorName => by;
 
   Map<String, dynamic> toJson() {
@@ -182,8 +182,8 @@ class Order {
   bool get isPending => status == 'Pending';
 
   String get orderCode => id;
-  DateTime get createdAt => DateTime.tryParse(date) ?? DateTime.now();
-  DateTime get dueDateTime => DateTime.tryParse(due) ?? DateTime.now();
+  DateTime get createdAt => DateTime.tryParse(date)?.toLocal() ?? DateTime.now();
+  DateTime get dueDateTime => DateTime.tryParse(due)?.toLocal() ?? DateTime.now();
 
   factory Order.fromJson(Map<String, dynamic> json) {
     final rawLines = json['lines'] as List? ?? [];

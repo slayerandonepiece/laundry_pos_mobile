@@ -109,5 +109,78 @@ void main() {
       await localCache.clearPendingSyncQueue();
       expect(localCache.getPendingSyncQueue(), isEmpty);
     });
+
+    test('Stores and retrieves cached owner data (metrics, expenses, staff, payment methods)', () async {
+      final metrics = {
+        'todaySales': 45000,
+        'todayCount': 3,
+        'periodSales': 150000,
+        'periodOrders': 12,
+        'todo': 4,
+        'completed': 8,
+        'outstanding': 20000,
+        'overdue': 1,
+        'dueToday': 2,
+        'serviceMix': [
+          {'label': 'Wash & Iron', 'amount': 25000},
+        ],
+        'cash': [
+          {'label': 'Mon', 'income': 20000, 'expenses': 5000},
+        ],
+      };
+      final expenses = [
+        {
+          'id': 'exp-1',
+          'title': 'Detergent 50kg',
+          'category': 'Supplies',
+          'amount': 3500,
+          'due': '2026-09-12',
+          'paid': '2026-09-12',
+          'monthly': false,
+        },
+      ];
+      final staff = [
+        {
+          'id': 'st-1',
+          'name': 'Ramesh Kumar',
+          'username': 'ramesh',
+          'active': true,
+        },
+      ];
+      final paymentMethods = [
+        {'id': 'pm-cash', 'name': 'Cash', 'type': 'Cash', 'active': true},
+        {'id': 'pm-upi', 'name': 'Store UPI', 'type': 'UPI', 'active': true},
+      ];
+
+      expect(localCache.getCachedDashboardMetrics(), isNull);
+      expect(localCache.getCachedExpenses(), isNull);
+      expect(localCache.getCachedStaff(), isNull);
+      expect(localCache.getCachedPaymentMethods(), isNull);
+
+      await localCache.setCachedDashboardMetrics(metrics);
+      await localCache.setCachedExpenses(expenses);
+      await localCache.setCachedStaff(staff);
+      await localCache.setCachedPaymentMethods(paymentMethods);
+
+      final cachedMetrics = localCache.getCachedDashboardMetrics();
+      expect(cachedMetrics, isNotNull);
+      expect(cachedMetrics?['todaySales'], 45000);
+      expect(
+        (cachedMetrics?['serviceMix'] as List).first['label'],
+        'Wash & Iron',
+      );
+
+      final cachedExpenses = localCache.getCachedExpenses();
+      expect(cachedExpenses?.length, 1);
+      expect(cachedExpenses?.first['title'], 'Detergent 50kg');
+
+      final cachedStaff = localCache.getCachedStaff();
+      expect(cachedStaff?.length, 1);
+      expect(cachedStaff?.first['name'], 'Ramesh Kumar');
+
+      final cachedMethods = localCache.getCachedPaymentMethods();
+      expect(cachedMethods?.length, 2);
+      expect(cachedMethods?.last['name'], 'Store UPI');
+    });
   });
 }

@@ -108,6 +108,7 @@ class OrdersRepository {
     String sort = 'recent',
   }) async {
     try {
+      SyncManager.instance.startSync('Fetching latest from cloud...');
       final response = await _apiClient.get(
         '${ApiEndpoints.orders}?limit=$limit&sort=$sort',
       );
@@ -118,6 +119,7 @@ class OrdersRepository {
         await _localCache.setCachedOrders(
           orders.map((o) => o.toJson()).toList(),
         );
+        SyncManager.instance.completeSync();
         return orders;
       }
       throw Exception('Failed to load recent orders: invalid response');
@@ -717,8 +719,9 @@ class OrdersRepository {
                   final ref = action['orderCode']?.toString();
                   if (ref != null && (ref == orderId || ref == orderCode)) {
                     final id = action['clientActionId']?.toString();
-                    if (id != null && id.isNotEmpty)
+                    if (id != null && id.isNotEmpty) {
                       droppedClientActionIds.add(id);
+                    }
                   }
                 }
                 continue;
@@ -747,8 +750,9 @@ class OrdersRepository {
                 if (droppedClientActionIds.contains(actionId)) continue;
 
                 final ref = action['orderCode']?.toString();
-                if (ref == null || (ref != orderId && ref != orderCode))
+                if (ref == null || (ref != orderId && ref != orderCode)) {
                   continue;
+                }
 
                 final type = action['type'];
                 if (type == 'update_status') {
@@ -790,8 +794,9 @@ class OrdersRepository {
                           ?.toString()
                           .trim()
                           .toLowerCase();
-                      if (pAmount != actionAmount || pMethod != actionMethod)
+                      if (pAmount != actionAmount || pMethod != actionMethod) {
                         return false;
+                      }
                       return _isPaymentDateClose(
                         p['date']?.toString(),
                         actionQueuedAt,

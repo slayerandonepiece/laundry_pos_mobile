@@ -68,11 +68,7 @@ class SubscriptionScreen extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
-            Icon(
-              Icons.info_outline,
-              size: 22,
-              color: AppColors.mutedText,
-            ),
+            Icon(Icons.info_outline, size: 22, color: AppColors.mutedText),
             SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -107,8 +103,8 @@ class SubscriptionScreen extends StatelessWidget {
     final parsedDate = DateTime.tryParse(paidThroughDate);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final isNearOrPast = parsedDate == null ||
-        parsedDate.difference(today).inDays <= 7;
+    final isNearOrPast =
+        parsedDate == null || parsedDate.difference(today).inDays <= 7;
 
     if (isNearOrPast) {
       return Container(

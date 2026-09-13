@@ -10,6 +10,7 @@ import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
+import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
   const OwnerProfileScreen({super.key});
@@ -97,96 +98,130 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                 color: AppColors.text,
               ),
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  color: AppColors.mutedText,
+                  size: 20,
+                ),
+                tooltip: 'Refresh',
+                onPressed: () {
+                  _isInitialized = false;
+                  context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),
               child: Container(color: AppColors.border, height: 1),
             ),
           ),
-          body: ListView(
-            padding: const EdgeInsets.all(20),
+          body: Column(
             children: [
-              Center(
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primaryTint,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      displayName.isNotEmpty
-                          ? displayName[0].toUpperCase()
-                          : 'O',
-                      style: const TextStyle(
-                        fontFamily: AppTextStyles.fontDisplay,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Editable fields
-              AppTextField(
-                label: 'FULL NAME',
-                hint: 'e.g. Ramesh Kumar',
-                controller: _nameController,
-              ),
-              const SizedBox(height: 14),
-
-              AppTextField(
-                label: 'PHONE',
-                hint: '+91 98765 43210',
-                keyboardType: TextInputType.phone,
-                controller: _phoneController,
-              ),
-              const SizedBox(height: 14),
-
-              AppTextField(
-                label: 'EMAIL',
-                hint: 'owner@example.com',
-                keyboardType: TextInputType.emailAddress,
-                controller: _emailController,
-              ),
-              const SizedBox(height: 16),
-
-              // Read-only account info
-              AppCard(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildRow('USERNAME', '@$username'),
-                    const Divider(color: AppColors.border, height: 20),
-                    _buildRow('ROLE', role),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              PrimaryButton(
-                label: 'Save changes',
-                isLoading: state.isLoading,
-                onPressed: () {
-                  final name = _nameController.text.trim();
-                  final phone = _phoneController.text.trim();
-                  final email = _emailController.text.trim();
-
-                  if (name.isEmpty) return;
-
-                  context.read<OwnerBloc>().add(
-                    UpdateStoreProfileEvent(
-                      storeName: state.storeProfile?.storeName ?? '',
-                      address: state.storeProfile?.address ?? '',
-                      phone: phone,
-                      name: name,
-                      email: email,
-                    ),
-                  );
+              SyncStatusBar(
+                onSyncNow: () {
+                  _isInitialized = false;
+                  context.read<OwnerBloc>().add(LoadStoreProfileEvent());
                 },
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    _isInitialized = false;
+                    context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                  },
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primaryTint,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              displayName.isNotEmpty
+                                  ? displayName[0].toUpperCase()
+                                  : 'O',
+                              style: const TextStyle(
+                                fontFamily: AppTextStyles.fontDisplay,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Editable fields
+                      AppTextField(
+                        label: 'FULL NAME',
+                        hint: 'e.g. Ramesh Kumar',
+                        controller: _nameController,
+                      ),
+                      const SizedBox(height: 14),
+
+                      AppTextField(
+                        label: 'PHONE',
+                        hint: '+91 98765 43210',
+                        keyboardType: TextInputType.phone,
+                        controller: _phoneController,
+                      ),
+                      const SizedBox(height: 14),
+
+                      AppTextField(
+                        label: 'EMAIL',
+                        hint: 'owner@example.com',
+                        keyboardType: TextInputType.emailAddress,
+                        controller: _emailController,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Read-only account info
+                      AppCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            _buildRow('USERNAME', '@$username'),
+                            const Divider(color: AppColors.border, height: 20),
+                            _buildRow('ROLE', role),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      PrimaryButton(
+                        label: 'Save changes',
+                        isLoading: state.isLoading,
+                        onPressed: () {
+                          final name = _nameController.text.trim();
+                          final phone = _phoneController.text.trim();
+                          final email = _emailController.text.trim();
+
+                          if (name.isEmpty) return;
+
+                          context.read<OwnerBloc>().add(
+                            UpdateStoreProfileEvent(
+                              storeName: state.storeProfile?.storeName ?? '',
+                              address: state.storeProfile?.address ?? '',
+                              phone: phone,
+                              name: name,
+                              email: email,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),

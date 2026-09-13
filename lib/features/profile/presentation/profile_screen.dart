@@ -22,10 +22,20 @@ class ProfileScreen extends StatelessWidget {
   final SyncEngine? syncEngine;
   final AuthRepository? authRepository;
 
-  const ProfileScreen({super.key, this.connectivityService, this.localCache, this.syncEngine, this.authRepository});
+  const ProfileScreen({
+    super.key,
+    this.connectivityService,
+    this.localCache,
+    this.syncEngine,
+    this.authRepository,
+  });
 
   String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '?';
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return parts[0].substring(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
@@ -69,7 +79,10 @@ class ProfileScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Container(
-          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
           padding: const EdgeInsets.all(22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -77,7 +90,10 @@ class ProfileScreen extends StatelessWidget {
             children: [
               const Text("You're offline", style: AppTextStyles.h2),
               const SizedBox(height: 8),
-              const Text("You're offline. Connect to the internet to log out.", style: AppTextStyles.hint),
+              const Text(
+                "You're offline. Connect to the internet to log out.",
+                style: AppTextStyles.hint,
+              ),
               const SizedBox(height: 22),
               ElevatedButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
@@ -85,7 +101,9 @@ class ProfileScreen extends StatelessWidget {
                   minimumSize: const Size.fromHeight(48),
                   backgroundColor: AppColors.primary,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(9),
+                  ),
                 ),
                 child: const Text('OK', style: AppTextStyles.button),
               ),
@@ -96,7 +114,11 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Future<bool?> _showPendingSyncDialog(BuildContext context, SyncEngine syncEngine, LocalCacheService cache) {
+  Future<bool?> _showPendingSyncDialog(
+    BuildContext context,
+    SyncEngine syncEngine,
+    LocalCacheService cache,
+  ) {
     return showDialog<bool>(
       context: context,
       barrierColor: AppColors.scrim.withValues(alpha: 0.42),
@@ -110,9 +132,15 @@ class ProfileScreen extends StatelessWidget {
               canPop: !isSyncing,
               child: Dialog(
                 backgroundColor: Colors.transparent,
-                insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 24,
+                ),
                 child: Container(
-                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(16)),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   padding: const EdgeInsets.all(22),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -120,7 +148,10 @@ class ProfileScreen extends StatelessWidget {
                     children: [
                       const Text('Unsynced orders', style: AppTextStyles.h2),
                       const SizedBox(height: 8),
-                      const Text('You have unsynced orders. Please sync them first.', style: AppTextStyles.hint),
+                      const Text(
+                        'You have unsynced orders. Please sync them first.',
+                        style: AppTextStyles.hint,
+                      ),
                       if (errorMessage != null) ...[
                         const SizedBox(height: 12),
                         Text(
@@ -138,13 +169,23 @@ class ProfileScreen extends StatelessWidget {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: isSyncing ? null : () => Navigator.of(dialogContext).pop(false),
+                              onPressed: isSyncing
+                                  ? null
+                                  : () =>
+                                        Navigator.of(dialogContext).pop(false),
                               style: OutlinedButton.styleFrom(
                                 minimumSize: const Size.fromHeight(48),
-                                side: const BorderSide(color: AppColors.controlBorder),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                                side: const BorderSide(
+                                  color: AppColors.controlBorder,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
                               ),
-                              child: const Text('Cancel', style: AppTextStyles.buttonSecondary),
+                              child: const Text(
+                                'Cancel',
+                                style: AppTextStyles.buttonSecondary,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -160,7 +201,9 @@ class ProfileScreen extends StatelessWidget {
                                       try {
                                         await syncEngine.retryNow();
                                       } catch (_) {}
-                                      final remaining = cache.getPendingSyncQueue().length;
+                                      final remaining = cache
+                                          .getPendingSyncQueue()
+                                          .length;
                                       if (remaining > 0) {
                                         if (dialogContext.mounted) {
                                           setState(() {
@@ -178,22 +221,34 @@ class ProfileScreen extends StatelessWidget {
                                 minimumSize: const Size.fromHeight(48),
                                 backgroundColor: AppColors.primary,
                                 elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
                               ),
                               child: isSyncing
                                   ? const Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         SizedBox(
                                           width: 18,
                                           height: 18,
-                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                         SizedBox(width: 8),
-                                        Text('Syncing…', style: AppTextStyles.button),
+                                        Text(
+                                          'Syncing…',
+                                          style: AppTextStyles.button,
+                                        ),
                                       ],
                                     )
-                                  : const Text('Sync now', style: AppTextStyles.button),
+                                  : const Text(
+                                      'Sync now',
+                                      style: AppTextStyles.button,
+                                    ),
                             ),
                           ),
                         ],
@@ -209,7 +264,11 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _showLogoutConfirmDialog(BuildContext context, AuthRepository authRepo, AuthBloc authBloc) {
+  Future<void> _showLogoutConfirmDialog(
+    BuildContext context,
+    AuthRepository authRepo,
+    AuthBloc authBloc,
+  ) {
     return showDialog(
       context: context,
       barrierColor: AppColors.scrim.withValues(alpha: 0.42),
@@ -223,9 +282,15 @@ class ProfileScreen extends StatelessWidget {
               canPop: !isLoggingOut,
               child: Dialog(
                 backgroundColor: Colors.transparent,
-                insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                insetPadding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 24,
+                ),
                 child: Container(
-                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(16)),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   padding: const EdgeInsets.all(22),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -254,13 +319,22 @@ class ProfileScreen extends StatelessWidget {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: isLoggingOut ? null : () => Navigator.of(dialogContext).pop(),
+                              onPressed: isLoggingOut
+                                  ? null
+                                  : () => Navigator.of(dialogContext).pop(),
                               style: OutlinedButton.styleFrom(
                                 minimumSize: const Size.fromHeight(48),
-                                side: const BorderSide(color: AppColors.controlBorder),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                                side: const BorderSide(
+                                  color: AppColors.controlBorder,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
                               ),
-                              child: const Text('Cancel', style: AppTextStyles.buttonSecondary),
+                              child: const Text(
+                                'Cancel',
+                                style: AppTextStyles.buttonSecondary,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -292,15 +366,23 @@ class ProfileScreen extends StatelessWidget {
                                 minimumSize: const Size.fromHeight(48),
                                 backgroundColor: AppColors.danger,
                                 elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
                               ),
                               child: isLoggingOut
                                   ? const SizedBox(
                                       width: 18,
                                       height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
                                     )
-                                  : const Text('Log out', style: AppTextStyles.button),
+                                  : const Text(
+                                      'Log out',
+                                      style: AppTextStyles.button,
+                                    ),
                             ),
                           ),
                         ],
@@ -321,7 +403,9 @@ class ProfileScreen extends StatelessWidget {
     final authState = context.watch<AuthBloc>().state;
     final isAuthenticated = authState is AuthenticatedState;
     final name = isAuthenticated ? authState.user.displayName : '';
-    final roleLabel = isAuthenticated && authState.isOwner ? 'Owner' : 'Employee';
+    final roleLabel = isAuthenticated && authState.isOwner
+        ? 'Owner'
+        : 'Employee';
     final storeName = isAuthenticated ? authState.currentStore.storeName : '';
     final hasMultipleStores = isAuthenticated && authState.hasMultipleStores;
 
@@ -352,7 +436,10 @@ class ProfileScreen extends StatelessWidget {
             Container(
               width: 64,
               height: 64,
-              decoration: const BoxDecoration(color: AppColors.primaryTint, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: AppColors.primaryTint,
+                shape: BoxShape.circle,
+              ),
               child: Center(
                 child: Text(
                   _initials(name),
@@ -380,7 +467,9 @@ class ProfileScreen extends StatelessWidget {
             _ProfileRow(
               icon: Icons.lock_outline,
               label: 'Change password',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChangePasswordScreen())),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
+              ),
             ),
             const Spacer(),
             const Divider(color: AppColors.border, height: 1),
@@ -408,7 +497,13 @@ class _ProfileRow extends StatelessWidget {
   final Color? labelColor;
   final Color? iconColor;
 
-  const _ProfileRow({required this.icon, required this.label, required this.onTap, this.labelColor, this.iconColor});
+  const _ProfileRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.labelColor,
+    this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -434,7 +529,12 @@ class _ProfileRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (iconColor == null) const Icon(Icons.chevron_right, size: 18, color: AppColors.mutedText),
+            if (iconColor == null)
+              const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: AppColors.mutedText,
+              ),
           ],
         ),
       ),
@@ -457,8 +557,14 @@ class _AppVersionText extends StatelessWidget {
             : AppEnvironmentConfig.isDev
             ? ' (dev)'
             : '';
-        final text = version.isNotEmpty ? 'v$version${buildNumber.isNotEmpty ? '+$buildNumber' : ''}$envSuffix' : '';
-        return Text(text, style: AppTextStyles.hint, textAlign: TextAlign.center);
+        final text = version.isNotEmpty
+            ? 'v$version${buildNumber.isNotEmpty ? '+$buildNumber' : ''}$envSuffix'
+            : '';
+        return Text(
+          text,
+          style: AppTextStyles.hint,
+          textAlign: TextAlign.center,
+        );
       },
     );
   }

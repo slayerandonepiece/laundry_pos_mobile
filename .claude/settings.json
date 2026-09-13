@@ -2,6 +2,8 @@
   "enabledPlugins": {
     "andrej-karpathy-skills@karpathy-skills": true,
     "superpowers@superpowers-marketplace": true,
-    "ecc@ecc": true
+    "ecc@ecc": true,
+    "obsidian-cli@obsidian-cli-skill": true,
+    "dart-flutter@dart-flutter": true
   }
 }

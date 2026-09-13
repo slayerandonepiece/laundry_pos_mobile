@@ -32,7 +32,15 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadDashboardEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    // Render whatever is cached immediately (no spinner) so charts don't sit
+    // blank while the network round-trip is in flight, then let the network
+    // fetch below silently replace it once it resolves.
+    final cachedMetrics = ownerRepository.getCachedDashboardMetricsSync();
+    if (cachedMetrics != null) {
+      emit(state.copyWith(metrics: cachedMetrics, error: null));
+    } else {
+      emit(state.copyWith(isLoading: true, error: null));
+    }
     try {
       final metrics = await ownerRepository.getDashboardMetrics(
         from: event.from,
@@ -44,7 +52,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           isLoading: false,
-          error: 'Could not load dashboard — try again',
+          error: cachedMetrics == null
+              ? 'Could not load dashboard — try again'
+              : null,
         ),
       );
     }
@@ -54,7 +64,12 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadExpensesEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    final cachedExpenses = ownerRepository.getCachedExpensesSync();
+    if (cachedExpenses != null) {
+      emit(state.copyWith(expenses: cachedExpenses, error: null));
+    } else {
+      emit(state.copyWith(isLoading: true, error: null));
+    }
     try {
       final expenses = await ownerRepository.listExpenses();
       emit(state.copyWith(isLoading: false, expenses: expenses));
@@ -63,7 +78,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           isLoading: false,
-          error: 'Could not load expenses — try again',
+          error: cachedExpenses == null
+              ? 'Could not load expenses — try again'
+              : null,
         ),
       );
     }
@@ -121,7 +138,12 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadStaffEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    final cachedStaff = ownerRepository.getCachedStaffSync();
+    if (cachedStaff != null) {
+      emit(state.copyWith(staff: cachedStaff, error: null));
+    } else {
+      emit(state.copyWith(isLoading: true, error: null));
+    }
     try {
       final staff = await ownerRepository.listStaff();
       emit(state.copyWith(isLoading: false, staff: staff));
@@ -130,7 +152,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           isLoading: false,
-          error: 'Could not load staff — try again',
+          error: cachedStaff == null
+              ? 'Could not load staff — try again'
+              : null,
         ),
       );
     }
@@ -214,7 +238,12 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadPaymentMethodsEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    final cachedMethods = ownerRepository.getCachedPaymentMethodsSync();
+    if (cachedMethods != null) {
+      emit(state.copyWith(paymentMethods: cachedMethods, error: null));
+    } else {
+      emit(state.copyWith(isLoading: true, error: null));
+    }
     try {
       final methods = await ownerRepository.listPaymentMethods();
       emit(state.copyWith(isLoading: false, paymentMethods: methods));
@@ -223,7 +252,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           isLoading: false,
-          error: 'Could not load payment methods — try again',
+          error: cachedMethods == null
+              ? 'Could not load payment methods — try again'
+              : null,
         ),
       );
     }
@@ -277,10 +308,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
   ) async {
     emit(state.copyWith(isLoading: true, error: null));
     try {
-      await ownerRepository.renamePaymentMethod(
-        id: event.id,
-        name: event.name,
-      );
+      await ownerRepository.renamePaymentMethod(id: event.id, name: event.name);
       final updated = await ownerRepository.listPaymentMethods();
       emit(
         state.copyWith(
@@ -304,7 +332,12 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadStoreProfileEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    final cachedProfile = ownerRepository.getCachedStoreProfileSync();
+    if (cachedProfile != null) {
+      emit(state.copyWith(storeProfile: cachedProfile, error: null));
+    } else {
+      emit(state.copyWith(isLoading: true, error: null));
+    }
     try {
       final profile = await ownerRepository.getStoreProfile();
       emit(state.copyWith(isLoading: false, storeProfile: profile));
@@ -313,7 +346,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           isLoading: false,
-          error: 'Could not load store profile — try again',
+          error: cachedProfile == null
+              ? 'Could not load store profile — try again'
+              : null,
         ),
       );
     }
