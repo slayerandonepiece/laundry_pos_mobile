@@ -4,6 +4,8 @@
     "superpowers@superpowers-marketplace": true,
     "ecc@ecc": true,
     "obsidian-cli@obsidian-cli-skill": true,
-    "dart-flutter@dart-flutter": true
+    "dart-flutter@dart-flutter": true,
+    "codex@openai-codex": true,
+    "wiki@llm-wiki": true
   }
 }
