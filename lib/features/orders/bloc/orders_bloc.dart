@@ -109,7 +109,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         event.nextStatus,
       );
       final updatedList = state.allOrders
-          .map((o) => o.id == updated.id ? updated : o)
+          .map((o) => o.isSameOrder(updated) ? updated : o)
           .toList();
 
       emit(
@@ -156,7 +156,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       );
 
       final updatedList = state.allOrders
-          .map((o) => o.id == updated.id ? updated : o)
+          .map((o) => o.isSameOrder(updated) ? updated : o)
           .toList();
 
       // Local-first writes (1 & 2) are done — emit success and let the
@@ -219,7 +219,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       );
 
       final updatedList = state.allOrders
-          .map((o) => o.id == updated.id ? updated : o)
+          .map((o) => o.isSameOrder(updated) ? updated : o)
           .toList();
 
       // Local-first write is done — emit success and let the dialog close
@@ -274,7 +274,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       await ordersRepository.getOrCreateInvoice(event.orderCode);
       final refreshed = await ordersRepository.getOrderDetail(event.orderCode);
       final updatedList = state.allOrders
-          .map((o) => o.id == refreshed.id ? refreshed : o)
+          .map((o) => o.isSameOrder(refreshed) ? refreshed : o)
           .toList();
       emit(state.copyWith(selectedOrder: refreshed, allOrders: updatedList));
     } catch (e) {

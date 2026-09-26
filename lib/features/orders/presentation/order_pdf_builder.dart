@@ -19,13 +19,13 @@ Future<Uint8List> buildOrderPdfBytes({
   required bool isFinalInvoice,
 }) async {
   final pdf = pw.Document();
-  final invoiceNo = order.invoice?.invoiceNumber ?? 'INV-${order.orderCode}';
+  final invoiceNo = order.invoice?.invoiceNumber ?? 'INV-${order.displayCode}';
   final dateStr = order.invoice != null
       ? DateFormatter.formatDate(order.invoice!.issuedAt)
       : DateFormatter.formatDate(DateTime.now());
   final headerLabel = isFinalInvoice
       ? 'Invoice: $invoiceNo'
-      : 'Bill for: ${order.orderCode}';
+      : 'Bill for: ${order.displayCode}';
 
   pdf.addPage(
     pw.Page(
@@ -65,7 +65,7 @@ Future<Uint8List> buildOrderPdfBytes({
                 children: [
                   pw.Text(headerLabel, style: const pw.TextStyle(fontSize: 11)),
                   pw.Text(
-                    'Order: ${order.orderCode}',
+                    'Order: ${order.displayCode}',
                     style: const pw.TextStyle(fontSize: 11),
                   ),
                   pw.Text(

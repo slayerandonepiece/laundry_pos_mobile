@@ -244,4 +244,92 @@ void main() {
       },
     );
   });
+
+  group('Two ids per order', () {
+    test(
+      'migrateLegacyOfflineIds moves LOCAL-/OFF- ids to offlineId, once',
+      () async {
+        final box = Hive.box(LocalCacheService.boxName);
+        const ordersKey = '${LocalCacheService.keyCachedOrders}::s1::o1';
+        await box.put(ordersKey, [
+          {'id': 'LOCAL-1', 'status': 'Pending'},
+          {'id': 'OFF-2', 'status': 'Pending'},
+          {'id': 'EL-3', 'status': 'Ready'},
+        ]);
+        final legacyCreate = {
+          'type': 'create_order',
+          'clientActionId': 'c1',
+          'offlineCode': 'LOCAL-1',
+          'body': {'phone': '9000000000'},
+        };
+        final status = {
+          'type': 'update_status',
+          'clientActionId': 's1',
+          'orderCode': 'LOCAL-1',
+          'status': 'Ready',
+        };
+        await box.put(LocalCacheService.keyPendingSyncQueue, [
+          legacyCreate,
+          status,
+        ]);
+        await box.put(LocalCacheService.keyDeadLetterQueue, [legacyCreate]);
+
+        await LocalCacheService.migrateLegacyOfflineIds(box);
+        await LocalCacheService.migrateLegacyOfflineIds(box);
+
+        final orders = (box.get(ordersKey) as List)
+            .map((e) => LocalCacheService.deepCopy(e) as Map<String, dynamic>)
+            .toList();
+        expect(orders[0], {
+          'id': '',
+          'offlineId': 'LOCAL-1',
+          'status': 'Pending',
+        });
+        expect(orders[1], {
+          'id': '',
+          'offlineId': 'OFF-2',
+          'status': 'Pending',
+        });
+        expect(orders[2], {'id': 'EL-3', 'status': 'Ready'});
+
+        final pending = localCache.getPendingSyncQueue();
+        expect(pending[0]['body'], {
+          'phone': '9000000000',
+          'offlineId': 'LOCAL-1',
+        });
+        // Status/payment actions keep their ref — it now equals the offlineId.
+        expect(pending[1]['orderCode'], 'LOCAL-1');
+        expect(
+          localCache.getDeadLetterQueue().single['body']['offlineId'],
+          'LOCAL-1',
+        );
+      },
+    );
+
+    test('dedupeOrdersById collapses rows sharing an id or an offlineId', () {
+      final result = LocalCacheService.dedupeOrdersById([
+        {'id': '', 'offlineId': 'u1', 'v': 'old'},
+        {'id': 'EL-1', 'offlineId': 'u1', 'v': 'new'},
+        {'id': 'EL-2', 'v': 'a'},
+        {'id': 'EL-2', 'v': 'b'},
+        {'id': '', 'offlineId': 'u3'},
+      ]);
+      expect(result, [
+        {'id': 'EL-1', 'offlineId': 'u1', 'v': 'new'},
+        {'id': 'EL-2', 'v': 'b'},
+        {'id': '', 'offlineId': 'u3'},
+      ]);
+    });
+
+    test('findSyncedIdByOfflineId looks across outlet scopes', () async {
+      final box = Hive.box(LocalCacheService.boxName);
+      await box.put('${LocalCacheService.keyCachedOrders}::s1::o2', [
+        {'id': 'EL-9', 'offlineId': 'u9'},
+        {'id': '', 'offlineId': 'u10'},
+      ]);
+      expect(localCache.findSyncedIdByOfflineId('u9'), 'EL-9');
+      expect(localCache.findSyncedIdByOfflineId('u10'), isNull);
+      expect(localCache.findSyncedIdByOfflineId('nope'), isNull);
+    });
+  });
 }

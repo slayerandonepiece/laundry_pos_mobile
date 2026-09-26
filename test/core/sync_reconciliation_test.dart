@@ -21,6 +21,7 @@ class MockApiClient extends ApiClient {
   Future<dynamic> Function(String url)? onGet;
   int getCallCount = 0;
   int postCallCount = 0;
+  dynamic lastPostBody;
 
   @override
   Future<dynamic> get(
@@ -40,6 +41,7 @@ class MockApiClient extends ApiClient {
     Map<String, String>? headers,
   }) async {
     postCallCount++;
+    lastPostBody = body;
     return postResponse;
   }
 }
@@ -267,32 +269,34 @@ void main() {
       },
     );
 
-    test('processPendingSyncQueue rewrites placeholder orderCode to confirmed id on dependent actions', () async {
+    test('dependent actions keep the offline id; the next push sends the server code', () async {
       await localCache.setPendingSyncQueue([
         {
           'type': 'create_order',
           'clientActionId': 'act_create_1',
-          'offlineCode': 'LOCAL-1001',
-          'body': {'phone': '9876543210'},
+          'offlineCode': 'off-1001',
+          'body': {'phone': '9876543210', 'offlineId': 'off-1001'},
         },
         {
           'type': 'update_status',
           'clientActionId': 'act_status_1',
-          'orderCode': 'LOCAL-1001',
+          'orderCode': 'off-1001',
           'status': 'In Progress',
         },
         {
           'type': 'record_payment',
           'clientActionId': 'act_pay_1',
-          'orderCode': 'LOCAL-1001',
+          'orderCode': 'off-1001',
           'amount': 500,
           'method': 'Cash',
         },
+      ]);
+      await localCache.setCachedOrders([
         {
-          'type': 'update_status',
-          'clientActionId': 'act_status_other',
-          'orderCode': 'EL-999',
-          'status': 'Ready',
+          'id': '',
+          'offlineId': 'off-1001',
+          'phone': '9876543210',
+          'isSynced': false,
         },
       ]);
 
@@ -303,6 +307,7 @@ void main() {
             'status': 'success',
             'order': {
               'id': 'EL-50',
+              'offlineId': 'off-1001',
               'phone': '9876543210',
               'status': 'Pending',
               'lines': [],
@@ -319,29 +324,24 @@ void main() {
         ],
       };
 
-      final ok = await repository.processPendingSyncQueue();
-      expect(ok, isTrue);
+      expect(await repository.processPendingSyncQueue(), isTrue);
 
       final queue = localCache.getPendingSyncQueue();
-      // create_order completed and removed
       expect(queue.any((a) => a['clientActionId'] == 'act_create_1'), isFalse);
+      // No rewrite: queued actions keep the offline id they were written with.
+      expect(queue.map((a) => a['orderCode']), ['off-1001', 'off-1001']);
 
-      // Dependent actions had LOCAL-1001 rewritten to EL-50
-      final statusAction = queue.firstWhere(
-        (a) => a['clientActionId'] == 'act_status_1',
-      );
-      expect(statusAction['orderCode'], 'EL-50');
+      // The placeholder row was filled in, not duplicated.
+      final cached = localCache.getCachedOrders()!;
+      expect(cached, hasLength(1));
+      expect(cached.single['id'], 'EL-50');
+      expect(cached.single['offlineId'], 'off-1001');
 
-      final payAction = queue.firstWhere(
-        (a) => a['clientActionId'] == 'act_pay_1',
-      );
-      expect(payAction['orderCode'], 'EL-50');
-
-      // Unrelated action untouched
-      final otherAction = queue.firstWhere(
-        (a) => a['clientActionId'] == 'act_status_other',
-      );
-      expect(otherAction['orderCode'], 'EL-999');
+      // Next push resolves the offline id to the server code.
+      mockApiClient.postResponse = {'results': []};
+      await repository.processPendingSyncQueue();
+      final sent = (mockApiClient.lastPostBody as Map)['actions'] as List;
+      expect(sent.map((a) => a['orderRef']), ['EL-50', 'EL-50']);
     });
 
     test(
@@ -618,5 +618,168 @@ void main() {
       final cached = repository.getCachedOrdersList();
       expect(cached.any((o) => o.id == 'EL-RUN2'), isTrue);
     });
+  });
+
+  group('Two ids per order (offlineId)', () {
+    Map<String, dynamic> serverOrder(String id, {String? offlineId}) => {
+      'id': id,
+      'offlineId': ?offlineId,
+      'phone': '9000000000',
+      'status': 'Pending',
+      'lines': [],
+      'payments': [],
+    };
+
+    test('lost reply: delta pull fills in the unsynced row, then the retried create keeps one order', () async {
+      await localCache.setCachedOrders([
+        {
+          'id': '',
+          'offlineId': 'off-2',
+          'phone': '9000000000',
+          'isSynced': false,
+        },
+      ]);
+      await localCache.setPendingSyncQueue([
+        {
+          'type': 'create_order',
+          'clientActionId': 'act_create_2',
+          'offlineCode': 'off-2',
+          'body': {'phone': '9000000000', 'offlineId': 'off-2'},
+        },
+      ]);
+
+      mockApiClient.getResponse = {
+        'orders': [serverOrder('EL-60', offlineId: 'off-2')],
+        'nextCursor': null,
+      };
+      expect(await repository.syncOrdersDelta(), isTrue);
+      var orders = repository.getCachedOrdersList();
+      expect(orders, hasLength(1));
+      expect(orders.single.id, 'EL-60');
+
+      // The server answers the retried create with the same order.
+      mockApiClient.postResponse = {
+        'results': [
+          {
+            'clientActionId': 'act_create_2',
+            'status': 'success',
+            'order': serverOrder('EL-60', offlineId: 'off-2'),
+          },
+        ],
+      };
+      await repository.processPendingSyncQueue();
+      orders = repository.getCachedOrdersList();
+      expect(orders, hasLength(1));
+      expect(orders.single.id, 'EL-60');
+      expect(localCache.getPendingSyncQueue(), isEmpty);
+    });
+
+    test(
+      "another device's new order is shown while uploads are pending",
+      () async {
+        await localCache.setCachedOrders([
+          {
+            'id': '',
+            'offlineId': 'off-3',
+            'phone': '9000000000',
+            'isSynced': false,
+          },
+        ]);
+        await localCache.setPendingSyncQueue([
+          {
+            'type': 'create_order',
+            'clientActionId': 'act_create_3',
+            'offlineCode': 'off-3',
+            'body': {'phone': '9000000000', 'offlineId': 'off-3'},
+          },
+        ]);
+        mockApiClient.getResponse = {
+          'orders': [serverOrder('EL-70')],
+          'nextCursor': null,
+        };
+
+        expect(await repository.syncOrdersDelta(), isTrue);
+
+        final orders = repository.getCachedOrdersList();
+        expect(orders.map((o) => o.orderCode), ['off-3', 'EL-70']);
+      },
+    );
+
+    test('create and pay offline: order keyed by its offline id', () async {
+      final posRepo = PosRepository(
+        apiClient: mockApiClient,
+        localCache: localCache,
+      );
+      fakeConnectivity.mockOffline = true;
+
+      final order = await posRepo.createOrderOptimistic(
+        idempotencyKey: 'idem_2',
+        phone: '9999999999',
+        dueDate: '2026-01-01',
+        entries: [
+          {'productId': 'p1', 'quantity': 1},
+        ],
+      );
+      expect(order.id, isEmpty);
+      expect(order.offlineId, isNotNull);
+      expect(order.orderCode, order.offlineId);
+      expect(order.displayCode, startsWith('OFF-'));
+
+      final create = localCache.getPendingSyncQueue().single;
+      expect(create['offlineCode'], order.offlineId);
+      expect(create['body']['offlineId'], order.offlineId);
+
+      final paid = await repository.recordPayment(order.orderCode, 100, 'Cash');
+      expect(paid.paidAmount, 100);
+      expect(paid.offlineId, order.offlineId);
+      final pay = localCache.getPendingSyncQueue().firstWhere(
+        (a) => a['type'] == 'record_payment',
+      );
+      expect(pay['orderCode'], order.offlineId);
+    });
+
+    test('web order edited in the app gets a phone-only offline id that survives a pull', () async {
+      await localCache.setCachedOrders([serverOrder('EL-80')]);
+
+      final updated = await repository.updateStatus('EL-80', 'Ready');
+      final offlineId = updated.offlineId;
+      expect(offlineId, isNotNull);
+      expect(localCache.getPendingSyncQueue().single['orderCode'], 'EL-80');
+
+      mockApiClient.getResponse = {
+        'orders': [serverOrder('EL-80')..['status'] = 'Ready'],
+        'nextCursor': null,
+      };
+      await repository.syncOrdersDelta();
+
+      final cached = repository.getCachedOrdersList().single;
+      expect(cached.id, 'EL-80');
+      expect(cached.offlineId, offlineId);
+      expect(localCache.getPendingSyncQueue(), isEmpty);
+    });
+
+    test(
+      'legacy LOCAL- action is not pruned once its order has synced',
+      () async {
+        await localCache.setCachedOrders([
+          serverOrder('EL-5', offlineId: 'LOCAL-5'),
+        ]);
+        await localCache.setPendingSyncQueue([
+          {
+            'type': 'update_status',
+            'clientActionId': 'act_legacy_status',
+            'orderCode': 'LOCAL-5',
+            'status': 'Ready',
+          },
+        ]);
+        mockApiClient.postResponse = {'results': []};
+
+        await repository.processPendingSyncQueue();
+
+        expect(mockApiClient.postCallCount, 1);
+        final sent = (mockApiClient.lastPostBody as Map)['actions'] as List;
+        expect(sent.single['orderRef'], 'EL-5');
+      },
+    );
   });
 }

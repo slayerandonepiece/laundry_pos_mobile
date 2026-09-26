@@ -17,22 +17,29 @@ class LocalCacheService {
     return val;
   }
 
-  /// Collapses orders sharing the same `id` down to one entry, keeping the
-  /// last occurrence (most recently written). Different sync paths (bulk
-  /// action reconciliation, delta pull, a concurrent write mid-sync) can
-  /// each independently insert a row for the same order under some race —
-  /// this is the single defensive place that guarantees the UI never shows
-  /// two rows for the same order regardless of which path caused it.
+  /// Collapses orders sharing the same non-empty `id` or the same non-empty
+  /// `offlineId` down to one entry, keeping the last occurrence (most
+  /// recently written). Different sync paths (bulk action reconciliation,
+  /// delta pull, a concurrent write mid-sync) can each independently insert
+  /// a row for the same order under some race — this is the single
+  /// defensive place that guarantees the UI never shows two rows for the
+  /// same order regardless of which path caused it.
   static List<Map<String, dynamic>> dedupeOrdersById(
     List<Map<String, dynamic>> orders,
   ) {
-    final seen = <String>{};
+    final seenIds = <String>{};
+    final seenOfflineIds = <String>{};
     final result = <Map<String, dynamic>>[];
     for (var i = orders.length - 1; i >= 0; i--) {
-      final id = orders[i]['id']?.toString();
-      if (id == null || id.isEmpty || seen.add(id)) {
-        result.insert(0, orders[i]);
+      final id = orders[i]['id']?.toString() ?? '';
+      final offlineId = orders[i]['offlineId']?.toString() ?? '';
+      if ((id.isNotEmpty && seenIds.contains(id)) ||
+          (offlineId.isNotEmpty && seenOfflineIds.contains(offlineId))) {
+        continue;
       }
+      if (id.isNotEmpty) seenIds.add(id);
+      if (offlineId.isNotEmpty) seenOfflineIds.add(offlineId);
+      result.insert(0, orders[i]);
     }
     return result;
   }
@@ -40,6 +47,56 @@ class LocalCacheService {
   static Future<void> init() async {
     await Hive.initFlutter();
     await Hive.openBox(boxName);
+    await migrateLegacyOfflineIds(Hive.box(boxName));
+  }
+
+  static bool _isLegacyPlaceholder(String id) =>
+      id.startsWith('LOCAL-') || id.startsWith('OFF-');
+
+  /// One-time, idempotent move of pre-offlineId data to the two-id model:
+  /// cached orders whose `id` is a `LOCAL-`/`OFF-` placeholder get
+  /// `offlineId = id, id = ''`, and queued `create_order` actions (pending
+  /// and dead-letter) get `body.offlineId ??= offlineCode`, so the server
+  /// stores the code that queued status/payment actions still reference.
+  static Future<void> migrateLegacyOfflineIds(Box box) async {
+    for (final key in box.keys.toList()) {
+      if (key is! String || !key.startsWith(keyCachedOrders)) continue;
+      final raw = box.get(key);
+      if (raw is! List) continue;
+      var changed = false;
+      final migrated = raw.map((e) {
+        final order = deepCopy(e) as Map<String, dynamic>;
+        final id = order['id']?.toString() ?? '';
+        if (_isLegacyPlaceholder(id)) {
+          changed = true;
+          return {...order, 'offlineId': id, 'id': ''};
+        }
+        return order;
+      }).toList();
+      if (changed) await box.put(key, migrated);
+    }
+    for (final key in [keyPendingSyncQueue, keyDeadLetterQueue]) {
+      final raw = box.get(key);
+      if (raw is! List) continue;
+      var changed = false;
+      final migrated = raw.map((e) {
+        final action = deepCopy(e) as Map<String, dynamic>;
+        final body = action['body'];
+        final code = action['offlineCode']?.toString() ?? '';
+        if (action['type'] == 'create_order' &&
+            body is Map<String, dynamic> &&
+            (body['offlineId']?.toString() ?? '').isEmpty &&
+            code.isNotEmpty) {
+          changed = true;
+          return {
+            ...action,
+            'body': {...body, 'offlineId': code},
+          };
+        }
+        return action;
+      }).toList();
+      if (changed) await box.put(key, migrated);
+    }
   }
 
   Box get _box => Hive.box(boxName);
@@ -232,6 +289,26 @@ class LocalCacheService {
 
   Future<void> setCachedOrders(List<Map<String, dynamic>> ordersList) =>
       _box.put(_outletScopedKey(keyCachedOrders), ordersList);
+
+  /// The server code (`EL-…`) of a cached order carrying [offlineId], looked
+  /// up across every outlet scope's cached orders; null while unsynced or
+  /// unknown. Queued actions keep the offline id they were written with, so
+  /// the queue push uses this to send the server code once it is known.
+  String? findSyncedIdByOfflineId(String offlineId) {
+    if (offlineId.isEmpty) return null;
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(keyCachedOrders)) continue;
+      final raw = _box.get(key);
+      if (raw is! List) continue;
+      for (final order in raw) {
+        if (order is Map && order['offlineId'] == offlineId) {
+          final id = order['id']?.toString() ?? '';
+          if (id.isNotEmpty) return id;
+        }
+      }
+    }
+    return null;
+  }
 
   // Delta-sync cursor (opaque server-issued string) — also per outlet scope,
   // so resuming sync after switching scope doesn't skip the new scope's

@@ -38,7 +38,7 @@ class OrderActivityScreen extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              '${order.orderCode} · ${order.name.isNotEmpty ? order.name : order.phone}',
+              '${order.displayCode} · ${order.name.isNotEmpty ? order.name : order.phone}',
               style: AppTextStyles.hint,
             ),
           ],

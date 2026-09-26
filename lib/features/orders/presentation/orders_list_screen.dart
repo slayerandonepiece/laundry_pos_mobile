@@ -61,7 +61,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   /// explicit pull-to-refresh — it never sees a sync that completes on its
   /// own, e.g. the fire-and-forget SyncEngine.trigger() fired right after
   /// creating an order in PosRepository.createOrderOptimistic. Without this,
-  /// a just-placed order can sit showing its LOCAL-xxx placeholder here even
+  /// a just-placed order can sit showing its OFF-xxx code here even
   /// after the sync that resolves it to a real order code has already
   /// finished, until the user happens to trigger another load. Re-reading
   /// the cache (no network call — LoadOrdersEvent is cache-only) whenever
@@ -589,7 +589,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       runSpacing: 4,
                       children: [
                         Text(
-                          order.orderCode,
+                          order.displayCode,
                           style: const TextStyle(
                             fontFamily: AppTextStyles.fontDisplay,
                             fontSize: 14.5,

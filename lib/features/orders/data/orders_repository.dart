@@ -52,8 +52,8 @@ class OrdersRepository {
     // Delta sync upserts by id in whatever order the server returned them
     // (oldest-changed first), which is not display order — always sort
     // newest-first here rather than relying on cache insertion order.
-    // Orders still on a LOCAL-xxx/OFF-xxx placeholder code (not yet synced)
-    // have no order number yet, so they sort to the very top.
+    // Orders not yet synced have no order number (empty id), so they sort
+    // to the very top.
     orders.sort((a, b) => _orderSortKey(b).compareTo(_orderSortKey(a)));
     return orders;
   }
@@ -150,7 +150,7 @@ class OrdersRepository {
       final cached = _localCache.getCachedOrders();
       if (cached != null) {
         final match = cached.firstWhere(
-          (c) => c['id'] == orderCode || c['orderCode'] == orderCode,
+          (c) => Order.jsonMatchesRef(c, orderCode),
           orElse: () => <String, dynamic>{},
         );
         if (match.isNotEmpty) {
@@ -235,13 +235,18 @@ class OrdersRepository {
     Map<String, dynamic> Function(Map<String, dynamic> json) mutate,
   ) async {
     final cached = _localCache.getCachedOrders() ?? [];
-    final index = cached.indexWhere(
-      (c) => c['id'] == orderCode || c['orderCode'] == orderCode,
-    );
+    final index = cached.indexWhere((c) => Order.jsonMatchesRef(c, orderCode));
     if (index == -1) {
       throw Exception('Order not found locally.');
     }
-    final updatedJson = mutate(Map<String, dynamic>.from(cached[index]));
+    final current = Map<String, dynamic>.from(cached[index]);
+    // A web order gets an offline id the first time it is changed on this
+    // phone. It stays on the phone only — the server already knows the
+    // order by its id (docs/OFFLINE-ID-SYNC-PLAN.md §6, decision 1).
+    if ((current['offlineId']?.toString() ?? '').isEmpty) {
+      current['offlineId'] = IdempotencyKeyGenerator.generate();
+    }
+    final updatedJson = mutate(current);
     cached[index] = updatedJson;
     await _localCache.setCachedOrders(cached);
     return updatedJson;
@@ -274,9 +279,7 @@ class OrdersRepository {
   ) async {
     final cached = _localCache.getCachedOrders();
     if (cached == null) return;
-    final index = cached.indexWhere(
-      (c) => c['id'] == orderCode || c['orderCode'] == orderCode,
-    );
+    final index = cached.indexWhere((c) => Order.jsonMatchesRef(c, orderCode));
     if (index == -1) return;
     cached[index] = {...cached[index], 'invoice': invoice.toJson()};
     await _localCache.setCachedOrders(cached);
@@ -368,8 +371,9 @@ class OrdersRepository {
 
     // Drop any update_status/record_payment action that can never resolve
     // because its parent order was never actually created — it targets a
-    // LOCAL-xxx/OFF-xxx placeholder with no matching create_order action
-    // anywhere in the queue (e.g. an earlier bug lost that create action
+    // legacy LOCAL-xxx/OFF-xxx placeholder with no matching create_order
+    // action anywhere in the queue and no synced order carrying it as its
+    // offline id (e.g. an earlier bug lost that create action
     // but left this dependent one behind). The server will keep saying
     // "not created yet" identically forever, so this must be pruned rather
     // than retried indefinitely — the underlying order stays visible in
@@ -384,7 +388,9 @@ class OrdersRepository {
       if (a['type'] == 'create_order') return false;
       final ref = a['orderCode']?.toString() ?? '';
       final isPlaceholder = ref.startsWith('LOCAL-') || ref.startsWith('OFF-');
-      return isPlaceholder && !createOfflineCodes.contains(ref);
+      return isPlaceholder &&
+          !createOfflineCodes.contains(ref) &&
+          _localCache.findSyncedIdByOfflineId(ref) == null;
     }).toList();
     if (orphaned.isNotEmpty) {
       dueNow.removeWhere(orphaned.contains);
@@ -413,8 +419,8 @@ class OrdersRepository {
     }
 
     // Confirmed order results from this run, keyed by whatever code the
-    // action targeted (a placeholder for create_order, the real orderCode
-    // for update_status/record_payment). Deliberately NOT applied to a
+    // action targeted (the offline id for create_order, the order's local
+    // key for update_status/record_payment). Deliberately NOT applied to a
     // `cached` list snapshot held across the whole run — this run can now
     // span several sequential batch requests, and another writer
     // (PosRepository.createOrderOptimistic(), _applyLocalUpdate() from a
@@ -426,7 +432,6 @@ class OrdersRepository {
     final completedIds = <String>{};
     final lastErrorById = <String, String>{};
     final failCountById = <String, int>{};
-    final createdPlaceholders = <String, String>{};
     final forbiddenDeadLetterIds = <String>{};
     var allBatchesOk = true;
 
@@ -506,11 +511,6 @@ class OrdersRepository {
                 if (placeholderCode.isNotEmpty) {
                   confirmedOrders[placeholderCode] = confirmedOrder.toJson();
                 }
-
-                if (action['type'] == 'create_order' &&
-                    placeholderCode.isNotEmpty) {
-                  createdPlaceholders[placeholderCode] = confirmedOrder.id;
-                }
               }
             } catch (e) {
               // The HTTP request itself succeeded — this is a client-side bug
@@ -528,24 +528,6 @@ class OrdersRepository {
                 final currentFailCount =
                     (action['failCount'] as num?)?.toInt() ?? 0;
                 failCountById[clientActionId] = currentFailCount + 1;
-              }
-            }
-          }
-
-          // A create_order in this batch may have just resolved a placeholder
-          // (e.g. LOCAL-1007) that a later, not-yet-sent action in this same
-          // run still targets (its update_status/record_payment). Before that
-          // action goes into its own batch, rewrite it to the real order id —
-          // each batch is now a separate request, so the server's own
-          // same-request placeholder resolution (which the old single-request
-          // design relied on) no longer reaches across batches.
-          if (createdPlaceholders.isNotEmpty) {
-            for (final futureAction in dueNow) {
-              final type = futureAction['type'];
-              if (type != 'update_status' && type != 'record_payment') continue;
-              final ref = futureAction['orderCode']?.toString();
-              if (ref != null && createdPlaceholders.containsKey(ref)) {
-                futureAction['orderCode'] = createdPlaceholders[ref]!;
               }
             }
           }
@@ -600,10 +582,15 @@ class OrdersRepository {
       final freshCached = _localCache.getCachedOrders() ?? [];
       for (final entry in confirmedOrders.entries) {
         final idx = freshCached.indexWhere(
-          (c) => c['id'] == entry.key || c['orderCode'] == entry.key,
+          (c) =>
+              Order.jsonMatchesRef(c, entry.key) ||
+              Order.jsonSameOrder(c, entry.value),
         );
         if (idx != -1) {
-          freshCached[idx] = entry.value;
+          freshCached[idx] = Order.mergeServerJson(
+            freshCached[idx],
+            entry.value,
+          );
         } else if (_localCache.isAllOutletsScope() ||
             entry.value['outletId'] == _localCache.getActiveOutletId()) {
           freshCached.insert(0, entry.value);
@@ -630,13 +617,6 @@ class OrdersRepository {
             }
             if (lastErrorById.containsKey(id)) {
               updated = {...updated, 'lastError': lastErrorById[id]};
-            }
-          }
-          final type = updated['type'];
-          if (type == 'update_status' || type == 'record_payment') {
-            final ref = updated['orderCode']?.toString();
-            if (ref != null && createdPlaceholders.containsKey(ref)) {
-              updated = {...updated, 'orderCode': createdPlaceholders[ref]!};
             }
           }
           return updated;
@@ -744,34 +724,30 @@ class OrdersRepository {
           final pendingSnapshot = _localCache.getPendingSyncQueue();
           final droppedClientActionIds = <String>{};
 
-          // A create_order action can reach the server successfully while
-          // the client never gets to see the response (dropped connection
-          // right after the server committed) — the local placeholder then
-          // never gets reconciled by processPendingSyncQueue, and this
-          // order still has a create_order action sitting in the queue.
-          // If delta pull then blindly inserted it under its real id, the
-          // placeholder and the real order would both show up as separate
-          // rows. While any create is still queued, skip adding order rows
-          // that don't already match something in cache — the queued
-          // create will reconcile correctly (same idempotencyKey returns
-          // the same order) on the very next successful push.
-          final hasPendingCreates = pendingSnapshot.any(
-            (a) => a['type'] == 'create_order',
-          );
+          // A create_order whose reply was lost (the server committed, the
+          // client never saw it) comes back here carrying the offlineId the
+          // app created it with, so it matches — and fills in — the local
+          // unsynced row instead of showing up as a second one.
           for (final raw in rawOrders) {
             try {
               final json = Map<String, dynamic>.from(raw as Map);
               final deleted = json['deleted'] == true;
-              final orderId = json['id']?.toString() ?? '';
-              final orderCode = json['orderCode']?.toString() ?? orderId;
-              final idx = cached.indexWhere((c) => c['id'] == orderId);
+              final idx = cached.indexWhere(
+                (c) => Order.jsonSameOrder(c, json),
+              );
+              // Every key a queued action may use for this order.
+              final refs = <String>{
+                json['id']?.toString() ?? '',
+                json['offlineId']?.toString() ?? '',
+                if (idx != -1) cached[idx]['offlineId']?.toString() ?? '',
+              }..remove('');
               if (deleted) {
                 if (idx != -1) cached.removeAt(idx);
                 // Target order was deleted/cancelled server-side.
                 // Drop all pending actions targeting this order (server state wins).
                 for (final action in pendingSnapshot) {
                   final ref = action['orderCode']?.toString();
-                  if (ref != null && (ref == orderId || ref == orderCode)) {
+                  if (ref != null && refs.contains(ref)) {
                     final id = action['clientActionId']?.toString();
                     if (id != null && id.isNotEmpty) {
                       droppedClientActionIds.add(id);
@@ -781,8 +757,8 @@ class OrdersRepository {
                 continue;
               }
               if (idx != -1) {
-                cached[idx] = json;
-              } else if (!hasPendingCreates) {
+                cached[idx] = Order.mergeServerJson(cached[idx], json);
+              } else {
                 cached.add(json);
               }
 
@@ -804,9 +780,7 @@ class OrdersRepository {
                 if (droppedClientActionIds.contains(actionId)) continue;
 
                 final ref = action['orderCode']?.toString();
-                if (ref == null || (ref != orderId && ref != orderCode)) {
-                  continue;
-                }
+                if (ref == null || !refs.contains(ref)) continue;
 
                 final type = action['type'];
                 if (type == 'update_status') {
@@ -917,11 +891,19 @@ class OrdersRepository {
         'offlineCode': action['offlineCode'],
         'payload': LocalCacheService.deepCopy(action['body']),
       };
-    } else if (type == 'update_status') {
+    }
+    // Actions keep the key they were queued with (an offline id while the
+    // order was unsynced); send the server code once this phone knows it.
+    // The server resolves an offline id too, so either is accepted.
+    final ref = action['orderCode']?.toString() ?? '';
+    final orderRef = ref.startsWith('EL-')
+        ? ref
+        : (_localCache.findSyncedIdByOfflineId(ref) ?? ref);
+    if (type == 'update_status') {
       return {
         'type': 'update_status',
         'clientActionId': clientActionId,
-        'orderRef': action['orderCode'],
+        'orderRef': orderRef,
         'status': action['status'],
       };
     }
@@ -929,7 +911,7 @@ class OrdersRepository {
     return {
       'type': 'record_payment',
       'clientActionId': clientActionId,
-      'orderRef': action['orderCode'],
+      'orderRef': orderRef,
       'amount': action['amount'],
       'method': action['method'],
     };
@@ -938,13 +920,12 @@ class OrdersRepository {
   Future<void> _updateCachedOrder(Order updated) async {
     final cached = _localCache.getCachedOrders();
     if (cached == null) return;
-    final index = cached.indexWhere(
-      (c) => c['id'] == updated.id || c['orderCode'] == updated.id,
-    );
+    final updatedJson = updated.toJson();
+    final index = cached.indexWhere((c) => Order.jsonSameOrder(c, updatedJson));
     if (index != -1) {
-      cached[index] = updated.toJson();
+      cached[index] = Order.mergeServerJson(cached[index], updatedJson);
     } else {
-      cached.insert(0, updated.toJson());
+      cached.insert(0, updatedJson);
     }
     await _localCache.setCachedOrders(cached);
   }

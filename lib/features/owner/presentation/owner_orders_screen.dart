@@ -343,7 +343,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
       // 2. Search query (matches id, name, phone)
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase().trim();
-        final matchesId = order.id.toLowerCase().contains(q);
+        final matchesId = order.displayCode.toLowerCase().contains(q);
         final matchesName = order.name.toLowerCase().contains(q);
         final matchesPhone = order.phone.contains(q);
         if (!matchesId && !matchesName && !matchesPhone) {
@@ -1101,7 +1101,7 @@ class _OwnerOrderCard extends StatelessWidget {
                   runSpacing: 4,
                   children: [
                     Text(
-                      order.orderCode,
+                      order.displayCode,
                       style: const TextStyle(
                         fontFamily: AppTextStyles.fontDisplay,
                         fontSize: 14.5,

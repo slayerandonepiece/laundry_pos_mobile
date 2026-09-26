@@ -37,7 +37,7 @@ class OrdersState {
       // 1. Search Query filter (matches order ID, customer name, customer phone)
       if (searchQuery.isNotEmpty) {
         final query = searchQuery.toLowerCase().trim();
-        final matchesId = order.id.toLowerCase().contains(query);
+        final matchesId = order.displayCode.toLowerCase().contains(query);
         final matchesName = order.name.toLowerCase().contains(query);
         final matchesPhone = order.phone.contains(query);
         if (!matchesId && !matchesName && !matchesPhone) {

@@ -51,7 +51,8 @@ class InvoiceActionsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final invoiceNo = order.invoice?.invoiceNumber ?? 'INV-${order.orderCode}';
+    final invoiceNo =
+        order.invoice?.invoiceNumber ?? 'INV-${order.displayCode}';
 
     return Container(
       decoration: const BoxDecoration(
@@ -93,7 +94,7 @@ class InvoiceActionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${order.orderCode} · ${order.name.isNotEmpty ? order.name : order.phone}',
+            '${order.displayCode} · ${order.name.isNotEmpty ? order.name : order.phone}',
             style: AppTextStyles.hint,
           ),
           const SizedBox(height: 20),
@@ -138,7 +139,7 @@ class InvoiceActionsSheet extends StatelessWidget {
                 messenger: messenger,
                 text:
                     'Hello ${order.name.isNotEmpty ? order.name : "Customer"}, '
-                    'your laundry order ${order.orderCode} ($invoiceNo) has been '
+                    'your laundry order ${order.displayCode} ($invoiceNo) has been '
                     'completed and paid in full (${CurrencyFormatter.format(order.totalAmount)}). '
                     'Thank you for choosing $storeName!',
                 subject: 'Invoice $invoiceNo - $storeName',
@@ -159,7 +160,7 @@ class InvoiceActionsSheet extends StatelessWidget {
               await _sharePdfSafely(
                 messenger: messenger,
                 text:
-                    'Invoice $invoiceNo for order ${order.orderCode}: '
+                    'Invoice $invoiceNo for order ${order.displayCode}: '
                     '${CurrencyFormatter.format(order.totalAmount)} paid in full at $storeName.',
                 subject: 'Invoice $invoiceNo - $storeName',
                 invoiceNo: invoiceNo,
@@ -260,7 +261,7 @@ class InvoiceActionsSheet extends StatelessWidget {
     try {
       AppLogger.log(
         _tag,
-        'starting share for invoice $invoiceNo, order ${order.orderCode}',
+        'starting share for invoice $invoiceNo, order ${order.displayCode}',
       );
       final result = await _sharePdf(
         text: text,
@@ -290,7 +291,7 @@ class InvoiceActionsSheet extends StatelessWidget {
     required String invoiceNo,
   }) async {
     final bytes = await _buildInvoicePdfBytes();
-    final fileName = '$invoiceNo-${order.orderCode}.pdf';
+    final fileName = '$invoiceNo-${order.displayCode}.pdf';
     return SharePlus.instance.share(
       ShareParams(
         files: [
@@ -305,10 +306,11 @@ class InvoiceActionsSheet extends StatelessWidget {
 
   Future<void> _printInvoicePdf() async {
     final bytes = await _buildInvoicePdfBytes();
-    final invoiceNo = order.invoice?.invoiceNumber ?? 'INV-${order.orderCode}';
+    final invoiceNo =
+        order.invoice?.invoiceNumber ?? 'INV-${order.displayCode}';
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => bytes,
-      name: '$invoiceNo-${order.orderCode}',
+      name: '$invoiceNo-${order.displayCode}',
     );
   }
 
