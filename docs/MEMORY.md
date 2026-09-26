@@ -19,7 +19,9 @@ machine-local and do **not** reach cloud sessions — this file does.
 - Surgical changes only (`CLAUDE.md`). Plan first, ask when unclear.
 - Workflow option from `HANDOFF.md`: Claude writes Gemini prompts and
   verifies; Claude implements directly only when asked — for the offline-id
-  work the user asked Claude to implement.
+  phases the user asked Claude to implement; the later fix batches went
+  through Gemini. When verifying, remove the fix and confirm the new test
+  fails — a Gemini test once passed without the fix.
 - The user signs in on devices; never enter credentials.
 - Owner add/edit forms are full-screen routes, never bottom sheets.
 - UI says "Organization", never "Store", for the backend `Store` entity.
@@ -53,6 +55,26 @@ machine-local and do **not** reach cloud sessions — this file does.
   `remembered_outlet::<userId>::<storeId>`; `LocalCacheService.clear()`
   (logout) keeps those keys.
 - Outlet facts: see "Durable knowledge" in `docs/HANDOFF.md`.
+- Owner `Load*` events take an optional `Completer<void> done` that the
+  bloc always completes; pull-to-refresh awaits it. Owner screens show
+  `OwnerState.error` in a SnackBar; the dashboard (kept alive in the
+  shell's `IndexedStack`) shows errors only while its route is on top, to
+  avoid duplicate SnackBars.
+- Staff can only be added online — never queue a staff password locally.
+  Expense and staff creation send an `idempotencyKey` generated once per
+  form (backend dedupes by it); a queued expense replays with the same key.
+  Products are saved with `POST /products` (upsert by a client id chosen
+  once per form). Staff active/inactive is an explicit `PUT /employees/{id}`
+  (`set_staff_active`), never the flipping `toggle-active` endpoint.
+- `OwnerState` has per-screen `loading` (`Set<OwnerSection>`) and
+  `messageSection`; each owner screen shows only its own spinner and
+  SnackBars.
+- The outlet switcher is the app bar title (`OutletTitleSwitcher`, design
+  "Option C") on Dashboard, both Orders screens and Expenses; the old
+  in-body `OutletSwitcher` is deleted. Offline, an outlet whose orders
+  aren't cached can't be picked (SnackBar).
+- The app syncs on resume (`AppResumeSync` in `main.dart`, uses
+  `SyncEngine.trigger()`).
 - Tests: use the Map-backed `FakeLocalCache` inside `testWidgets` (real Hive
   hangs under FakeAsync). Fakes that extend `LocalCacheService` must override
   every new cache method they reach (else "Box not found"); stubs that

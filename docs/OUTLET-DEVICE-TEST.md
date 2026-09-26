@@ -72,9 +72,9 @@ Test data created on the backend by this run (additive, not removable from the a
 
 | # | Finding | Severity | Status |
 | --- | --- | --- | --- |
-| F1 | Payment methods screen subtitle shows "Cash" under Card and COD — new API has no `type`; model guesses | Low (label) | ⏳ fix later |
-| F2 | `GET /orders/sync` fired before sign-in → 401 | Low | ⏳ investigate |
-| F3 | After sign-in, `/dashboard` loaded 3× and `/expenses` 2× | Low (perf) | ⏳ investigate |
-| F4 | Delivered orders' invoices re-downloaded on every outlet switch | Low (perf) | ⏳ investigate |
+| F1 | Payment methods screen subtitle shows "Cash" under Card and COD — new API has no `type`; model guesses | Low (label) | ✅ fixed `a753d64` — subtitle shows the server `code` |
+| F2 | `GET /orders/sync` fired before sign-in → 401 | Low | ✅ fixed `a753d64` — sync skips until signed in |
+| F3 | After sign-in, `/dashboard` loaded 3× and `/expenses` 2× | Low (perf) | ✅ covered — test: with a warm cache, opening Dashboard/Expenses makes zero network calls (consistency batch) |
+| F4 | Delivered orders' invoices re-downloaded on every outlet switch | Low (perf) | ✅ fixed `a753d64` — cached invoice kept when server sends none |
 | F5 | `POST /orders/bulk-sync` took 10 s server-side for 1 action | Watch | backend |
 | F6 | Org has a method named "COD" ("Pay full amount now") next to "Pay on delivery" — confusing for staff | Product/data | ⏳ owner decision |

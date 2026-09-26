@@ -1,4 +1,4 @@
-# Session handoff — offline ids, syncing screen, local-first (2026-09-26)
+# Session handoff — offline ids, syncing screen, local-first, app audit (2026-09-26)
 
 Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
@@ -45,19 +45,35 @@ cloud, so everything needed to continue is in this file and the docs it links.
 
 ## Where things stand (updated end of 2026-09-26 app session)
 
-- **Branch `frontend/offline-id`** (this repo) = `main` + docs + three
-  committed batches, **not pushed, not merged**:
+- **Branch `frontend/offline-id`** (this repo) = `main` + docs + these
+  commits, **pushed, not merged**:
   - `32e7811` Phase 1 — two ids per order (`id` + `offlineId`), legacy
     `LOCAL-`/`OFF-` migration.
   - `dadee1d` Phase 2 — syncing (setup) screen after login and on
     never-synced outlets; remembered outlet across logout.
   - `14fb09d` Phase 3 — screens open from local data; network only on
     pull-to-refresh / Refresh / Sync now.
-  - Gates at `14fb09d`: `flutter analyze` clean, `flutter test` **297/297**.
-  Details, deviations and "as built" notes: `docs/OFFLINE-ID-SYNC-PLAN.md`.
+  - `a753d64` device findings F1, F2, F4 fixed (Gemini, verified).
+  - `74d6e40` app audit fixes (Gemini, verified): owner screens show a
+    first-load spinner and errors; pull-to-refresh waits for the result;
+    dashboard pull/Refresh also syncs orders; sync on app resume
+    (`lib/core/sync/app_resume_sync.dart`); staff can only be added online
+    (no password stored in the offline queue); a queued "mark paid" /
+    staff edit keeps the server id across sync runs.
+  - Consistency batch (Gemini, verified): owner writes match the backend
+    (PUT profile/employees, explicit staff active, `POST /products`),
+    idempotency keys for expense/staff create, per-screen owner
+    loading/errors, "Can't load orders", order-detail saved-copy message,
+    F3 test, and the outlet switcher as the app bar title (Option C).
+    See plan doc §10.
+  - Gates now: `flutter analyze` clean, `flutter test` **320/320**.
+  Details, deviations and "as built" notes: `docs/OFFLINE-ID-SYNC-PLAN.md`
+  (§8 verification log, §9 audit).
 - **Backend** `backend/offline-id` in `laundry_pos` carries the `offlineId`
-  API (handled in a separate chat). Its migration is already applied to the
-  Neon dev DB (checked with `prisma migrate status`).
+  API (handled in a separate chat), plus idempotent `POST /expenses` and
+  `POST /employees` by `idempotencyKey` (migration
+  `20260926120000_add_expense_and_staff_idempotency_key`). All migrations
+  are applied to the Neon dev DB; backend tests 57/57.
 - **Local testing setup:** app `ENV` defaults to `dev` → local backend at
   `127.0.0.1:3000` (iOS sim) / `10.0.2.2:3000` (Android emu). Start the
   backend with `npm run dev` in `../laundry_pos`. Flutter is not on the
@@ -82,6 +98,13 @@ cloud, so everything needed to continue is in this file and the docs it links.
   - User wants testing delegated to Sonnet ("opus is not required").
   - Open, told to the user: a screen with nothing cached fetches once (as
     built) vs strict empty state + Reload.
+  - Later the same day the user asked for an app audit (pull-to-refresh,
+    which screens call the API on open, retries, duplicates, errors). The
+    findings are in the plan doc §9. Fixes went through the Gemini workflow:
+    Claude wrote the prompts
+    and re-verified, including removing a fix to prove its test fails
+    (caught one test that proved nothing, and a double-SnackBar regression
+    Gemini introduced; both fixed before commit).
 - Earlier discussions (still valid): F0 answered (`TASKS.md`); "store" =
   outlet; one working branch per repo; merge to `main` (no auto-deploy).
 
@@ -99,28 +122,20 @@ cloud, so everything needed to continue is in this file and the docs it links.
    (`docs/OFFLINE-ID-SYNC-PLAN.md`). Left: simulator check of Phase 1
    (`OFF-` codes, create/pay offline then sync — needs the user's OK since it
    creates real orders) and Phase 3 (screens open without network); answer
-   the open empty-cache question; push `frontend/offline-id`; merge to `main`
-   together with `backend/offline-id` when the user says so.
-1. **Global outlet switcher in the app bar** (user request, verbatim:
-   "make all outlets switch, need re-desing and show in app bar along with
-   switch button — make it global state"). Today `OutletSwitcher`
-   (`lib/shared/widgets/outlet_switcher.dart`) is embedded per screen:
-   `owner_dashboard_screen.dart:267`, `owner_orders_screen.dart:473`,
-   `orders_list_screen.dart:229`, `expenses_screen.dart:449`. Scope is already
-   global via `OutletScopeCubit` (`lib/features/shell/bloc/`), provided in
-   `main.dart`; refetch-on-switch lives in `main_navigation_shell.dart`.
-   Wanted: one redesigned switcher (current outlet / "All outlets" + a switch
-   button) in the shared app bar across tabs, replacing the per-screen
-   copies. Brainstorm/confirm the design with the user first, then follow the
-   Gemini workflow. Keep the employee rules: hidden for a single-outlet
-   employee, no "All outlets" for employees.
+   the open empty-cache question; merge to `main` together with
+   `backend/offline-id` when the user says so. Also simulator-check the
+   `74d6e40` fixes (owner spinner/errors, pull spinner, resume sync) and
+   the consistency batch against the real backend (store profile, staff
+   edit/active, add/edit service, add expense/staff twice → one row).
+1. ~~Global outlet switcher in the app bar~~ — done (Option C, plan doc
+   §10). Simulator-check it: owner menu, employee with 1 and 2 outlets,
+   offline + outlet not on this phone.
 2. Finish device tests: A9, A15/A16 (Ready violet — needs a real status
    change; ask first), A17 (collect dialog, don't submit), A18 (offline, two
    outlets → two bulk-sync calls), then Employee B1–B4 / C1–C3 and edge cases
    D1–D4 (need the user to sign in / set up accounts).
-3. Fix batch for findings F1 (payment-method subtitle guesses "Cash" — new API
-   has no `type`), then investigate F2–F4; F5 is backend, F6 is an owner
-   decision.
+3. F1–F4 done (F3 covered by a test). Left: F5 is backend (watch); F6 is
+   an owner decision. Audit leftovers (plan doc §9) are all fixed (§10).
 4. Wiki last (local `.wiki/` already has `wiki/concepts/outlet-scope.md` as of
    2026-09-26; add anything durable from the tasks above).
 

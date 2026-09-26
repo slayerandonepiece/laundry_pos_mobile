@@ -285,8 +285,8 @@ Open (told to the user, no answer yet):
 
 Phase 1 app → Phase 2 → Phase 3, each a separate tested batch, committed only
 with the user's approval. Gates: `flutter analyze` clean, `flutter test` all
-green (baseline **273/273** on `main` c6e3212; now **297/297** at `14fb09d`).
-All three done. Next: simulator check of Phases 1 and 3, push the branch,
+green (baseline **273/273** on `main` c6e3212; **297/297** at `14fb09d`; now **308/308** at `74d6e40`).
+All three done and pushed, plus fixes `a753d64` (F1, F2, F4) and `74d6e40` (§9). Next: simulator check of Phases 1 and 3 and the §9 fixes,
 merge to `main` together with `backend/offline-id` (user's call).
 
 ## 8. Verification log
@@ -317,3 +317,105 @@ merge to `main` together with `backend/offline-id` (user's call).
     pre-existing `RenderFlex overflowed by 0.054 pixels`; simulator noise.
   - The agent signed the owner out (More → Sign out) to force a fresh
     login — not asked for; next time say explicitly whether sign-out is OK.
+- `a753d64` (Gemini, verified by Claude): F1 payment-method subtitle shows
+  the server `code`; F2 `SyncEngine._runSync` skips when no organization is
+  signed in; F4 `Order.mergeServerJson` keeps the cached invoice when the
+  server sends none. 301/301.
+- `74d6e40` (Gemini, verified by Claude): the §9 fixes. 308/308. The
+  dashboard's "error only while on top" guard was proven by removing it:
+  test 14 in `owner_dashboard_screen_test.dart` then fails with a second,
+  queued SnackBar.
+
+## 9. App audit (2026-09-26, read from code at `a753d64`)
+
+The user asked: which screens show progress on pull-to-refresh, which call
+the API when opened, how retries, duplicates and errors are handled.
+
+**Pull-to-refresh (after `74d6e40`).** Every pull now waits for its
+result. Orders, owner orders, dashboard (numbers + orders sync), expenses,
+staff, payment methods, store/owner profile, services and order detail all
+have pull. New sale has a Refresh button instead. The owner `Load*` events
+carry an optional `Completer<void> done` that the bloc always completes.
+
+**API on open.** Every list screen opens from the local cache. It fetches
+once only when nothing is cached for the scope. Always network: a custom
+dashboard date range, the customer-name lookup, payment methods if never
+cached, the setup screen, and Profile → Sync now / Log out.
+
+**Retries.**
+- Order actions go through the queue, in bulk-sync batches of 5 per outlet.
+- `SyncEngine` runs one sync at a time and coalesces overlapping triggers.
+  After 3 failed syncs the banner says "paused"; a manual retry resets
+  that, re-checks connectivity and revives parked items.
+- Order actions are parked after 5 failures, owner actions after 3, and an
+  outlet's actions immediately on a 403.
+- Sync triggers: after a local change, on reconnect, on app resume (new
+  in `74d6e40`), on pull / Sync now / Retry.
+- Missing invoices are retried after each clean sync.
+
+**Duplicates.**
+- Orders are protected: an `idempotencyKey` per sale, an `offlineId` per
+  order, and a `clientActionId` per action; local copies are merged by id
+  or offlineId.
+- Place-order and Collect are disabled while busy; owner forms close on
+  Save.
+- Open: expense and staff creation send no key, so a lost reply followed
+  by a retry, or a user retrying after a timeout, creates a duplicate.
+  Fixing this needs a backend change.
+
+**Errors.** The network layer maps 401, 403 (with reason), 400
+"Invalid outlet.", 404 and 429 to typed exceptions, with a 30 s timeout.
+Offline is confirmed with a real call to the backend. Order actions are
+saved locally first.
+
+**Fixed in `74d6e40`:**
+- Owner screens never showed errors and had no first-load spinner.
+- Pull spinners closed at once.
+- The dashboard pull didn't sync orders.
+- Services load failures were silent.
+- There was no resume sync, though a comment claimed one.
+- An offline staff add stored the password in plain text in Hive; now
+  staff can only be added online. Already-queued legacy `create_staff`
+  actions still drain.
+- A queued "mark paid" / staff edit for a `LOCAL-` id was parked if its
+  create synced in an earlier run.
+- Stale invoice-retry comments.
+
+**Left (not fixed):**
+- The idempotency key for expense/staff (backend).
+- `OwnerState` shares one `isLoading` / `error` across owner screens.
+- With an empty cache offline, Orders shows "No orders yet" rather than
+  an offline message.
+- An order-detail refresh while offline silently shows the saved copy.
+
+## 10. Consistency batch (2026-09-26, Gemini, verified)
+
+All four §9 leftovers are fixed, plus the owner write calls that the
+backend rejected (found in the §9 audit, PATCH → 405/404):
+- Store profile: `PUT /profile` with key `store`. Staff edit:
+  `PUT /employees/{id}`. Staff active/inactive: explicit
+  `PUT /employees/{id}` with `active` (queued as `set_staff_active`; legacy
+  queued `toggle_staff_active` replays as `POST …/toggle-active`).
+  Services: `POST /products` upsert, client id generated once per form.
+- Idempotency: expense and staff creation send an `idempotencyKey` made
+  once per form; a queued expense replays with the same key. Backend
+  support is on `backend/offline-id` (unique `idempotencyKey` on `Expense`
+  and `StoreMembership`; migration already applied on Neon; 57/57 backend
+  tests).
+- `OwnerState` per-screen `loading` / `messageSection`.
+- Orders: "Can't load orders" when the list is empty and sync is
+  offline, failed or paused.
+- Order detail: a failed refresh shows the saved copy with "Could not
+  refresh — showing the saved copy".
+- F3: warm-cache test, no network calls on open.
+- Outlet switcher "Option C": `lib/shared/widgets/outlet_title_switcher.dart`
+  is the app bar title on Dashboard, owner Orders, employee Orders and
+  Expenses; menu rows say "On this phone" / "Not on this phone yet"; offline
+  + not cached → SnackBar, no switch. `outlet_switcher.dart` deleted.
+
+Verification: `flutter analyze` clean, `flutter test` **320/320**. Claude
+re-ran 12 mutation checks (undo each fix → its test fails): staff PUT,
+expense replay key, `store` key, loadFailed, detail message, offline switch
+guard, section-scoped SnackBars, product id per form, no All outlets for
+employees, row subtitles, global select, chevron. Not yet run against the
+real backend on a simulator.
