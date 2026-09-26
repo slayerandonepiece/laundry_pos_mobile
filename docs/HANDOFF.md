@@ -1,4 +1,4 @@
-# Session handoff — outlet parity (2026-09-26)
+# Session handoff — outlet parity → offline ids (2026-09-26)
 
 Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
@@ -7,13 +7,15 @@ cloud, so everything needed to continue is in this file and the docs it links.
 ## Read first, in this order
 
 1. `CLAUDE.md` — scope boundary (surgical changes, no opportunistic refactors).
-2. `../laundry_pos/.agents/MOBILE-API-CONTRACT.md` — backend repo
-   `slayerandonepiece/laundry_pos`, branch `chore/backend-and-setup`
-   (pushed; last contract commit `feaa4e5`). Generated from server code;
+2. `docs/MEMORY.md` — the user's working preferences and durable facts.
+3. `docs/OFFLINE-ID-SYNC-PLAN.md` — **current task**: findings, plan, status.
+4. `../laundry_pos/.agents/MOBILE-API-CONTRACT.md` — backend repo
+   `slayerandonepiece/laundry_pos`, working branch `claude/nifty-newton-8w8fhh`
+   (§3.5 = the new `offlineId` contract). Generated from server code;
    **it wins** wherever it disagrees with the spec.
-3. `docs/OUTLET-PARITY-SPEC.md` — client plan (O0–O11). O7 already rewritten
+5. `docs/OUTLET-PARITY-SPEC.md` — client plan (O0–O11). O7 already rewritten
    to match the contract.
-4. `docs/OUTLET-DEVICE-TEST.md` — live device-test checklist + findings F1–F6.
+6. `docs/OUTLET-DEVICE-TEST.md` — live device-test checklist + findings F1–F6.
 
 ## Standing rules from the user (keep following them)
 
@@ -41,7 +43,27 @@ cloud, so everything needed to continue is in this file and the docs it links.
 - Web Super Admin UI says "Organization", never "Store" (internal `Store`
   identifiers stay).
 
-## Where things stand
+## Where things stand (updated end of 2026-09-26 cloud session)
+
+- **Branches:** outlet work (`chore/backend-and-setup`) and the F0 decisions
+  are merged into `main` in both repos. One working branch per repo:
+  `claude/nifty-newton-8w8fhh` (mobile = `main` + these docs; backend = `main`
+  + the `offlineId` change). The old `chore/backend-and-setup` branches are
+  fully merged; the session could not delete them (git proxy 403) — the user
+  deletes them on GitHub.
+- **Current task:** offline ids + syncing screen + local-first screens —
+  see `docs/OFFLINE-ID-SYNC-PLAN.md`. Backend part of Phase 1 is committed on
+  the backend working branch; the app part has not started.
+- **Artifacts:** owner-screen wireframes (every owner screen, minimal UI) —
+  https://claude.ai/artifact/KXDqbi19o2crwHR9rw8to3
+- **Discussions this session:** F0 answered (`TASKS.md`: four statuses,
+  employees may collect, v1 white UI, no Flutter web); "store" = outlet;
+  user wants a syncing screen after login, local-first screens, and
+  `id` + `offline_id` on orders (verbatim request in the plan doc §1);
+  keep one working branch per repo and merge to `main` (no auto-deploy).
+  Open: the two pending decisions in the plan doc §6.
+
+### Earlier state (outlet parity)
 
 - Spec O11 steps 1–10 + contract gaps 1–3 implemented; `flutter analyze`
   clean; `flutter test` **273/273** pass.
@@ -51,7 +73,9 @@ cloud, so everything needed to continue is in this file and the docs it links.
 
 ## Next tasks (in order)
 
-1. **NEW — global outlet switcher in the app bar** (user request, verbatim:
+0. **Offline ids / sync screen / local-first** — `docs/OFFLINE-ID-SYNC-PLAN.md`
+   (Phase 1 app → Phase 2 → Phase 3). Takes priority over the items below.
+1. **Global outlet switcher in the app bar** (user request, verbatim:
    "make all outlets switch, need re-desing and show in app bar along with
    switch button — make it global state"). Today `OutletSwitcher`
    (`lib/shared/widgets/outlet_switcher.dart`) is embedded per screen:
