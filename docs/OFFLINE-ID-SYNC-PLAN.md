@@ -1,7 +1,8 @@
 # Offline ids, sync screen and local-first screens: plan and findings
 
 Status: **planned, backend part implemented (uncommitted → now committed on
-`laundry_pos` branch `claude/nifty-newton-8w8fhh`), app part not started.**
+`laundry_pos` branch `backend/offline-id`), app part not started on
+`laundry_pos_mobile` branch `frontend/offline-id`.**
 Written 2026-09-26. Check git before trusting any "done" claim here.
 
 "Store" in the user's wording = **outlet** in code. The backend `Store` table
@@ -74,7 +75,7 @@ Also noted: dashboard preset periods send no dates (known, pre-existing).
 
 ## 3. Phase 1 — two ids per order (`id` + `offlineId`)
 
-### 3.1 Backend (`laundry_pos`) — DONE on branch `claude/nifty-newton-8w8fhh`
+### 3.1 Backend (`laundry_pos`) — DONE on branch `backend/offline-id`
 
 - `prisma/schema.prisma`: `Order.offlineId String?` + `@@unique([storeId, offlineId])`.
   Migration `20260926100000_add_order_offline_id` (verified equal to
@@ -205,7 +206,9 @@ local match.
 
 Resolved:
 - Build on the outlet work — `chore/backend-and-setup` merged into `main` in
-  both repos; single working branch `claude/nifty-newton-8w8fhh` in each.
+  both repos. One working branch per repo, named per side:
+  `frontend/offline-id` (this repo) and `backend/offline-id` (`laundry_pos`).
+  Frontend and backend are handled in **separate chats with separate prompts**.
 - Claude implements directly (user: "start working on it").
 
 Pending (use the recommendation if the user doesn't say otherwise, and say so):

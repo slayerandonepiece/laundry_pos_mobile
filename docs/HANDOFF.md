@@ -10,7 +10,7 @@ cloud, so everything needed to continue is in this file and the docs it links.
 2. `docs/MEMORY.md` — the user's working preferences and durable facts.
 3. `docs/OFFLINE-ID-SYNC-PLAN.md` — **current task**: findings, plan, status.
 4. `../laundry_pos/.agents/MOBILE-API-CONTRACT.md` — backend repo
-   `slayerandonepiece/laundry_pos`, working branch `claude/nifty-newton-8w8fhh`
+   `slayerandonepiece/laundry_pos`, working branch `backend/offline-id`
    (§3.5 = the new `offlineId` contract). Generated from server code;
    **it wins** wherever it disagrees with the spec.
 5. `docs/OUTLET-PARITY-SPEC.md` — client plan (O0–O11). O7 already rewritten
@@ -47,8 +47,11 @@ cloud, so everything needed to continue is in this file and the docs it links.
 
 - **Branches:** outlet work (`chore/backend-and-setup`) and the F0 decisions
   are merged into `main` in both repos. One working branch per repo:
-  `claude/nifty-newton-8w8fhh` (mobile = `main` + these docs; backend = `main`
-  + the `offlineId` change). The old `chore/backend-and-setup` branches are
+  `frontend/offline-id` here (= `main` + these docs) and `backend/offline-id`
+  in `laundry_pos` (= `main` + the `offlineId` change). Frontend and backend
+  are worked in separate chats with separate prompts. Superseded branch
+  `claude/nifty-newton-8w8fhh` (both repos) is for the user to delete.
+  The old `chore/backend-and-setup` branches are
   fully merged; the session could not delete them (git proxy 403) — the user
   deletes them on GitHub.
 - **Current task:** offline ids + syncing screen + local-first screens —

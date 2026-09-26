@@ -7,9 +7,12 @@ machine-local and do **not** reach cloud sessions — this file does.
 ## How the user wants to work
 
 - Never commit without explicit permission, per batch of work.
-- Keep **one working branch per repo** (`claude/nifty-newton-8w8fhh` in both
-  `laundry_pos_mobile` and `laundry_pos`). Pull `main` into it before each
-  batch. Merge finished work to `main`; merging does not deploy (auto-deploy
+- Keep **one working branch per repo, named per side**: `frontend/offline-id`
+  here, `backend/offline-id` in `laundry_pos`. Pull `main` into it before
+  each batch.
+- Frontend and backend work happen in **separate chats**, each with its own
+  prompt and its own diff — never club the two repos in one session or diff.
+- Merge finished work to `main`; merging does not deploy (auto-deploy
   disabled by the user).
 - Run commands yourself; confirm before irreversible actions (real orders,
   payments, status changes, shared config, deleting data/branches).
