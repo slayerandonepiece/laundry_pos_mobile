@@ -18,15 +18,14 @@ Working artboards: `design/*.dc.html`.
 
 ## F0 — Decisions inherited from Phase 1
 
-These were left open deliberately. Confirm the answers before building
-the affected screens; do not guess.
+Resolved 2026-09-26 — each answer keeps what the app already does.
 
-| # | Decision | Blocks |
+| # | Decision | Answer |
 | --- | --- | --- |
-| F0.1 | `WorkStatus` — three values or four (does `Ready` / `Delivered` exist)? | order detail, status dialog, invoice trigger |
-| F0.2 | May an employee collect a balance? | screen 9e |
-| F0.3 | Build v1 (white) or v2 (tinted + typed tiles)? Default: **v1** | every screen |
-| F0.4 | Is Flutter **web** a target? Decides whether the API needs CORS | — |
+| F0.1 | `WorkStatus` — three values or four (does `Ready` / `Delivered` exist)? | **Four, as built**: Pending / In progress / Ready / Delivered |
+| F0.2 | May an employee collect a balance? | **Yes** — Collect payment is not role-gated |
+| F0.3 | Build v1 (white) or v2 (tinted + typed tiles)? | **v1, as built** — pure white surfaces |
+| F0.4 | Is Flutter **web** a target? Decides whether the API needs CORS | **No** — strictly Android/iOS; the API needs no CORS for this app |
 
 ## F1 — Project setup
 
