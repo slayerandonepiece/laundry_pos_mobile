@@ -1,4 +1,4 @@
-# Session handoff — outlet parity → offline ids (2026-09-26)
+# Session handoff — offline ids, syncing screen, local-first (2026-09-26)
 
 Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
@@ -43,28 +43,47 @@ cloud, so everything needed to continue is in this file and the docs it links.
 - Web Super Admin UI says "Organization", never "Store" (internal `Store`
   identifiers stay).
 
-## Where things stand (updated end of 2026-09-26 cloud session)
+## Where things stand (updated end of 2026-09-26 app session)
 
-- **Branches:** outlet work (`chore/backend-and-setup`) and the F0 decisions
-  are merged into `main` in both repos. One working branch per repo:
-  `frontend/offline-id` here (= `main` + these docs) and `backend/offline-id`
-  in `laundry_pos` (= `main` + the `offlineId` change). Frontend and backend
-  are worked in separate chats with separate prompts. Superseded branch
-  `claude/nifty-newton-8w8fhh` (both repos) is for the user to delete.
-  The old `chore/backend-and-setup` branches are
-  fully merged; the session could not delete them (git proxy 403) — the user
-  deletes them on GitHub.
-- **Current task:** offline ids + syncing screen + local-first screens —
-  see `docs/OFFLINE-ID-SYNC-PLAN.md`. Backend part of Phase 1 is committed on
-  the backend working branch; the app part has not started.
+- **Branch `frontend/offline-id`** (this repo) = `main` + docs + three
+  committed batches, **not pushed, not merged**:
+  - `32e7811` Phase 1 — two ids per order (`id` + `offlineId`), legacy
+    `LOCAL-`/`OFF-` migration.
+  - `dadee1d` Phase 2 — syncing (setup) screen after login and on
+    never-synced outlets; remembered outlet across logout.
+  - `14fb09d` Phase 3 — screens open from local data; network only on
+    pull-to-refresh / Refresh / Sync now.
+  - Gates at `14fb09d`: `flutter analyze` clean, `flutter test` **297/297**.
+  Details, deviations and "as built" notes: `docs/OFFLINE-ID-SYNC-PLAN.md`.
+- **Backend** `backend/offline-id` in `laundry_pos` carries the `offlineId`
+  API (handled in a separate chat). Its migration is already applied to the
+  Neon dev DB (checked with `prisma migrate status`).
+- **Local testing setup:** app `ENV` defaults to `dev` → local backend at
+  `127.0.0.1:3000` (iOS sim) / `10.0.2.2:3000` (Android emu). Start the
+  backend with `npm run dev` in `../laundry_pos`. Flutter is not on the
+  cloud image; this session used Flutter 3.47.5 cloned into the scratchpad.
+- **Simulator check:** a Sonnet subagent ran a read-only pass of Phase 2 on
+  the iPhone 17 Pro simulator (owner; the user signed in): fresh login,
+  cold start, orders list and outlet switching all pass; the setup screen
+  rows, a never-opened outlet and the employee flow were not seen. Details
+  in the plan doc §8. Build command: `flutter build ios --simulator --debug
+  --flavor dev --dart-define=ENV=dev` (bundle `com.myshop.myshop.dev`).
+- Superseded branch `claude/nifty-newton-8w8fhh` and the merged
+  `chore/backend-and-setup` branches (both repos) are for the user to delete
+  on GitHub (session git proxy refuses remote deletes).
 - **Artifacts:** owner-screen wireframes (every owner screen, minimal UI) —
   https://claude.ai/artifact/KXDqbi19o2crwHR9rw8to3
-- **Discussions this session:** F0 answered (`TASKS.md`: four statuses,
-  employees may collect, v1 white UI, no Flutter web); "store" = outlet;
-  user wants a syncing screen after login, local-first screens, and
-  `id` + `offline_id` on orders (verbatim request in the plan doc §1);
-  keep one working branch per repo and merge to `main` (no auto-deploy).
-  Open: the two pending decisions in the plan doc §6.
+- **Discussions this session:**
+  - User approved each batch and its commit separately.
+  - Pending decisions resolved with the recommendations: web order's
+    `offlineId` stays on the phone; services & prices are one setup row.
+  - User asked to run the app against local/dev (localhost); confirmed no
+    config change needed.
+  - User wants testing delegated to Sonnet ("opus is not required").
+  - Open, told to the user: a screen with nothing cached fetches once (as
+    built) vs strict empty state + Reload.
+- Earlier discussions (still valid): F0 answered (`TASKS.md`); "store" =
+  outlet; one working branch per repo; merge to `main` (no auto-deploy).
 
 ### Earlier state (outlet parity)
 
@@ -76,8 +95,12 @@ cloud, so everything needed to continue is in this file and the docs it links.
 
 ## Next tasks (in order)
 
-0. **Offline ids / sync screen / local-first** — `docs/OFFLINE-ID-SYNC-PLAN.md`
-   (Phase 1 app → Phase 2 → Phase 3). Takes priority over the items below.
+0. **Finish offline ids / sync screen / local-first** — code done
+   (`docs/OFFLINE-ID-SYNC-PLAN.md`). Left: simulator check of Phase 1
+   (`OFF-` codes, create/pay offline then sync — needs the user's OK since it
+   creates real orders) and Phase 3 (screens open without network); answer
+   the open empty-cache question; push `frontend/offline-id`; merge to `main`
+   together with `backend/offline-id` when the user says so.
 1. **Global outlet switcher in the app bar** (user request, verbatim:
    "make all outlets switch, need re-desing and show in app bar along with
    switch button — make it global state"). Today `OutletSwitcher`

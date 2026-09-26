@@ -25,6 +25,14 @@ machine-local and do **not** reach cloud sessions — this file does.
 - UI says "Organization", never "Store", for the backend `Store` entity.
   In the user's own words "store" usually means **outlet**.
 - Mobile only: no Flutter web (F0.4).
+- Delegate simulator/device testing to a **Sonnet** subagent — Opus is not
+  needed for testing (user, 2026-09-26). Testing is read-only unless the user
+  approves real orders/payments/status changes; the user signs in.
+- Test against the local backend: the app's default `ENV=dev` already points
+  to `127.0.0.1:3000` (iOS sim) / `10.0.2.2:3000` (Android emu); run the
+  backend with `npm run dev` in `../laundry_pos`. iOS builds need
+  `--flavor dev` (bundle `com.myshop.myshop.dev`). Tell test agents
+  whether signing out is allowed.
 - Update this file, `docs/HANDOFF.md` and the relevant plan doc at the end of
   every session, and mention artifacts and discussions.
 
@@ -35,10 +43,22 @@ machine-local and do **not** reach cloud sessions — this file does.
   orders. See `docs/OFFLINE-ID-SYNC-PLAN.md` and backend
   `.agents/MOBILE-API-CONTRACT.md` §3.5.
 - Local-first rule (user): every screen opens from local cache; network only
-  on pull-to-refresh / Reload (plus background SyncEngine).
+  on pull-to-refresh / Reload (plus background SyncEngine). In code: owner
+  `Load*` events read cache unless `refresh: true`; nothing cached yet →
+  fetched once. Dashboard caches only the default period.
+- Setup (syncing) screen shows on fresh login and whenever the active outlet
+  scope has no cached order list (`main.dart _needsSetup`); an empty list
+  `[]` means "set up, no orders".
+- Employee outlet choice is remembered per user + organization under
+  `remembered_outlet::<userId>::<storeId>`; `LocalCacheService.clear()`
+  (logout) keeps those keys.
 - Outlet facts: see "Durable knowledge" in `docs/HANDOFF.md`.
 - Tests: use the Map-backed `FakeLocalCache` inside `testWidgets` (real Hive
-  hangs under FakeAsync).
+  hangs under FakeAsync). Fakes that extend `LocalCacheService` must override
+  every new cache method they reach (else "Box not found"); stubs that
+  `implements` a repository must override every new method they reach
+  (else NoSuchMethodError). A `MyShopApp` test needs a cached order list or
+  it opens the setup screen.
 - Cloud sessions: Flutter is not preinstalled; download the stable SDK
   (3.47.x, Dart ≥ 3.13.1) into the scratchpad. Deleting remote branches is
   refused (HTTP 403) by the session git proxy — ask the user to delete them

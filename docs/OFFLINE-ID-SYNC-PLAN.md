@@ -1,8 +1,11 @@
 # Offline ids, sync screen and local-first screens: plan and findings
 
-Status: **planned, backend part implemented (uncommitted → now committed on
-`laundry_pos` branch `backend/offline-id`), app part not started on
-`laundry_pos_mobile` branch `frontend/offline-id`.**
+Status (updated 2026-09-26, end of the app session): **all three phases
+implemented and committed on `laundry_pos_mobile` branch
+`frontend/offline-id`** — Phase 1 `32e7811`, Phase 2 `dadee1d`, Phase 3
+`14fb09d` (not pushed, not merged). Backend part is on `laundry_pos` branch
+`backend/offline-id`. Gates: `flutter analyze` clean, `flutter test`
+**297/297** (baseline was 273). Simulator pass of Phase 2: see §8.
 Written 2026-09-26. Check git before trusting any "done" claim here.
 
 "Store" in the user's wording = **outlet** in code. The backend `Store` table
@@ -48,7 +51,7 @@ is the organization; it has `Outlet`s.
 
 ---
 
-## 2. Bugs found in the current offline sync (not yet fixed)
+## 2. Bugs found in the offline sync (1–3 and 5 fixed; 4 now has an exact path)
 
 1. **Setup screen wipes the local orders list.**
    `BootstrapScreen` → `OrdersRepository.fetchRecentOrders(limit: 30)` →
@@ -99,7 +102,7 @@ Also noted: dashboard preset periods send no dates (known, pre-existing).
 - Migration applies on deploy (`vercel-build` runs `prisma migrate deploy`).
   User says auto-deploy on merge is disabled.
 
-### 3.2 App (`laundry_pos_mobile`) — TO DO, detailed design
+### 3.2 App (`laundry_pos_mobile`) — DONE (`32e7811`), design as built
 
 Order model (`lib/features/orders/data/models/order_model.dart`):
 - Add `final String? offlineId` (fromJson: empty → null; toJson; copyWith).
@@ -135,13 +138,16 @@ Create (`lib/features/pos/data/pos_repository.dart` `createOrderOptimistic`):
 
 Edits (`OrdersRepository._applyLocalUpdate`):
 - If the order has no `offlineId` (web order), assign a UUID — local only
-  (recommended; server already knows it by `id`). **Decision pending.**
+  (server already knows it by `id`). Decided: phone only.
 
 Queue push (`_processPendingSyncQueueImpl` / `_toBulkSyncAction`):
 - `orderRef` = cached order's `id` if known, else the ref (offlineId). The
   server now resolves offlineIds across requests, so **remove the
   `createdPlaceholders` rewrite** (in-batch and at queue write-back).
-- Keep the legacy orphan prune (only `LOCAL-`/`OFF-` refs) as is.
+- Legacy orphan prune (only `LOCAL-`/`OFF-` refs) kept, **but** it now skips
+  a ref whose order has already synced (see "as built" below) — "as is"
+  would have deleted the queued status/payment actions of a legacy create
+  that was still queued at upgrade time.
 - Confirmed results merge into the fresh cache read by the match rule above.
 
 Delta pull (`syncOrdersDelta`):
@@ -165,9 +171,22 @@ legacy migration; existing tests asserting `LOCAL-` codes
 (`sync_reconciliation_test`, `sync_per_outlet_test`, `sale_flow_test`, …).
 Tests must use the Map-backed `FakeLocalCache` inside `testWidgets`.
 
+**As built (differences and additions to the design above):**
+- `LocalCacheService.findSyncedIdByOfflineId(offlineId)` scans every
+  `cached_orders_list*` key (all outlet scopes). Used by the queue push to
+  send the `EL-` code once known (`_toBulkSyncAction`) and by the orphan
+  prune to spare refs whose order already synced.
+- `Order.jsonMatchesRef`, `Order.jsonSameOrder`, `Order.mergeServerJson`
+  are the single implementation of the matching/merge rules.
+- `order_placed_screen` showed `order.id` (blank for a new order) → now
+  `displayCode`; both order search boxes match `displayCode` (`OFF-…`
+  searchable).
+- Migration runs in `LocalCacheService.init()` via
+  `migrateLegacyOfflineIds(box)` (static, testable with a real Hive box).
+
 ---
 
-## 4. Phase 2 — setup ("syncing") screen after login
+## 4. Phase 2 — setup ("syncing") screen after login — DONE (`dadee1d`)
 
 Runs on **fresh login** and on switching to an outlet with an empty cache.
 Cold start opens straight from local data.
@@ -187,7 +206,32 @@ keyed by user + organization (bug 5).
 
 Keep per-step retry + "Continue anyway" (`bootstrap_screen.dart`).
 
-## 5. Phase 3 — every screen opens with local data only
+**As built:**
+- `bootstrap_screen.dart` is a list of `_SetupStep`s (title, error text,
+  optional `hasCache`, `run`). Offline + cached → "Using cached data" with no
+  call; failure with cache → cached and continue; failure without → stop with
+  Retry (resumes from that step) and "Continue anyway".
+- Owner rows: Fetching organization & outlets · Syncing organization
+  details · Syncing services & prices · Syncing payment methods · Syncing
+  orders · Syncing dashboard · Syncing expenses · Syncing staff.
+- Employee rows: Opening your outlet (outlet name) · Syncing organization
+  details · Syncing services & prices · Syncing payment methods · Syncing
+  orders. **Deviation:** organization details kept for employees (it ran for
+  them before; dropping it risked a regression).
+- Orders step = `OrdersRepository.syncAllOrders()`: upload queue, then
+  `syncOrdersDelta(fromStart: true, maxBatches: 100)`, merged; leaves `[]`
+  when empty. `fetchRecentOrders` removed (fixes bug 1).
+- When shown: `main.dart _needsSetup` = fresh login **or** no cached order
+  list for the active scope (`getCachedOrders() == null`). BootstrapScreen is
+  keyed by scope. "Continue anyway" writes `[]` for orders if missing, so the
+  app doesn't route straight back to setup.
+- Remembered outlet (bug 5): `remembered_outlet::<userId>::<storeId>`,
+  written by `OutletScopeCubit.select()`, used by `adoptFromLogin` for
+  employees with ≥2 outlets if still allowed; `LocalCacheService.clear()`
+  keeps `remembered_outlet*` keys.
+- Copy: "Loading …" → "Syncing …"; subtitle no longer says "store".
+
+## 5. Phase 3 — every screen opens with local data only — DONE (`14fb09d`)
 
 Already local-only: Orders list (`OrdersBloc._onLoadOrders`), order detail.
 To change (cache-only `Load*`, network only via pull-to-refresh / Reload →
@@ -202,6 +246,24 @@ Exceptions: background `SyncEngine` push/pull on reconnect/resume stays
 period); customer-name lookup asks the server only when the phone has no
 local match.
 
+**As built:**
+- No new `Refresh*` events: the existing owner `Load*` events got
+  `refresh: false` by default. Open / outlet switch → cache only;
+  pull-to-refresh, app-bar Refresh, "Sync now", retry → `refresh: true`.
+- **Deviation:** nothing cached yet → fetched once (same as the Orders
+  screen), instead of an empty state with Reload. The user was told; revisit
+  if they want strict "Reload only".
+- Dashboard: only the default period is cached
+  (`OwnerRepository.getDashboardMetrics` skips the cache write when
+  `from`/`to` are set); custom range always fetches; preset change sends
+  `refresh: true`. Pre-existing and unchanged: presets send no dates; Refresh
+  reloads the default period even while a custom range is shown.
+- Services screen `_loadServices({refresh})`; `PosRepository
+  .getCachedPaymentMethodsList()` (null = never synced) used by
+  `CartBloc._onLoadCatalog` and `CollectPaymentDialog`.
+- `main_navigation_shell.dart` outlet-switch listener: `RefreshOrdersEvent`
+  → `LoadOrdersEvent` (cache).
+
 ## 6. Decisions
 
 Resolved:
@@ -211,14 +273,47 @@ Resolved:
   Frontend and backend are handled in **separate chats with separate prompts**.
 - Claude implements directly (user: "start working on it").
 
-Pending (use the recommendation if the user doesn't say otherwise, and say so):
-1. Web order edited in the app: keep its new `offlineId` on the phone only
-   (**recommended**) vs also save it on the server.
-2. Setup screen: "Prices" and "Products" as one row (**recommended**, same
-   API) or two.
+- Web order edited in the app: its new `offlineId` stays on the phone only.
+- Setup screen: services & prices are one row (same API).
+- The user wants simulator/device testing delegated to a Sonnet subagent
+  (Opus not needed for testing).
+
+Open (told to the user, no answer yet):
+- Empty cache on a screen: fetch once (as built) vs empty state + Reload.
 
 ## 7. Order of work
 
 Phase 1 app → Phase 2 → Phase 3, each a separate tested batch, committed only
 with the user's approval. Gates: `flutter analyze` clean, `flutter test` all
-green (baseline **273/273** on `main` c6e3212).
+green (baseline **273/273** on `main` c6e3212; now **297/297** at `14fb09d`).
+All three done. Next: simulator check of Phases 1 and 3, push the branch,
+merge to `main` together with `backend/offline-id` (user's call).
+
+## 8. Verification log
+
+- Gates per batch: Phase 1 285/285, Phase 2 290/290, Phase 3 297/297;
+  `flutter analyze` clean each time (Flutter 3.47.5 from the scratchpad).
+- Local environment checked 2026-09-26: app `ENV` defaults to `dev` →
+  `http://127.0.0.1:3000` (iOS sim) / `10.0.2.2:3000` (Android emu); local
+  backend (`npm run dev` in `../laundry_pos`, branch `backend/offline-id`)
+  answers on :3000; `prisma migrate status` → all 9 migrations applied on the
+  Neon dev DB, including `20260926100000_add_order_offline_id`.
+- Simulator pass of Phase 2 (Sonnet subagent, iPhone 17 Pro, worktree at
+  `dadee1d`, owner account, user signed in). Build needs
+  `--flavor dev --dart-define=ENV=dev` (bundle `com.myshop.myshop.dev`).
+  - PASS: cold start of a synced scope opens straight to the dashboard;
+    after sign-out + fresh sign-in the app synced and landed on the
+    dashboard with "All data synced", same totals as before; Orders shows
+    EL-1…EL-9 once each, no duplicates; outlet switcher lists All outlets +
+    Chinnapanahalli + HSR Layout and switches without a setup screen (both
+    already cached); terminate + relaunch opens from local data.
+  - NOT VERIFIED: the setup screen's rows on screen (the sync finished
+    between 20 s screenshots; logs show the sync sequence succeeding); the
+    never-opened-outlet case (no such outlet in the data); employee flow (no
+    employee sign-in). Phase 1 `OFF-` codes (no offline order created) and
+    Phase 3 were not exercised.
+  - Log notes: one early `pull outcome=false … failureStreak=1` about 80 s
+    before the successful sync (likely before sign-in completed); a
+    pre-existing `RenderFlex overflowed by 0.054 pixels`; simulator noise.
+  - The agent signed the owner out (More → Sign out) to force a fresh
+    login — not asked for; next time say explicitly whether sign-out is OK.
