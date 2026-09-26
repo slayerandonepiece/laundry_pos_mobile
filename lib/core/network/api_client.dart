@@ -31,6 +31,7 @@ class ApiClient {
 
   void Function()? onUnauthorized;
   void Function(String? reason, String? paidThroughDate)? onForbidden;
+  void Function()? onInvalidOutlet;
 
   static const Duration _requestTimeout = Duration(seconds: 30);
 
@@ -40,6 +41,7 @@ class ApiClient {
     LocalCacheService? localCache,
     this.onUnauthorized,
     this.onForbidden,
+    this.onInvalidOutlet,
   }) : _secureStorage = secureStorage ?? SecureStorageService(),
        _localCache = localCache ?? LocalCacheService(),
        _dio =
@@ -84,6 +86,7 @@ class ApiClient {
         ErrorInterceptor(
           onUnauthorized: () => onUnauthorized?.call(),
           onForbidden: (reason, date) => onForbidden?.call(reason, date),
+          onInvalidOutlet: () => onInvalidOutlet?.call(),
         ),
       );
     }

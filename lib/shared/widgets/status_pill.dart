@@ -11,6 +11,8 @@ enum PillVariant {
   paid,
   danger,
   balanceDue,
+  // Amber, for payment/due states (Unpaid, Due today) — Ready is violet.
+  warning,
   neutral,
 }
 
@@ -60,6 +62,10 @@ class StatusPill extends StatelessWidget {
         bgColor = AppColors.primaryTint;
         break;
       case PillVariant.ready:
+        textColor = AppColors.violet;
+        bgColor = AppColors.violetBg;
+        break;
+      case PillVariant.warning:
         textColor = AppColors.warning;
         bgColor = AppColors.warningBg;
         break;

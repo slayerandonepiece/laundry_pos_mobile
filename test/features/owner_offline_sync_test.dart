@@ -227,24 +227,23 @@ void main() {
     });
 
     test(
-      'createPaymentMethod offline: updates cache and queues action',
+      'togglePaymentMethod online PATCHes body {\'enabled\': <bool>}',
       () async {
-        mockConnectivity.mockOffline = true;
+        await localCache.setCachedPaymentMethods([
+          {'id': 'pm_1', 'name': 'Cash', 'type': 'Cash', 'active': true},
+        ]);
 
-        final method = await ownerRepo.createPaymentMethod(
-          name: 'Store Gift Card',
+        mockConnectivity.mockOffline = false;
+        await ownerRepo.togglePaymentMethod('pm_1', false);
+
+        expect(
+          mockApiClient.patchUrls,
+          contains(ApiEndpoints.paymentMethodDetail('pm_1')),
         );
-        expect(method.id.startsWith('LOCAL-'), isTrue);
-        expect(method.name, 'Store Gift Card');
+        expect(mockApiClient.patchBodies.last, equals({'enabled': false}));
 
         final cached = localCache.getCachedPaymentMethods();
-        expect(cached!.length, 1);
-        expect(cached.first['name'], 'Store Gift Card');
-
-        final queue = localCache.getPendingOwnerActionsQueue();
-        expect(queue.length, 1);
-        expect(queue.first['type'], 'create_payment_method');
-        expect(queue.first['payload']['name'], 'Store Gift Card');
+        expect(cached!.first['active'], isFalse);
       },
     );
 
@@ -470,9 +469,33 @@ void main() {
       },
     );
 
+    test('Queued legacy create_payment_method action is dropped (not dead-lettered, no network call)', () async {
+      await localCache.enqueueOwnerAction({
+        'clientActionId': 'owner_legacy_create_pm',
+        'type': 'create_payment_method',
+        'payload': {'localId': 'LOCAL-123', 'name': 'Old Custom Method'},
+        'queuedAt': DateTime.now().toIso8601String(),
+      });
+      expect(localCache.getPendingOwnerActionsQueue().length, 1);
+
+      mockConnectivity.mockOffline = false;
+      final result = await ownerRepo.processPendingOwnerActions();
+
+      expect(result, isTrue);
+      expect(localCache.getPendingOwnerActionsQueue(), isEmpty);
+      expect(localCache.getDeadLetterOwnerActionsQueue(), isEmpty);
+      expect(mockApiClient.postUrls, isEmpty);
+      expect(mockApiClient.patchUrls, isEmpty);
+    });
+
     test('Failing action reaches dead letter queue after 3 retries and revives cleanly', () async {
       mockConnectivity.mockOffline = true;
-      await ownerRepo.createPaymentMethod(name: 'Broken Gateway');
+      await ownerRepo.createExpense(
+        title: 'Broken Expense',
+        category: 'Supplies',
+        amount: 500,
+        due: '2026-09-30',
+      );
 
       mockConnectivity.mockOffline = false;
       mockApiClient.shouldThrow = true;
@@ -495,7 +518,7 @@ void main() {
       expect(localCache.getPendingOwnerActionsQueue(), isEmpty);
       final deadLetter = localCache.getDeadLetterOwnerActionsQueue();
       expect(deadLetter.length, 1);
-      expect(deadLetter.first['type'], 'create_payment_method');
+      expect(deadLetter.first['type'], 'create_expense');
 
       // Revive dead letter queue
       await ownerRepo.reviveDeadLetterQueue();

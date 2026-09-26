@@ -21,7 +21,12 @@ class AppColors {
   static const Color success = Color(0xFF0F6E4C);
   static const Color successBg = Color(0xFFE7F5EF);
 
-  // Warning (Ready, unpaid, renewal due)
+  // Violet (Ready work status) — matches the workspace statusTone() tokens,
+  // keeping amber for payment states only (O8.1).
+  static const Color violet = Color(0xFF6B3FC9);
+  static const Color violetBg = Color(0xFFF3EEFE);
+
+  // Warning (unpaid, renewal due)
   static const Color warning = Color(0xFF92400E);
   static const Color warningBg = Color(0xFFFEF3C7);
   static const Color warningNoticeBg = Color(0xFFFFFDF5);

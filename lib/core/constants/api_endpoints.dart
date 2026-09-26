@@ -40,6 +40,8 @@ class ApiEndpoints {
 
   // Payment Methods
   static String get paymentMethods => '$baseUrl/api/v1/payment-methods';
+  static String get paymentMethodsAll =>
+      '$baseUrl/api/v1/payment-methods?all=true';
   static String paymentMethodDetail(String id) =>
       '$baseUrl/api/v1/payment-methods/$id';
 

@@ -235,10 +235,10 @@ void main() {
       await pumpDashboard(tester);
 
       // Operational chips
-      expect(find.text('Waiting'), findsOneWidget);
+      expect(find.text('Open orders'), findsOneWidget);
       expect(find.text('3'), findsOneWidget); // metrics.todo
 
-      expect(find.text('Completed'), findsWidgets); // chip + donut legend
+      expect(find.text('Delivered'), findsWidgets); // chip + donut legend
       expect(find.text('7'), findsOneWidget); // metrics.completed
 
       expect(find.text('Due today'), findsOneWidget);
@@ -324,10 +324,17 @@ void main() {
         expect(find.byType(PieChart), findsOneWidget);
 
         // 4 buckets derived from mockOrdersRepo (4 orders total: 1 Pending, 1 In Progress, 1 Ready, 1 Delivered)
+        final donutCard = find.ancestor(
+          of: find.text('How orders are moving'),
+          matching: find.byType(AppCard),
+        );
         expect(find.text('Pending'), findsOneWidget);
         expect(find.text('In progress'), findsOneWidget);
         expect(find.text('Ready'), findsOneWidget);
-        expect(find.text('Delivered'), findsOneWidget);
+        expect(
+          find.descendant(of: donutCard, matching: find.text('Delivered')),
+          findsOneWidget,
+        );
 
         // Check PieChart sections count, sum, and matching colors
         final pieChart = tester.widget<PieChart>(find.byType(PieChart));
@@ -342,9 +349,9 @@ void main() {
         expect(sections[1].value, 1.0);
         expect(sections[1].color, AppColors.primary);
 
-        // Ready: value 1, color AppColors.warning
+        // Ready: value 1, color AppColors.violet
         expect(sections[2].value, 1.0);
-        expect(sections[2].color, AppColors.warning);
+        expect(sections[2].color, AppColors.violet);
 
         // Delivered: value 1, color AppColors.success
         expect(sections[3].value, 1.0);
@@ -539,7 +546,7 @@ void main() {
     );
 
     testWidgets(
-      '11. "Money in & expenses" net cash-flow chart renders net total, received/spent, and grouped BarChart',
+      '11. "Collected vs expenses — this month" net cash-flow chart renders net total, received/spent, and grouped BarChart',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -549,8 +556,11 @@ void main() {
         await tester.pumpWidget(buildTestWidget());
         await pumpDashboard(tester);
 
-        expect(find.text('Money in & expenses'), findsOneWidget);
-        expect(find.text('Received minus spent'), findsOneWidget);
+        expect(
+          find.text('Collected vs expenses — this month'),
+          findsOneWidget,
+        );
+        expect(find.text('payments collected this month'), findsOneWidget);
         expect(find.byType(BarChart), findsOneWidget);
 
         // cash fixture: income: 300+500+400 = 1200 (₹1,200), expenses: 100+200+150 = 450 (₹450), net = 750 (₹750)

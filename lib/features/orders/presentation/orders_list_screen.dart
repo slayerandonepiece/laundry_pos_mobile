@@ -17,10 +17,12 @@ import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
 import 'package:myshop/features/profile/presentation/profile_screen.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
+import 'package:myshop/shared/widgets/outlet_switcher.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sticky_header_delegate.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
@@ -73,7 +75,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }
 
   void _startNewOrder(BuildContext context) {
-    context.read<CartBloc>().add(ResetSaleEvent());
+    final outletId = context.read<OutletScopeCubit>().state.activeOutletId;
+    context.read<CartBloc>().add(ResetSaleEvent(outletId: outletId));
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const CustomerDetailsScreen()));
   }
@@ -81,6 +84,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
+    final outletScope = context.watch<OutletScopeCubit>().state;
+    final hasOutletChoice =
+        outletScope.allowed.length > 1 || outletScope.isOwner;
     String storeSubtitle = '';
     final hasMultipleStores =
         authState is AuthenticatedState && authState.availableStores.length > 1;
@@ -212,6 +218,18 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   onRefresh: () => _refreshAndAwait(context),
                   child: CustomScrollView(
                     slivers: [
+                      // Outlet switcher — omitted entirely when there's no
+                      // choice to make (O5.1), so it never adds spacing.
+                      if (hasOutletChoice)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutletSwitcher(showAllOutletsOption: true),
+                            ),
+                          ),
+                        ),
                       // Stat cards — this is the part that scrolls away.
                       SliverToBoxAdapter(
                         child: Padding(
@@ -284,6 +302,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                         context,
                         allOrders: allOrders,
                         filteredOrders: filteredOrders,
+                        outletScope: outletScope,
                       ),
                     ],
                   ),
@@ -458,6 +477,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     BuildContext context, {
     required List<Order> allOrders,
     required List<Order> filteredOrders,
+    required OutletScope outletScope,
   }) {
     if (allOrders.isEmpty) {
       // Screen 9a: Empty state
@@ -514,14 +534,32 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           separatorBuilder: (_, _) => const SizedBox(height: 11),
           itemBuilder: (context, index) {
             final order = filteredOrders[index];
-            return _buildOrderCard(context, order);
+            return _buildOrderCard(
+              context,
+              order,
+              outletLabel: _resolveOutletLabel(order, outletScope),
+            );
           },
         ),
       ),
     ];
   }
 
-  Widget _buildOrderCard(BuildContext context, Order order) {
+  /// Resolved outlet label for a row, or null to hide the line entirely —
+  /// only shown in All-outlets scope with more than one outlet (O5.3).
+  String? _resolveOutletLabel(Order order, OutletScope scope) {
+    if (!scope.allOutlets || scope.allowed.length <= 1) return null;
+    final outletId = order.outletId;
+    if (outletId == null || outletId.isEmpty) return 'Organization-wide';
+    final matches = scope.allowed.where((o) => o.id == outletId);
+    return matches.isEmpty ? null : matches.first.displayName;
+  }
+
+  Widget _buildOrderCard(
+    BuildContext context,
+    Order order, {
+    String? outletLabel,
+  }) {
     final hasBalance = order.balanceDue > 0;
     final isReady = order.status.toLowerCase() == 'ready';
 
@@ -596,7 +634,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${order.lines.length} ${order.lines.length == 1 ? "service" : "services"} · ready ${DateFormatter.formatShort(order.due)}',
+                      '${order.lines.length} ${order.lines.length == 1 ? "service" : "services"} · ready ${DateFormatter.formatShort(order.due)}'
+                      '${outletLabel != null ? ' · $outletLabel' : ''}',
                       style: AppTextStyles.hint,
                     ),
                   ],

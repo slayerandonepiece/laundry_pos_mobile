@@ -11,6 +11,7 @@ import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_orders_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/shared/widgets/bottom_nav.dart';
 
 class MainNavigationShell extends StatefulWidget {
@@ -62,15 +63,30 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       _currentIndex = 0;
     }
 
-    return BlocListener<AuthBloc, AuthState>(
-      listenWhen: (prev, curr) =>
-          prev is AuthenticatedState &&
-          curr is AuthenticatedState &&
-          prev.currentStore.storeId != curr.currentStore.storeId,
-      listener: (context, state) {
-        context.read<CartBloc>().add(LoadCatalogEvent());
-        context.read<OrdersBloc>().add(LoadOrdersEvent());
-      },
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<AuthBloc, AuthState>(
+          listenWhen: (prev, curr) =>
+              prev is AuthenticatedState &&
+              curr is AuthenticatedState &&
+              prev.currentStore.storeId != curr.currentStore.storeId,
+          listener: (context, state) {
+            context.read<CartBloc>().add(LoadCatalogEvent());
+            context.read<OrdersBloc>().add(LoadOrdersEvent());
+          },
+        ),
+        // Switching outlet scope (O5.1's OutletSwitcher) must refetch orders
+        // for the newly-active scope rather than leave stale rows from the
+        // previous one on screen — see O5.3's verify condition.
+        BlocListener<OutletScopeCubit, OutletScope>(
+          listenWhen: (prev, curr) =>
+              prev.activeOutletId != curr.activeOutletId ||
+              prev.allOutlets != curr.allOutlets,
+          listener: (context, state) {
+            context.read<OrdersBloc>().add(RefreshOrdersEvent());
+          },
+        ),
+      ],
       child: Scaffold(
         backgroundColor: AppColors.surface,
         body: IndexedStack(index: _currentIndex, children: screens),

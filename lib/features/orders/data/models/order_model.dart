@@ -152,6 +152,10 @@ class Order {
   /// True once the backend has confirmed this order (always true for server-fetched orders).
   final bool isSynced;
 
+  /// The outlet this order belongs to, or null for an org-wide/legacy order
+  /// (no outlet assigned). See O5.3 in docs/OUTLET-PARITY-SPEC.md.
+  final String? outletId;
+
   Order({
     required this.id,
     required this.name,
@@ -166,6 +170,7 @@ class Order {
     this.history = const [],
     this.invoice,
     this.isSynced = true,
+    this.outletId,
   });
 
   int get totalAmount => lines.fold(0, (sum, line) => sum + line.amount);
@@ -216,6 +221,7 @@ class Order {
           .toList(),
       invoice: rawInvoice != null ? InvoiceInfo.fromJson(rawInvoice) : null,
       isSynced: json['isSynced'] != false, // defaults to true for server data
+      outletId: json['outletId']?.toString(),
     );
   }
 
@@ -234,6 +240,7 @@ class Order {
       'history': history.map((h) => h.toJson()).toList(),
       'invoice': invoice?.toJson(),
       'isSynced': isSynced,
+      'outletId': outletId,
     };
   }
 
@@ -251,6 +258,7 @@ class Order {
     List<OrderHistoryEvent>? history,
     InvoiceInfo? invoice,
     bool? isSynced,
+    String? outletId,
   }) {
     return Order(
       id: id ?? this.id,
@@ -266,6 +274,7 @@ class Order {
       history: history ?? this.history,
       invoice: invoice ?? this.invoice,
       isSynced: isSynced ?? this.isSynced,
+      outletId: outletId ?? this.outletId,
     );
   }
 }

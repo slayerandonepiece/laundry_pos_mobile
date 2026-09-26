@@ -27,8 +27,7 @@ class FakeProfileOwnerRepository extends OwnerRepository {
   List<StorePaymentMethod> paymentMethods = [];
 
   Map<String, String>? lastUpdatedStoreProfile;
-  String? lastCreatedPaymentMethodName;
-  Map<String, String>? lastRenamedPaymentMethod;
+  Map<String, dynamic>? lastToggledPaymentMethod;
 
   FakeProfileOwnerRepository({required this.storeProfile})
     : super(apiClient: ApiClient());
@@ -69,39 +68,8 @@ class FakeProfileOwnerRepository extends OwnerRepository {
   }
 
   @override
-  Future<StorePaymentMethod> createPaymentMethod({required String name}) async {
-    lastCreatedPaymentMethodName = name;
-    final method = StorePaymentMethod(
-      id: 'pm-${paymentMethods.length + 1}',
-      name: name,
-      active: true,
-    );
-    paymentMethods.add(method);
-    return method;
-  }
-
-  @override
-  Future<StorePaymentMethod> renamePaymentMethod({
-    required String id,
-    required String name,
-  }) async {
-    lastRenamedPaymentMethod = {'id': id, 'name': name};
-    final index = paymentMethods.indexWhere((m) => m.id == id);
-    if (index >= 0) {
-      final updated = StorePaymentMethod(
-        id: id,
-        name: name,
-        type: paymentMethods[index].type,
-        active: paymentMethods[index].active,
-      );
-      paymentMethods[index] = updated;
-      return updated;
-    }
-    throw Exception('Payment method not found');
-  }
-
-  @override
   Future<void> togglePaymentMethod(String id, bool active) async {
+    lastToggledPaymentMethod = {'id': id, 'active': active};
     final index = paymentMethods.indexWhere((m) => m.id == id);
     if (index >= 0) {
       paymentMethods[index] = StorePaymentMethod(
@@ -270,65 +238,37 @@ void main() {
     );
 
     testWidgets(
-      '3. Renaming a payment method opens full-screen rename form and dispatches RenamePaymentMethodEvent',
+      '3. PaymentMethodsScreen toggle dispatches TogglePaymentMethodEvent and renders no Add/Rename UI',
       (tester) async {
         await tester.pumpWidget(wrapScreen(const PaymentMethodsScreen()));
         await pumpAsync(tester);
 
-        expect(find.byType(Scaffold), findsOneWidget);
-
-        // Tap Rename on Cash method
-        final renameButtons = find.widgetWithText(TextButton, 'Rename');
-        expect(renameButtons, findsNWidgets(2));
-        await tester.tap(renameButtons.first);
-        await tester.pumpAndSettle();
-
-        // Verify full-screen rename screen
-        expect(find.byType(RenamePaymentMethodScreen), findsOneWidget);
-        expect(find.byType(Scaffold, skipOffstage: false), findsNWidgets(2));
-        expect(find.byType(BottomSheet), findsNothing);
-        expect(find.text('Rename payment method'), findsOneWidget);
-        expect(find.byIcon(Icons.arrow_back), findsOneWidget);
-
-        // Field is pre-filled with 'Cash'
-        final renameField = find.byType(TextField);
         expect(find.text('Cash'), findsWidgets);
+        expect(find.text('UPI QR'), findsOneWidget);
+        expect(
+          find.text(
+            'Payment methods are managed by the platform. Enable the ones you accept.',
+          ),
+          findsOneWidget,
+        );
 
-        await tester.enterText(renameField, 'Cash Counter 1');
-        await tester.pumpAndSettle();
+        // No Add or Rename UI rendered
+        expect(find.text('Rename'), findsNothing);
+        expect(find.text('Add payment method'), findsNothing);
+        expect(find.text('Add method'), findsNothing);
+        expect(find.byType(TextField), findsNothing);
 
-        await tester.tap(find.text('Save changes'));
+        // Toggle the first Switch (Cash: active true -> false)
+        final switches = find.byType(Switch);
+        expect(switches, findsNWidgets(2));
+        await tester.tap(switches.first);
         await pumpAsync(tester);
 
-        // Popped back
-        expect(find.byType(RenamePaymentMethodScreen), findsNothing);
-        expect(fakeRepo.lastRenamedPaymentMethod, isNotNull);
-        expect(fakeRepo.lastRenamedPaymentMethod!['id'], 'pm-1');
-        expect(fakeRepo.lastRenamedPaymentMethod!['name'], 'Cash Counter 1');
+        expect(fakeRepo.lastToggledPaymentMethod, isNotNull);
+        expect(fakeRepo.lastToggledPaymentMethod!['id'], 'pm-1');
+        expect(fakeRepo.lastToggledPaymentMethod!['active'], isFalse);
       },
     );
-
-    testWidgets('4. Adding a payment method dispatches AddPaymentMethodEvent', (
-      tester,
-    ) async {
-      await tester.pumpWidget(wrapScreen(const PaymentMethodsScreen()));
-      await pumpAsync(tester);
-
-      final addField = find.widgetWithText(
-        TextField,
-        'e.g. PhonePe QR or Card Machine',
-      );
-      expect(addField, findsOneWidget);
-
-      await tester.enterText(addField, 'PhonePe QR Counter');
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Add method'));
-      await pumpAsync(tester);
-
-      expect(fakeRepo.lastCreatedPaymentMethodName, 'PhonePe QR Counter');
-      expect(find.text('PhonePe QR Counter'), findsOneWidget);
-    });
 
     testWidgets(
       '5. "Show passwords" checkbox in ChangePasswordScreen toggles obscureText on all 3 fields',

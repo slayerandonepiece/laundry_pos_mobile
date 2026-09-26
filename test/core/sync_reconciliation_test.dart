@@ -449,9 +449,42 @@ void main() {
       expect(products.first.name, 'Wash & Fold');
       expect(mockApiClient.getCallCount, 0);
 
+      // No cached methods: must not fabricate a Cash/UPI fallback.
       final methods = await posRepo.listPaymentMethods();
-      expect(methods, isNotEmpty);
+      expect(methods, isEmpty);
       expect(mockApiClient.getCallCount, 0);
+
+      await localCache.setCachedPaymentMethods([
+        {'id': 'pm_1', 'name': 'Card', 'type': 'Cash', 'active': true},
+      ]);
+      final cached = await posRepo.listPaymentMethods();
+      expect(cached.map((m) => m.name), ['Card']);
+    });
+
+    test('createOrderOptimistic puts outletId in queued payload and local order', () async {
+      final posRepo = PosRepository(
+        apiClient: mockApiClient,
+        localCache: localCache,
+      );
+      fakeConnectivity.mockOffline = true;
+
+      final order = await posRepo.createOrderOptimistic(
+        idempotencyKey: 'idem_1',
+        phone: '9999999999',
+        dueDate: '2026-01-01',
+        entries: [
+          {'productId': 'p1', 'quantity': 1},
+        ],
+        outletId: 'outlet_A',
+      );
+
+      expect(order.outletId, 'outlet_A');
+      final queued = localCache
+          .getPendingSyncQueue()
+          .where((a) => a['type'] == 'create_order')
+          .toList();
+      expect(queued, hasLength(1));
+      expect(queued.first['body']['outletId'], 'outlet_A');
     });
 
     test('SyncManager pendingOnline state and getters', () {

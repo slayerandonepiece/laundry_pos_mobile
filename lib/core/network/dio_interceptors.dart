@@ -47,6 +47,9 @@ dynamic _sanitizeBody(dynamic body) {
   return body;
 }
 
+/// Pass as X-Outlet-Id to force the header to be OMITTED (owner, organization-wide) instead of defaulting to the active outlet.
+const String kNoOutletHeader = '__no_outlet__';
+
 /// Automatically injects authentication tokens and active store IDs into requests.
 class AuthInterceptor extends Interceptor {
   final SecureStorageService _secureStorage;
@@ -77,6 +80,18 @@ class AuthInterceptor extends Interceptor {
       final storeId = _localCache.getActiveStoreId();
       if (storeId != null && storeId.isNotEmpty) {
         options.headers['X-Store-Id'] = storeId;
+      }
+    }
+
+    // Absence means "All outlets" for an owner — never send an empty
+    // string, and never fall back to a default outlet (see O1's employee
+    // 403 gate: the server deliberately never guesses either).
+    if (options.headers['X-Outlet-Id'] == kNoOutletHeader) {
+      options.headers.remove('X-Outlet-Id');
+    } else if (!options.headers.containsKey('X-Outlet-Id')) {
+      final outletId = _localCache.getActiveOutletId();
+      if (outletId != null && outletId.isNotEmpty) {
+        options.headers['X-Outlet-Id'] = outletId;
       }
     }
 
@@ -189,8 +204,13 @@ class DioLoggingInterceptor extends Interceptor {
 class ErrorInterceptor extends Interceptor {
   final void Function()? onUnauthorized;
   final void Function(String? reason, String? paidThroughDate)? onForbidden;
+  final void Function()? onInvalidOutlet;
 
-  ErrorInterceptor({this.onUnauthorized, this.onForbidden});
+  ErrorInterceptor({
+    this.onUnauthorized,
+    this.onForbidden,
+    this.onInvalidOutlet,
+  });
 
   bool _isAuthEndpoint(String path) {
     return path.contains('/auth/login') ||
@@ -259,6 +279,9 @@ class ErrorInterceptor extends Interceptor {
         statusCode: 403,
       );
     } else if (statusCode == 400) {
+      if (errorMessage == 'Invalid outlet.') {
+        onInvalidOutlet?.call();
+      }
       appException = ValidationException(errorMessage);
     } else if (statusCode == 404) {
       appException = NotFoundException(errorMessage);

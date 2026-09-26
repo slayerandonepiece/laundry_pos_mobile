@@ -6,7 +6,7 @@ import '../../core/theme/text_styles.dart';
 import 'app_button.dart';
 
 class BlockedScreen extends StatelessWidget {
-  final String? reason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed'
+  final String? reason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed' | 'no_outlet_assigned'
   final bool isOwner;
   final String? paidThroughDate;
   final String? ownerPhone;
@@ -45,6 +45,10 @@ class BlockedScreen extends StatelessWidget {
       description = isOwner
           ? 'This store has been locked by platform administration. Please contact support.'
           : 'Store access is temporarily locked. Please check with your store owner.';
+    } else if (normReason == 'no_outlet_assigned') {
+      title = 'No outlet assigned';
+      description =
+          "Your account isn't assigned to an outlet yet, so orders can't be loaded. Ask your store owner to assign you to one, then sign in again.";
     } else if (normReason == 'store_archived') {
       title = 'Store archived';
       description =

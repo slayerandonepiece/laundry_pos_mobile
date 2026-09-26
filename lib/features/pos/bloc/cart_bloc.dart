@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/core/utils/idempotency.dart';
+import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 
 import 'cart_event.dart';
@@ -36,18 +37,37 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     final cachedProducts = posRepository.getCachedProductsList();
     if (cachedProducts.isNotEmpty) {
       emit(state.copyWith(allProducts: cachedProducts, error: null));
+    }
+
+    // Payment methods are best-effort: a failure must not break the catalog.
+    List<StorePaymentMethod> paymentMethods = [];
+    try {
+      paymentMethods = await posRepository.listPaymentMethods();
+    } catch (_) {
+      paymentMethods = [];
+    }
+
+    if (cachedProducts.isNotEmpty) {
+      emit(state.copyWith(paymentMethods: paymentMethods));
       return;
     }
 
     emit(state.copyWith(isLoading: true, error: null));
     try {
       final products = await posRepository.listProducts();
-      emit(state.copyWith(isLoading: false, allProducts: products));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          allProducts: products,
+          paymentMethods: paymentMethods,
+        ),
+      );
     } catch (e) {
       AppLogger.log(_tag, 'load catalog failed', error: e);
       emit(
         state.copyWith(
           isLoading: false,
+          paymentMethods: paymentMethods,
           error: 'Could not load products — try again',
         ),
       );
@@ -60,9 +80,23 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     Emitter<CartState> emit,
   ) async {
     emit(state.copyWith(isLoading: true, error: null));
+
+    List<StorePaymentMethod> paymentMethods = [];
+    try {
+      paymentMethods = await posRepository.listPaymentMethods();
+    } catch (_) {
+      paymentMethods = [];
+    }
+
     try {
       final products = await posRepository.listProducts();
-      emit(state.copyWith(isLoading: false, allProducts: products));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          allProducts: products,
+          paymentMethods: paymentMethods,
+        ),
+      );
     } catch (e) {
       AppLogger.log(_tag, 'refresh catalog failed', error: e);
       emit(
@@ -169,9 +203,16 @@ class CartBloc extends Bloc<CartEvent, CartState> {
 
       Map<String, dynamic>? initialPayment;
       if (event.paymentChoice != 'delivery') {
-        final methodName =
-            event.paymentMethodName ??
-            (event.paymentChoice == 'upi' ? 'UPI' : 'Cash');
+        final methodName = event.paymentMethodName;
+        if (methodName == null || methodName.isEmpty) {
+          emit(
+            state.copyWith(
+              isSubmitting: false,
+              submissionError: 'Choose a payment method',
+            ),
+          );
+          return;
+        }
         initialPayment = {'amount': state.totalAmount, 'method': methodName};
       }
 
@@ -184,6 +225,7 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         notes: state.notes,
         entries: entries,
         initialPayment: initialPayment,
+        outletId: state.outletId,
       );
 
       emit(state.copyWith(isSubmitting: false, placedOrder: order));
@@ -210,6 +252,8 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         idempotencyKey: IdempotencyKeyGenerator.generate(),
         clearPlacedOrder: true,
         submissionError: null,
+        clearOutlet: event.outletId == null,
+        outletId: event.outletId,
       ),
     );
   }

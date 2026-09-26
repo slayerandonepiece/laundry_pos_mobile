@@ -21,8 +21,6 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     on<UpdateStaffEvent>(_onUpdateStaff);
     on<LoadPaymentMethodsEvent>(_onLoadPaymentMethods);
     on<TogglePaymentMethodEvent>(_onTogglePaymentMethod);
-    on<AddPaymentMethodEvent>(_onAddPaymentMethod);
-    on<RenamePaymentMethodEvent>(_onRenamePaymentMethod);
     on<LoadStoreProfileEvent>(_onLoadStoreProfile);
     on<UpdateStoreProfileEvent>(_onUpdateStoreProfile);
     on<ChangePasswordSubmittedEvent>(_onChangePasswordSubmitted);
@@ -272,58 +270,6 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       AppLogger.log(_tag, 'toggle payment method failed', error: e);
       emit(
         state.copyWith(error: 'Could not update payment method — try again'),
-      );
-    }
-  }
-
-  Future<void> _onAddPaymentMethod(
-    AddPaymentMethodEvent event,
-    Emitter<OwnerState> emit,
-  ) async {
-    emit(state.copyWith(isLoading: true, error: null));
-    try {
-      await ownerRepository.createPaymentMethod(name: event.name);
-      final updated = await ownerRepository.listPaymentMethods();
-      emit(
-        state.copyWith(
-          isLoading: false,
-          paymentMethods: updated,
-          actionMessage: 'Payment method added',
-        ),
-      );
-    } catch (e) {
-      AppLogger.log(_tag, 'add payment method failed', error: e);
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: 'Could not add payment method — try again',
-        ),
-      );
-    }
-  }
-
-  Future<void> _onRenamePaymentMethod(
-    RenamePaymentMethodEvent event,
-    Emitter<OwnerState> emit,
-  ) async {
-    emit(state.copyWith(isLoading: true, error: null));
-    try {
-      await ownerRepository.renamePaymentMethod(id: event.id, name: event.name);
-      final updated = await ownerRepository.listPaymentMethods();
-      emit(
-        state.copyWith(
-          isLoading: false,
-          paymentMethods: updated,
-          actionMessage: 'Payment method renamed',
-        ),
-      );
-    } catch (e) {
-      AppLogger.log(_tag, 'rename payment method failed', error: e);
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: 'Could not rename payment method — try again',
-        ),
       );
     }
   }

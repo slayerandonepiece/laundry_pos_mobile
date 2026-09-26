@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
+import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
@@ -176,6 +178,7 @@ class OrdersRepository {
       'orderCode': orderCode,
       'status': status,
       'storeId': _localCache.getActiveStoreId(),
+      'outletId': updatedJson['outletId'] ?? _localCache.getActiveOutletId(),
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
@@ -213,6 +216,7 @@ class OrdersRepository {
       'amount': amount,
       'method': method,
       'storeId': _localCache.getActiveStoreId(),
+      'outletId': updatedJson['outletId'] ?? _localCache.getActiveOutletId(),
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
@@ -423,136 +427,165 @@ class OrdersRepository {
     final lastErrorById = <String, String>{};
     final failCountById = <String, int>{};
     final createdPlaceholders = <String, String>{};
+    final forbiddenDeadLetterIds = <String>{};
     var allBatchesOk = true;
 
-    // Send the queue as small, sequential batches rather than one request
-    // for everything — a large offline queue can otherwise take the server
-    // longer than the client's 30s timeout to process in a single call.
+    final groups = <String?, List<Map<String, dynamic>>>{};
+    for (final action in dueNow) {
+      final key = _outletKeyForAction(action);
+      (groups[key] ??= <Map<String, dynamic>>[]).add(action);
+    }
+
+    // Send the queue as small, sequential batches per outlet group rather than
+    // one request for everything — a large offline queue can otherwise take the
+    // server longer than the client's 30s timeout to process in a single call.
     // Sequential (not concurrent) so batches don't all hit the timeout
     // window at once on a already-struggling connection.
-    for (var start = 0; start < dueNow.length; start += _bulkSyncBatchSize) {
-      final end = (start + _bulkSyncBatchSize < dueNow.length)
-          ? start + _bulkSyncBatchSize
-          : dueNow.length;
-      final batch = dueNow.sublist(start, end);
-      final actions = batch.map(_toBulkSyncAction).toList();
+    for (final groupEntry in groups.entries) {
+      final key = groupEntry.key;
+      final groupDue = groupEntry.value;
 
-      SyncManager.instance.startSync(
-        'Syncing $end of ${dueNow.length} offline changes...',
-      );
-      AppLogger.log(
-        _tag,
-        'processPendingSyncQueue(): sending batch ${(start ~/ _bulkSyncBatchSize) + 1} '
-        '(${batch.length} action(s), $start-${end - 1} of ${dueNow.length})',
-      );
+      for (var start = 0; start < groupDue.length; start += _bulkSyncBatchSize) {
+        final end = (start + _bulkSyncBatchSize < groupDue.length)
+            ? start + _bulkSyncBatchSize
+            : groupDue.length;
+        final batch = groupDue.sublist(start, end);
+        final actions = batch.map(_toBulkSyncAction).toList();
 
-      try {
-        final response = await _apiClient.post(
-          ApiEndpoints.ordersBulkSync,
-          body: {'actions': actions},
+        SyncManager.instance.startSync(
+          'Syncing $end of ${groupDue.length} offline changes...',
+        );
+        AppLogger.log(
+          _tag,
+          'processPendingSyncQueue(): sending batch ${(start ~/ _bulkSyncBatchSize) + 1} '
+          '(${batch.length} action(s), $start-${end - 1} of ${groupDue.length})',
         );
 
-        final rawResults = (response is Map ? response['results'] : null);
-        final resultsById = <String, Map<String, dynamic>>{
-          for (final r in (rawResults is List ? rawResults : <dynamic>[]))
-            if (r is Map && r['clientActionId'] != null)
-              r['clientActionId'].toString(): Map<String, dynamic>.from(r),
-        };
+        try {
+          final response = await _apiClient.post(
+            ApiEndpoints.ordersBulkSync,
+            body: {'actions': actions},
+            headers: {'X-Outlet-Id': key ?? kNoOutletHeader},
+          );
 
-        for (final action in batch) {
-          final clientActionId = action['clientActionId']?.toString();
-          try {
-            final result = clientActionId != null
-                ? resultsById[clientActionId]
-                : null;
+          final rawResults = (response is Map ? response['results'] : null);
+          final resultsById = <String, Map<String, dynamic>>{
+            for (final r in (rawResults is List ? rawResults : <dynamic>[]))
+              if (r is Map && r['clientActionId'] != null)
+                r['clientActionId'].toString(): Map<String, dynamic>.from(r),
+          };
 
-            if (result == null || result['status'] != 'success') {
+          for (final action in batch) {
+            final clientActionId = action['clientActionId']?.toString();
+            try {
+              final result = clientActionId != null
+                  ? resultsById[clientActionId]
+                  : null;
+
+              if (result == null || result['status'] != 'success') {
+                if (clientActionId != null) {
+                  final currentFailCount =
+                      (action['failCount'] as num?)?.toInt() ?? 0;
+                  failCountById[clientActionId] = currentFailCount + 1;
+                  if (result != null && result['error'] != null) {
+                    lastErrorById[clientActionId] = result['error'].toString();
+                  }
+                }
+                continue;
+              }
+              if (clientActionId != null) completedIds.add(clientActionId);
+
+              final orderJson = result['order'];
+              if (orderJson is Map) {
+                final confirmedOrder = Order.fromJson(
+                  Map<String, dynamic>.from(orderJson),
+                );
+                final placeholderCode = action['type'] == 'create_order'
+                    ? (action['offlineCode'] as String? ?? '')
+                    : (action['orderCode'] as String? ?? '');
+                if (placeholderCode.isNotEmpty) {
+                  confirmedOrders[placeholderCode] = confirmedOrder.toJson();
+                }
+
+                if (action['type'] == 'create_order' &&
+                    placeholderCode.isNotEmpty) {
+                  createdPlaceholders[placeholderCode] = confirmedOrder.id;
+                }
+              }
+            } catch (e) {
+              // The HTTP request itself succeeded — this is a client-side bug
+              // processing this one action's result (unexpected payload
+              // shape), not a network/connectivity failure. Count just this
+              // action as failed rather than letting it look like the whole
+              // batch/request failed.
+              AppLogger.log(
+                _tag,
+                'processPendingSyncQueue(): failed to process result for '
+                'action $clientActionId',
+                error: e,
+              );
               if (clientActionId != null) {
                 final currentFailCount =
                     (action['failCount'] as num?)?.toInt() ?? 0;
                 failCountById[clientActionId] = currentFailCount + 1;
-                if (result != null && result['error'] != null) {
-                  lastErrorById[clientActionId] = result['error'].toString();
-                }
-              }
-              continue;
-            }
-            if (clientActionId != null) completedIds.add(clientActionId);
-
-            final orderJson = result['order'];
-            if (orderJson is Map) {
-              final confirmedOrder = Order.fromJson(
-                Map<String, dynamic>.from(orderJson),
-              );
-              final placeholderCode = action['type'] == 'create_order'
-                  ? (action['offlineCode'] as String? ?? '')
-                  : (action['orderCode'] as String? ?? '');
-              if (placeholderCode.isNotEmpty) {
-                confirmedOrders[placeholderCode] = confirmedOrder.toJson();
-              }
-
-              if (action['type'] == 'create_order' &&
-                  placeholderCode.isNotEmpty) {
-                createdPlaceholders[placeholderCode] = confirmedOrder.id;
               }
             }
-          } catch (e) {
-            // The HTTP request itself succeeded — this is a client-side bug
-            // processing this one action's result (unexpected payload
-            // shape), not a network/connectivity failure. Count just this
-            // action as failed rather than letting it look like the whole
-            // batch/request failed.
+          }
+
+          // A create_order in this batch may have just resolved a placeholder
+          // (e.g. LOCAL-1007) that a later, not-yet-sent action in this same
+          // run still targets (its update_status/record_payment). Before that
+          // action goes into its own batch, rewrite it to the real order id —
+          // each batch is now a separate request, so the server's own
+          // same-request placeholder resolution (which the old single-request
+          // design relied on) no longer reaches across batches.
+          if (createdPlaceholders.isNotEmpty) {
+            for (final futureAction in dueNow) {
+              final type = futureAction['type'];
+              if (type != 'update_status' && type != 'record_payment') continue;
+              final ref = futureAction['orderCode']?.toString();
+              if (ref != null && createdPlaceholders.containsKey(ref)) {
+                futureAction['orderCode'] = createdPlaceholders[ref]!;
+              }
+            }
+          }
+        } catch (e) {
+          if (e is AuthException && e.code == 'FORBIDDEN') {
             AppLogger.log(
               _tag,
-              'processPendingSyncQueue(): failed to process result for '
-              'action $clientActionId',
+              'processPendingSyncQueue(): 403 FORBIDDEN on outlet '
+              '${key ?? kNoOutletHeader}, dead-lettering group',
               error: e,
             );
-            if (clientActionId != null) {
-              final currentFailCount =
-                  (action['failCount'] as num?)?.toInt() ?? 0;
-              failCountById[clientActionId] = currentFailCount + 1;
+            for (final action in groupDue.sublist(start)) {
+              final id = action['clientActionId']?.toString();
+              if (id != null && id.isNotEmpty) {
+                forbiddenDeadLetterIds.add(id);
+                lastErrorById[id] = 'outlet access changed';
+              }
             }
+            break;
           }
-        }
-
-        // A create_order in this batch may have just resolved a placeholder
-        // (e.g. LOCAL-1007) that a later, not-yet-sent action in this same
-        // run still targets (its update_status/record_payment). Before that
-        // action goes into its own batch, rewrite it to the real order id —
-        // each batch is now a separate request, so the server's own
-        // same-request placeholder resolution (which the old single-request
-        // design relied on) no longer reaches across batches.
-        if (createdPlaceholders.isNotEmpty) {
-          for (final futureAction in dueNow) {
-            final type = futureAction['type'];
-            if (type != 'update_status' && type != 'record_payment') continue;
-            final ref = futureAction['orderCode']?.toString();
-            if (ref != null && createdPlaceholders.containsKey(ref)) {
-              futureAction['orderCode'] = createdPlaceholders[ref]!;
-            }
+          // This batch failed outright — stop sending further batches for this
+          // group. Whatever earlier batches already succeeded stays applied
+          // below; this batch's and any later batches' actions in this group
+          // simply remain queued for the next sync attempt, same as a
+          // single-request failure used to leave the whole queue untouched.
+          AppLogger.log(
+            _tag,
+            'processPendingSyncQueue(): batch starting at $start failed',
+            error: e,
+          );
+          final reallyOffline = await ConnectivityService.instance
+              .checkIsOffline();
+          if (reallyOffline) {
+            SyncManager.instance.setOffline(queue.length);
+          } else {
+            SyncManager.instance.setError('Sync failed — tap to retry');
           }
+          allBatchesOk = false;
+          break;
         }
-      } catch (e) {
-        // This batch failed outright — stop sending further batches for this
-        // run. Whatever earlier batches already succeeded stays applied
-        // below; this batch's and any later batches' actions simply remain
-        // queued for the next sync attempt, same as a single-request
-        // failure used to leave the whole queue untouched.
-        AppLogger.log(
-          _tag,
-          'processPendingSyncQueue(): batch starting at $start failed',
-          error: e,
-        );
-        final reallyOffline = await ConnectivityService.instance
-            .checkIsOffline();
-        if (reallyOffline) {
-          SyncManager.instance.setOffline(queue.length);
-        } else {
-          SyncManager.instance.setError('Sync failed — tap to retry');
-        }
-        allBatchesOk = false;
-        break;
       }
     }
 
@@ -571,7 +604,8 @@ class OrdersRepository {
         );
         if (idx != -1) {
           freshCached[idx] = entry.value;
-        } else {
+        } else if (_localCache.isAllOutletsScope() ||
+            entry.value['outletId'] == _localCache.getActiveOutletId()) {
           freshCached.insert(0, entry.value);
         }
       }
@@ -613,14 +647,17 @@ class OrdersRepository {
         })
         .toList();
 
-    // Actions that have now failed _deadLetterThreshold times in a row stop
-    // being retried on every sync cycle — parked in a separate queue so
-    // they stop counting toward "is anything still stuck?" for the banner.
+    // Actions that have now failed _deadLetterThreshold times in a row (or
+    // hit a 403 FORBIDDEN on their outlet group) stop being retried on every
+    // sync cycle — parked in a separate queue so they stop counting toward
+    // "is anything still stuck?" for the banner.
     final remaining = <Map<String, dynamic>>[];
     final newlyDeadLettered = <Map<String, dynamic>>[];
     for (final a in updatedQueue) {
+      final id = a['clientActionId']?.toString();
       final failCount = (a['failCount'] as num?)?.toInt() ?? 0;
-      if (failCount >= _deadLetterThreshold) {
+      if ((id != null && forbiddenDeadLetterIds.contains(id)) ||
+          failCount >= _deadLetterThreshold) {
         newlyDeadLettered.add(a);
       } else {
         remaining.add(a);
@@ -631,8 +668,7 @@ class OrdersRepository {
       AppLogger.log(
         _tag,
         'processPendingSyncQueue(): moving ${newlyDeadLettered.length} '
-        'action(s) to dead-letter queue after $_deadLetterThreshold failed '
-        'attempts',
+        'action(s) to dead-letter queue',
       );
       final currentDeadLetter = _localCache.getDeadLetterQueue();
       await _localCache.setDeadLetterQueue([
@@ -642,6 +678,24 @@ class OrdersRepository {
     }
 
     return allBatchesOk;
+  }
+
+  String? _outletKeyForAction(Map<String, dynamic> action) {
+    final direct = action['outletId'] as String?;
+    if (direct != null && direct.isNotEmpty) return direct;
+    if (action['type'] == 'create_order') {
+      final body = action['body'];
+      if (body is Map) {
+        final fromBody = body['outletId'] as String?;
+        if (fromBody != null && fromBody.isNotEmpty) return fromBody;
+      }
+      return null;
+    }
+    if (action.containsKey('outletId')) {
+      return null;
+    }
+    final active = _localCache.getActiveOutletId();
+    return (active != null && active.isNotEmpty) ? active : null;
   }
 
   /// Gives every dead-lettered action one fresh attempt. Only called from a

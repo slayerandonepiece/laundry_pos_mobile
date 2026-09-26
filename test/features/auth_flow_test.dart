@@ -34,6 +34,9 @@ class MockLocalCache extends LocalCacheService {
       _activeStoreId = storeId;
 
   @override
+  String? getActiveOutletId() => null;
+
+  @override
   Future<void> clear() async => _activeStoreId = null;
 }
 

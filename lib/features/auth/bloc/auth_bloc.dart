@@ -238,11 +238,29 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AccessForbiddenEvent event,
     Emitter<AuthState> emit,
   ) async {
+    final reason = event.reason;
+    if (reason == null || reason.isEmpty) {
+      // No organization-level blockedReason attached — this is an
+      // outlet-scoped 403 (e.g. the active outlet's access changed) or one
+      // of the other reason-less FORBIDDEN cases (role/membership changed
+      // server-side). None of those are "store locked": defaulting here
+      // used to mislabel every one of them with that screen. Force a fresh
+      // sign-in instead (O0.3), which also re-resolves outlet scope on the
+      // next login.
+      await _localCache.clearActiveOutletId();
+      await authRepository.logout();
+      emit(
+        UnauthenticatedState(
+          errorMessage: 'Your access changed. Please sign in again.',
+        ),
+      );
+      return;
+    }
     final current = state;
     final isOwner = current is AuthenticatedState ? current.isOwner : false;
     emit(
       AccessBlockedState(
-        reason: event.reason ?? 'store_locked',
+        reason: reason,
         paidThroughDate: event.paidThroughDate,
         isOwner: isOwner,
       ),

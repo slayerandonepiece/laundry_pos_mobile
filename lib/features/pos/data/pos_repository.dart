@@ -94,55 +94,45 @@ class PosRepository {
   Future<List<StorePaymentMethod>> listPaymentMethods() async {
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
-      final raw = _localCache.get('cached_payment_methods');
-      if (raw is List) {
-        return raw
+      final cached = _localCache.getCachedPaymentMethods();
+      if (cached != null) {
+        return cached
             .map(
-              (m) => StorePaymentMethod.fromJson(
-                Map<String, dynamic>.from(m as Map),
-              ),
-            )
-            .toList();
-      }
-      return [
-        StorePaymentMethod(id: 'pm_cash', name: 'Cash', active: true),
-        StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
-      ];
-    }
-
-    try {
-      final response = await _apiClient.get(ApiEndpoints.paymentMethods);
-      if (response is List) {
-        final methods = response
-            .map(
-              (m) => StorePaymentMethod.fromJson(
-                Map<String, dynamic>.from(m as Map),
-              ),
+              (m) => StorePaymentMethod.fromJson(m),
             )
             .where((m) => m.active)
             .toList();
-        await _localCache.put(
-          'cached_payment_methods',
-          methods.map((m) => m.toJson()).toList(),
-        );
-        return methods;
       }
-    } catch (_) {
-      final raw = _localCache.get('cached_payment_methods');
-      if (raw is List) {
-        return raw
+      return [];
+    }
+
+    try {
+      final response = await _apiClient.get(ApiEndpoints.paymentMethodsAll);
+      if (response is List) {
+        final allMethods = response
             .map(
               (m) => StorePaymentMethod.fromJson(
                 Map<String, dynamic>.from(m as Map),
               ),
             )
             .toList();
+        await _localCache.setCachedPaymentMethods(
+          allMethods.map((m) => m.toJson()).toList(),
+        );
+        return allMethods.where((m) => m.active).toList();
+      }
+    } catch (_) {
+      final cached = _localCache.getCachedPaymentMethods();
+      if (cached != null) {
+        return cached
+            .map(
+              (m) => StorePaymentMethod.fromJson(m),
+            )
+            .where((m) => m.active)
+            .toList();
       }
     }
-    return [
-      StorePaymentMethod(id: 'pm_cash', name: 'Cash', active: true),
-      StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
-    ];
+    return [];
   }
 
   /// Creates a new order. Local-first: builds the order, saves it to Hive,
@@ -158,6 +148,7 @@ class PosRepository {
     String notes = '',
     required List<Map<String, dynamic>> entries,
     Map<String, dynamic>? initialPayment,
+    String? outletId,
   }) async {
     final body = {
       'idempotencyKey': idempotencyKey,
@@ -167,6 +158,7 @@ class PosRepository {
       'notes': notes.trim(),
       'entries': entries,
       'initialPayment': ?initialPayment,
+      'outletId': ?outletId,
     };
 
     final offlineCode =
@@ -225,6 +217,7 @@ class PosRepository {
       payments: localPayments,
       notes: notes.trim(),
       isSynced: false,
+      outletId: outletId,
     );
 
     // Save to local cache immediately — this is what makes the order appear
@@ -239,6 +232,7 @@ class PosRepository {
       'body': body,
       'offlineCode': offlineCode,
       'storeId': _localCache.getActiveStoreId(),
+      'outletId': outletId,
       'queuedAt': DateTime.now().toIso8601String(),
     });
 

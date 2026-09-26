@@ -250,7 +250,7 @@ class OrderActivityScreen extends StatelessWidget {
         variant: PillVariant.balanceDue,
       );
     } else if (dueDay.isAtSameMomentAs(today)) {
-      return const StatusPill(label: 'Due today', variant: PillVariant.ready);
+      return const StatusPill(label: 'Due today', variant: PillVariant.warning);
     } else {
       final days = dueDay.difference(today).inDays;
       return StatusPill(

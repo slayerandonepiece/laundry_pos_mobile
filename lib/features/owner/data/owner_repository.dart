@@ -1,6 +1,7 @@
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
@@ -58,6 +59,10 @@ class OwnerRepository {
     final query = <String, String>{};
     if (from != null && from.isNotEmpty) query['from'] = from;
     if (to != null && to.isNotEmpty) query['to'] = to;
+    final outletId = localCache.getActiveOutletId();
+    if (outletId != null && !localCache.isAllOutletsScope()) {
+      query['outletId'] = outletId;
+    }
 
     final uri = Uri.parse(ApiEndpoints.dashboard)
         .replace(queryParameters: query.isEmpty ? null : query);
@@ -171,9 +176,11 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    String? outletHeader,
   }) async {
     final response = await apiClient.post(
       ApiEndpoints.expenses,
+      headers: outletHeader != null ? {'X-Outlet-Id': outletHeader} : null,
       body: {
         'title': title.trim(),
         'category': category.trim(),
@@ -208,6 +215,9 @@ class OwnerRepository {
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'create_expense',
+      'outletId': localCache.isAllOutletsScope()
+          ? null
+          : localCache.getActiveOutletId(),
       'payload': {
         'localId': localId,
         'title': title.trim(),
@@ -652,7 +662,7 @@ class OwnerRepository {
 
     try {
       SyncManager.instance.startSync('Fetching latest from cloud...');
-      final response = await apiClient.get(ApiEndpoints.paymentMethods);
+      final response = await apiClient.get(ApiEndpoints.paymentMethodsAll);
       if (response is List) {
         final methods = response
             .map(
@@ -697,7 +707,7 @@ class OwnerRepository {
   Future<void> _togglePaymentMethodDirect(String id, bool active) async {
     await apiClient.patch(
       ApiEndpoints.paymentMethodDetail(id),
-      body: {'active': active},
+      body: {'enabled': active},
     );
   }
 
@@ -740,131 +750,6 @@ class OwnerRepository {
       if (reallyOffline) {
         await _togglePaymentMethodOffline(id, active);
         return;
-      }
-      rethrow;
-    }
-  }
-
-  Future<StorePaymentMethod> _createPaymentMethodDirect({
-    required String name,
-  }) async {
-    final response = await apiClient.post(
-      ApiEndpoints.paymentMethods,
-      body: {'name': name.trim()},
-    );
-    return StorePaymentMethod.fromJson(
-      Map<String, dynamic>.from(response as Map),
-    );
-  }
-
-  Future<StorePaymentMethod> _createPaymentMethodOffline({
-    required String name,
-  }) async {
-    final localId = 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
-    final method = StorePaymentMethod(
-      id: localId,
-      name: name.trim(),
-      active: true,
-    );
-    final cached = localCache.getCachedPaymentMethods() ?? [];
-    cached.add(method.toJson());
-    await localCache.setCachedPaymentMethods(cached);
-
-    await localCache.enqueueOwnerAction({
-      'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
-      'type': 'create_payment_method',
-      'payload': {'localId': localId, 'name': name.trim()},
-      'queuedAt': DateTime.now().toIso8601String(),
-    });
-
-    SyncEngine.instance.trigger();
-    return method;
-  }
-
-  /// Creates a new payment method
-  Future<StorePaymentMethod> createPaymentMethod({required String name}) async {
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    if (isOffline) {
-      return _createPaymentMethodOffline(name: name);
-    }
-
-    try {
-      final method = await _createPaymentMethodDirect(name: name);
-      final cached = localCache.getCachedPaymentMethods() ?? [];
-      cached.add(method.toJson());
-      await localCache.setCachedPaymentMethods(cached);
-      return method;
-    } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
-        return _createPaymentMethodOffline(name: name);
-      }
-      rethrow;
-    }
-  }
-
-  Future<StorePaymentMethod> _renamePaymentMethodDirect({
-    required String id,
-    required String name,
-  }) async {
-    final response = await apiClient.patch(
-      ApiEndpoints.paymentMethodDetail(id),
-      body: {'name': name.trim()},
-    );
-    return StorePaymentMethod.fromJson(
-      Map<String, dynamic>.from(response as Map),
-    );
-  }
-
-  Future<StorePaymentMethod> _renamePaymentMethodOffline({
-    required String id,
-    required String name,
-  }) async {
-    final cached = localCache.getCachedPaymentMethods() ?? [];
-    final idx = cached.indexWhere((m) => m['id']?.toString() == id);
-    StorePaymentMethod method;
-    if (idx != -1) {
-      cached[idx] = {...cached[idx], 'name': name.trim()};
-      await localCache.setCachedPaymentMethods(cached);
-      method = StorePaymentMethod.fromJson(cached[idx]);
-    } else {
-      method = StorePaymentMethod(id: id, name: name.trim());
-    }
-
-    await localCache.enqueueOwnerAction({
-      'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
-      'type': 'rename_payment_method',
-      'payload': {'id': id, 'name': name.trim()},
-      'queuedAt': DateTime.now().toIso8601String(),
-    });
-
-    SyncEngine.instance.trigger();
-    return method;
-  }
-
-  /// Renames an existing payment method
-  Future<StorePaymentMethod> renamePaymentMethod({
-    required String id,
-    required String name,
-  }) async {
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    if (isOffline) {
-      return _renamePaymentMethodOffline(id: id, name: name);
-    }
-
-    try {
-      final method = await _renamePaymentMethodDirect(id: id, name: name);
-      final cached = localCache.getCachedPaymentMethods() ?? [];
-      final idx = cached.indexWhere((m) => m['id']?.toString() == id);
-      if (idx != -1) {
-        cached[idx] = method.toJson();
-        await localCache.setCachedPaymentMethods(cached);
-      }
-      return method;
-    } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
-        return _renamePaymentMethodOffline(id: id, name: name);
       }
       rethrow;
     }
@@ -1070,6 +955,9 @@ class OwnerRepository {
               amount: (payload['amount'] as num?)?.toInt() ?? 0,
               due: payload['due']?.toString() ?? '',
               monthly: payload['monthly'] == true,
+              outletHeader: action.containsKey('outletId')
+                  ? (action['outletId'] as String? ?? kNoOutletHeader)
+                  : null,
             );
             if (localId != null && localId.isNotEmpty) {
               idMap[localId] = serverExpense.id;
@@ -1153,45 +1041,6 @@ class OwnerRepository {
             }
             break;
 
-          case 'create_payment_method':
-            final localId = payload['localId']?.toString();
-            final serverMethod = await _createPaymentMethodDirect(
-              name: payload['name']?.toString() ?? '',
-            );
-            if (localId != null && localId.isNotEmpty) {
-              idMap[localId] = serverMethod.id;
-              final cached = localCache.getCachedPaymentMethods() ?? [];
-              final idx = cached.indexWhere(
-                (m) => m['id']?.toString() == localId,
-              );
-              if (idx != -1) {
-                cached[idx] = serverMethod.toJson();
-              } else {
-                cached.add(serverMethod.toJson());
-              }
-              await localCache.setCachedPaymentMethods(cached);
-            }
-            break;
-
-          case 'rename_payment_method':
-            final rawId = payload['id']?.toString() ?? '';
-            final resolvedId = idMap[rawId] ?? rawId;
-            final updatedMethod = await _renamePaymentMethodDirect(
-              id: resolvedId,
-              name: payload['name']?.toString() ?? '',
-            );
-            final cached = localCache.getCachedPaymentMethods() ?? [];
-            final idx = cached.indexWhere(
-              (m) =>
-                  m['id']?.toString() == resolvedId ||
-                  m['id']?.toString() == rawId,
-            );
-            if (idx != -1) {
-              cached[idx] = updatedMethod.toJson();
-              await localCache.setCachedPaymentMethods(cached);
-            }
-            break;
-
           case 'toggle_payment_method':
             final rawId = payload['id']?.toString() ?? '';
             final resolvedId = idMap[rawId] ?? rawId;
@@ -1226,6 +1075,7 @@ class OwnerRepository {
             break;
 
           default:
+            // Legacy queued actions (e.g. create/rename_payment_method) hit this branch to be logged and dropped.
             AppLogger.log(
               _tag,
               'processPendingOwnerActions: unknown action type $type',

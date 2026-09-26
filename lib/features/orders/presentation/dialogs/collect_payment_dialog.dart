@@ -7,6 +7,8 @@ import 'package:myshop/features/orders/bloc/orders_bloc.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
+import 'package:myshop/features/owner/data/models/payment_method_model.dart';
+import 'package:myshop/features/pos/data/pos_repository.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 
 class CollectPaymentDialog extends StatefulWidget {
@@ -19,9 +21,12 @@ class CollectPaymentDialog extends StatefulWidget {
       context: context,
       barrierDismissible: true,
       // barrierColor: AppColors.tr,
-      builder: (_) => BlocProvider.value(
-        value: context.read<OrdersBloc>(),
-        child: CollectPaymentDialog(order: order),
+      builder: (_) => RepositoryProvider.value(
+        value: context.read<PosRepository>(),
+        child: BlocProvider.value(
+          value: context.read<OrdersBloc>(),
+          child: CollectPaymentDialog(order: order),
+        ),
       ),
     );
   }
@@ -31,7 +36,38 @@ class CollectPaymentDialog extends StatefulWidget {
 }
 
 class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
-  String _selectedMethod = 'Cash';
+  String? _selectedMethodName;
+  List<StorePaymentMethod> _methods = const [];
+  bool _loadingMethods = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // A fully paid order goes straight to delivery — there is no method to
+    // pick, so skip the fetch.
+    if (widget.order.balanceDue == 0) {
+      _loadingMethods = false;
+    } else {
+      _loadPaymentMethods();
+    }
+  }
+
+  Future<void> _loadPaymentMethods() async {
+    try {
+      final methods = await context.read<PosRepository>().listPaymentMethods();
+      if (!mounted) return;
+      setState(() {
+        _methods = methods;
+        _loadingMethods = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _methods = const [];
+        _loadingMethods = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +98,9 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
         final isBusy = isPaid
             ? state.isUpdatingStatus
             : state.isCollectingPayment;
+        final canSubmit =
+            !isBusy &&
+            (isPaid || (!_loadingMethods && _selectedMethodName != null));
 
         return Dialog(
           backgroundColor: AppColors.surface,
@@ -179,25 +218,62 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Payment Options: Cash & UPI
-                  _buildOption(
-                    name: 'Cash',
-                    icon: Icons.payments_outlined,
-                    isSelected: _selectedMethod == 'Cash',
-                    onTap: isBusy
-                        ? () {}
-                        : () => setState(() => _selectedMethod = 'Cash'),
-                  ),
-                  const SizedBox(height: 10),
-                  _buildOption(
-                    name: 'UPI',
-                    icon: Icons.qr_code_scanner_outlined,
-                    isSelected: _selectedMethod == 'UPI',
-                    onTap: isBusy
-                        ? () {}
-                        : () => setState(() => _selectedMethod = 'UPI'),
-                  ),
-                  const SizedBox(height: 16),
+                  // Payment Options
+                  if (_loadingMethods) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else if (_methods.isEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.dangerBg,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: const Text(
+                        'No payment methods are enabled. Ask the owner to enable one in Profile → Payment methods.',
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fontBody,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.danger,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    for (int i = 0; i < _methods.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      _buildOption(
+                        name: _methods[i].name,
+                        icon: _methods[i].type.toUpperCase() == 'UPI'
+                            ? Icons.qr_code_scanner_outlined
+                            : Icons.payments_outlined,
+                        isSelected: _selectedMethodName == _methods[i].name,
+                        onTap: isBusy
+                            ? () {}
+                            : () => setState(
+                                  () => _selectedMethodName = _methods[i].name,
+                                ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                  ],
                 ],
 
                 // Information note
@@ -262,7 +338,7 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
                       child: PrimaryButton(
                         label: isPaid ? 'Deliver order' : 'Collect & deliver',
                         isLoading: isBusy,
-                        onPressed: isBusy
+                        onPressed: !canSubmit
                             ? null
                             : () {
                                 if (isPaid) {
@@ -274,7 +350,7 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
                                     CollectPaymentEvent(
                                       orderCode: widget.order.orderCode,
                                       amount: widget.order.balanceDue,
-                                      method: _selectedMethod,
+                                      method: _selectedMethodName!,
                                     ),
                                   );
                                 }

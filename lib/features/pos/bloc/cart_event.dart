@@ -55,10 +55,14 @@ class SetCustomerDetailsEvent extends CartEvent {
 }
 
 class SubmitOrderEvent extends CartEvent {
-  final String paymentChoice; // 'cash' | 'upi' | 'delivery'
+  final String paymentChoice; // 'prepaid' (needs paymentMethodName) | 'delivery'
   final String? paymentMethodName;
 
   SubmitOrderEvent({required this.paymentChoice, this.paymentMethodName});
 }
 
-class ResetSaleEvent extends CartEvent {}
+class ResetSaleEvent extends CartEvent {
+  final String? outletId;
+
+  ResetSaleEvent({this.outletId});
+}

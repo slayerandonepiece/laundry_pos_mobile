@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/theme/text_styles.dart';
+import '../../../core/utils/phone_normalizer.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/step_progress_header.dart';
@@ -32,6 +33,7 @@ class CustomerDetailsScreen extends StatefulWidget {
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
+  final FocusNode _phoneFocusNode = FocusNode();
   String? _phoneError;
   bool _isSearching = false;
   bool _hasSearched = false;
@@ -56,11 +58,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       _customerFound = cart.customerName.isNotEmpty;
     }
     _phoneController.addListener(_onPhoneEdited);
+    _phoneFocusNode.addListener(_onPhoneFocusChanged);
   }
 
   @override
   void dispose() {
     _phoneController.removeListener(_onPhoneEdited);
+    _phoneFocusNode.removeListener(_onPhoneFocusChanged);
+    _phoneFocusNode.dispose();
     _phoneController.dispose();
     _nameController.dispose();
     super.dispose();
@@ -71,8 +76,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       setState(() => _phoneError = null);
     }
     // Editing the phone after a search invalidates that search — Next
-    // locks again until the (new) number is looked up.
-    if (_hasSearched && _phoneController.text.trim() != _searchedPhone) {
+    // locks again until the (new) number is looked up. Compared normalised,
+    // so blur-normalising a searched number doesn't undo the lookup.
+    if (_hasSearched &&
+        tenDigitPhone(_phoneController.text) != _searchedPhone) {
       setState(() {
         _hasSearched = false;
         _customerFound = false;
@@ -80,8 +87,32 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     }
   }
 
+  // Raw text is kept while typing; on blur the field is rewritten to its
+  // 10-digit form (so a pasted "+91 98765 43210" becomes "9876543210") and
+  // anything still invalid shows the inline error.
+  void _onPhoneFocusChanged() {
+    if (_phoneFocusNode.hasFocus || !mounted) return;
+    final phone = _normalisePhone();
+    if (phone.isNotEmpty && !_indianMobileRegex.hasMatch(phone)) {
+      setState(() => _phoneError = 'Enter a valid 10-digit mobile number');
+    }
+  }
+
+  /// Replaces the phone text with its normalised 10-digit form — never
+  /// truncated — and returns it.
+  String _normalisePhone() {
+    final phone = tenDigitPhone(_phoneController.text);
+    if (phone != _phoneController.text) {
+      _phoneController.value = TextEditingValue(
+        text: phone,
+        selection: TextSelection.collapsed(offset: phone.length),
+      );
+    }
+    return phone;
+  }
+
   Future<void> _searchCustomer() async {
-    final phone = _phoneController.text.trim();
+    final phone = _normalisePhone();
     if (!_indianMobileRegex.hasMatch(phone)) {
       setState(() => _phoneError = 'Enter a valid 10-digit mobile number');
       return;
@@ -112,7 +143,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   void _proceedToServices() {
-    final phone = _phoneController.text.trim();
+    final phone = _normalisePhone();
     final cart = context.read<CartBloc>().state;
     context.read<CartBloc>().add(
       SetCustomerDetailsEvent(
@@ -258,10 +289,16 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                                 Expanded(
                                   child: TextField(
                                     controller: _phoneController,
+                                    focusNode: _phoneFocusNode,
                                     keyboardType: TextInputType.phone,
+                                    // No digits-only filter or length cap:
+                                    // either would mangle a pasted
+                                    // "+91 98765 43210". tenDigitPhone
+                                    // cleans it on blur/submit.
                                     inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                      LengthLimitingTextInputFormatter(10),
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[\d+\-\s()]'),
+                                      ),
                                     ],
                                     style: AppTextStyles.bodyLarge,
                                     decoration: const InputDecoration(

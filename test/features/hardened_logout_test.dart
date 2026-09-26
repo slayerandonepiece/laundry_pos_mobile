@@ -37,6 +37,9 @@ class MockLocalCache extends LocalCacheService {
   String? getActiveStoreId() => 'store-1';
 
   @override
+  String? getActiveOutletId() => null;
+
+  @override
   List<Map<String, dynamic>> getPendingSyncQueue() => queue;
 
   @override

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
@@ -8,6 +9,7 @@ import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
+import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/profile/presentation/dialogs/logout_dialog.dart';
 
 class MockLocalCache extends LocalCacheService {
@@ -18,7 +20,14 @@ class MockLocalCache extends LocalCacheService {
   String? getActiveStoreId() => storeId;
 
   @override
+  String? getActiveOutletId() => null;
+
+  @override
   List<Map<String, dynamic>> getPendingSyncQueue() => queue;
+
+  // SyncEngine's getTotalPendingCount() also reads the owner-action queue.
+  @override
+  List<Map<String, dynamic>> getPendingOwnerActionsQueue() => [];
 }
 
 // LogoutDialog now always syncs via SyncEngine.instance (so it shares
@@ -53,6 +62,37 @@ class MockOrdersRepository extends OrdersRepository {
     syncDeltaCallCount++;
     return true;
   }
+
+  // LogoutDialog goes through SyncEngine.retryNow(), which revives the
+  // dead-letter queue first — the real one reads Hive, which isn't open here.
+  @override
+  Future<void> reviveDeadLetterQueue() async {}
+
+  // Fired in the background after a successful sync; also reads Hive.
+  @override
+  Future<void> retryMissingInvoices() async {}
+}
+
+// retryNow() re-probes connectivity; the real probe goes through a platform
+// channel that never completes under testWidgets' fake time.
+class FakeConnectivityService extends ConnectivityService {
+  FakeConnectivityService() : super.internal();
+
+  @override
+  bool get isOffline => false;
+
+  @override
+  Future<bool> checkIsOffline() async => false;
+}
+
+// SyncEngine also drains/revives owner actions on the same run; without this
+// it falls back to a real OwnerRepository and throws on Hive before the push.
+class MockOwnerRepository extends OwnerRepository {
+  @override
+  Future<bool> processPendingOwnerActions() async => true;
+
+  @override
+  Future<void> reviveDeadLetterQueue() async {}
 }
 
 class FakeAuthBloc extends AuthBloc {
@@ -87,8 +127,10 @@ void main() {
       mockCache = MockLocalCache();
       mockOrdersRepo = MockOrdersRepository(mockCache);
       fakeAuthBloc = FakeAuthBloc();
+      ConnectivityService.instance = FakeConnectivityService();
       SyncEngine.instance = SyncEngine.internal(
         ordersRepository: mockOrdersRepo,
+        ownerRepository: MockOwnerRepository(),
         localCache: mockCache,
       );
     });
@@ -96,6 +138,7 @@ void main() {
     tearDown(() {
       fakeAuthBloc.close();
       SyncEngine.instance = SyncEngine.internal();
+      ConnectivityService.instance = ConnectivityService.internal();
     });
 
     testWidgets(

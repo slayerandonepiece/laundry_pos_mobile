@@ -64,9 +64,53 @@ class AuthRepository {
         await _localCache.setCachedStoreDetails(active.toJson());
       }
 
+      await _cacheOrganizationOutlets(response);
+
       return AuthResult(user: user, stores: stores);
     }
     throw ApiException('Invalid response format from login endpoint');
+  }
+
+  /// Caches every organization's `allowedOutlets` (not just the active store's),
+  /// the same way [setCachedAvailableStores] caches every store's summary — so
+  /// switching stores later finds that store's outlets already cached.
+  /// If the response has no `'organizations'` key at all (older server), does
+  /// nothing so existing cached outlets are never overwritten with `[]`.
+  Future<void> _cacheOrganizationOutlets(Map response) async {
+    if (!response.containsKey('organizations')) return;
+    final rawOrganizations = response['organizations'];
+    if (rawOrganizations is! List) return;
+    for (final org in rawOrganizations) {
+      if (org is! Map) continue;
+      final orgMap = Map<String, dynamic>.from(org);
+      final orgId = orgMap['id']?.toString();
+      if (orgId == null || orgId.isEmpty) continue;
+      final outlets = (orgMap['allowedOutlets'] as List? ?? [])
+          .map((o) => Map<String, dynamic>.from(o as Map))
+          .toList();
+      await _localCache.setAllowedOutletsForStore(orgId, outlets);
+    }
+  }
+
+  /// Refreshes cached organization outlets from `/auth/status` and returns the
+  /// active store's fresh allowed outlets list, or `null` on failure.
+  Future<List<Map<String, dynamic>>?> refreshOutletContext() async {
+    try {
+      final response = await _apiClient.get(ApiEndpoints.sessionStatus);
+      if (response is Map) {
+        await _cacheOrganizationOutlets(response);
+        return _localCache.getAllowedOutlets();
+      }
+      return null;
+    } on AuthException catch (e) {
+      if (e.code == 'UNAUTHENTICATED') {
+        await logout();
+        return null;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Checks stored session token and validates status with the backend
@@ -103,6 +147,8 @@ class AuthRepository {
           await _localCache.setActiveStoreId(active.storeId);
           await _localCache.setCachedStoreDetails(active.toJson());
         }
+
+        await _cacheOrganizationOutlets(response);
 
         return AuthResult(user: user, stores: stores);
       }

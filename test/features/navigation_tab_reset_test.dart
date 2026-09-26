@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
@@ -14,7 +15,19 @@ import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/features/shell/presentation/main_navigation_shell.dart';
+
+class FakeLocalCache extends LocalCacheService {
+  @override
+  Map<String, dynamic>? getCachedStoreDetails() => {'role': 'OWNER'};
+  @override
+  List<Map<String, dynamic>>? getAllowedOutlets() => null;
+  @override
+  String? getActiveOutletId() => null;
+  @override
+  bool isAllOutletsScope() => false;
+}
 
 class FakeDashboardOwnerRepo implements OwnerRepository {
   DashboardMetrics metrics;
@@ -69,6 +82,7 @@ void main() {
     late OrdersBloc ordersBloc;
     late CartBloc cartBloc;
     late MockAuthBloc authBloc;
+    late OutletScopeCubit outletScopeCubit;
 
     setUp(() {
       fakeOwnerRepo = FakeDashboardOwnerRepo(
@@ -107,6 +121,9 @@ void main() {
           availableStores: [store],
         ),
       );
+
+      outletScopeCubit = OutletScopeCubit(localCache: FakeLocalCache())
+        ..hydrate();
     });
 
     tearDown(() {
@@ -114,6 +131,7 @@ void main() {
       ordersBloc.close();
       cartBloc.close();
       authBloc.close();
+      outletScopeCubit.close();
     });
 
     Widget buildTestWidget() {
@@ -123,6 +141,7 @@ void main() {
           BlocProvider<OwnerBloc>.value(value: ownerBloc),
           BlocProvider<OrdersBloc>.value(value: ordersBloc),
           BlocProvider<CartBloc>.value(value: cartBloc),
+          BlocProvider<OutletScopeCubit>.value(value: outletScopeCubit),
         ],
         child: const MaterialApp(
           home: MainNavigationShell(),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
@@ -12,6 +13,29 @@ import 'package:myshop/features/owner/presentation/owner_orders_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
+
+class FakeLocalCache extends LocalCacheService {
+  List<Map<String, dynamic>>? allowedOutlets = [
+    {
+      'id': 'outlet_main',
+      'outletCode': 'O01',
+      'displayName': 'Main Outlet',
+      'isDefault': true,
+      'status': 'ACTIVE',
+    },
+  ];
+  String? activeOutletId;
+
+  @override
+  Map<String, dynamic>? getCachedStoreDetails() => {'role': 'OWNER'};
+  @override
+  List<Map<String, dynamic>>? getAllowedOutlets() => allowedOutlets;
+  @override
+  String? getActiveOutletId() => activeOutletId;
+  @override
+  bool isAllOutletsScope() => activeOutletId == null;
+}
 
 class MockOrdersRepository implements OrdersRepository {
   List<Order> cachedOrders = [];
@@ -126,10 +150,12 @@ void main() {
       mockOrdersRepo.cachedOrders = fakeOrders;
     });
 
-    Widget createScreen() {
+    Widget createScreen({FakeLocalCache? cache}) {
       final ordersBloc = OrdersBloc(ordersRepository: mockOrdersRepo);
       final cartBloc = CartBloc(posRepository: mockPosRepo);
       final authBloc = MockAuthBloc();
+      final outletScopeCubit = OutletScopeCubit(localCache: cache ?? FakeLocalCache())
+        ..hydrate();
 
       return MultiRepositoryProvider(
         providers: [
@@ -141,6 +167,7 @@ void main() {
             BlocProvider<OrdersBloc>.value(value: ordersBloc),
             BlocProvider<CartBloc>.value(value: cartBloc),
             BlocProvider<AuthBloc>.value(value: authBloc),
+            BlocProvider<OutletScopeCubit>.value(value: outletScopeCubit),
           ],
           child: const MaterialApp(home: OwnerOrdersScreen()),
         ),
@@ -267,7 +294,7 @@ void main() {
     });
 
     testWidgets(
-      'Tapping + button in app bar navigates to CustomerDetailsScreen',
+      'Tapping + button in allOutlets scope shows outlet sheet and navigates on selection',
       (tester) async {
         await tester.pumpWidget(createScreen());
         await tester.pumpAndSettle();
@@ -278,6 +305,48 @@ void main() {
         await tester.tap(addButton);
         await tester.pumpAndSettle();
 
+        expect(find.text('Select outlet'), findsOneWidget);
+        expect(find.text('Main Outlet'), findsOneWidget);
+
+        await tester.tap(find.text('Main Outlet'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(CustomerDetailsScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Tapping + button in allOutlets scope cancels when sheet is dismissed',
+      (tester) async {
+        await tester.pumpWidget(createScreen());
+        await tester.pumpAndSettle();
+
+        final addButton = find.byIcon(Icons.add);
+        await tester.tap(addButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Select outlet'), findsOneWidget);
+
+        // Tap barrier to dismiss sheet
+        await tester.tapAt(const Offset(20, 20));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(CustomerDetailsScreen), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Tapping + button with narrowed activeOutletId navigates directly without sheet',
+      (tester) async {
+        final cache = FakeLocalCache()..activeOutletId = 'outlet_main';
+        await tester.pumpWidget(createScreen(cache: cache));
+        await tester.pumpAndSettle();
+
+        final addButton = find.byIcon(Icons.add);
+        await tester.tap(addButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Select outlet'), findsNothing);
         expect(find.byType(CustomerDetailsScreen), findsOneWidget);
       },
     );

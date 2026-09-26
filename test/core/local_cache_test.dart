@@ -182,5 +182,66 @@ void main() {
       expect(cachedMethods?.length, 2);
       expect(cachedMethods?.last['name'], 'Store UPI');
     });
+
+    test('Outlet scope keys are store-scoped and independent', () async {
+      expect(localCache.getAllowedOutlets(), isNull);
+      expect(localCache.getActiveOutletId(), isNull);
+      expect(localCache.isAllOutletsScope(), isFalse);
+
+      await localCache.setActiveStoreId('store_a');
+      await localCache.setAllowedOutletsForStore('store_a', [
+        {
+          'id': 'outlet_1',
+          'outletCode': 'OBLRCHN01',
+          'displayName': 'Chinnapanahalli',
+          'isDefault': true,
+          'status': 'ACTIVE',
+        },
+      ]);
+      expect(localCache.getAllowedOutlets()?.length, 1);
+      expect(localCache.getAllowedOutlets()?.first['displayName'], 'Chinnapanahalli');
+
+      await localCache.setActiveOutletId('outlet_1');
+      expect(localCache.getActiveOutletId(), 'outlet_1');
+      expect(localCache.isAllOutletsScope(), isFalse);
+
+      await localCache.setAllOutletsScope(true);
+      expect(localCache.isAllOutletsScope(), isTrue);
+
+      // Switching the active store must not see store_a's outlets/selection.
+      await localCache.setActiveStoreId('store_b');
+      expect(localCache.getAllowedOutlets(), isNull);
+      expect(localCache.getActiveOutletId(), isNull);
+      expect(localCache.isAllOutletsScope(), isFalse);
+
+      // Switching back to store_a finds its outlet selection untouched.
+      await localCache.setActiveStoreId('store_a');
+      expect(localCache.getActiveOutletId(), 'outlet_1');
+      await localCache.clearActiveOutletId();
+      expect(localCache.getActiveOutletId(), isNull);
+    });
+
+    test(
+      'Cached orders/dashboard metrics/sync cursor are scoped per outlet',
+      () async {
+        await localCache.setActiveStoreId('store_a');
+        await localCache.setActiveOutletId('outlet_1');
+        await localCache.setCachedOrders([
+          {'id': 'EL-1', 'name': 'Outlet 1 order'},
+        ]);
+        await localCache.setCachedDashboardMetrics({'todaySales': 1000});
+        await localCache.setLastSyncCursor('cursor-outlet-1');
+
+        await localCache.setActiveOutletId('outlet_2');
+        expect(localCache.getCachedOrders(), isNull);
+        expect(localCache.getCachedDashboardMetrics(), isNull);
+        expect(localCache.getLastSyncCursor(), isNull);
+
+        await localCache.setActiveOutletId('outlet_1');
+        expect(localCache.getCachedOrders()?.first['id'], 'EL-1');
+        expect(localCache.getCachedDashboardMetrics()?['todaySales'], 1000);
+        expect(localCache.getLastSyncCursor(), 'cursor-outlet-1');
+      },
+    );
   });
 }

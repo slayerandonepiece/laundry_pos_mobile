@@ -104,11 +104,13 @@ class LocalCacheService {
     List<Map<String, dynamic>> storesList,
   ) => _box.put(keyCachedAvailableStores, storesList);
 
-  // Cached Dashboard Metrics
+  // Cached Dashboard Metrics — outlet-scoped once _outletScopedKey is
+  // defined below; declared here to keep it grouped with the other cached
+  // reads, same as before.
   static const String keyCachedDashboardMetrics =
       'cached_dashboard_metrics_json';
   Map<String, dynamic>? getCachedDashboardMetrics() {
-    final raw = _box.get(keyCachedDashboardMetrics);
+    final raw = _box.get(_outletScopedKey(keyCachedDashboardMetrics));
     if (raw is Map) {
       return deepCopy(raw) as Map<String, dynamic>;
     }
@@ -116,12 +118,12 @@ class LocalCacheService {
   }
 
   Future<void> setCachedDashboardMetrics(Map<String, dynamic> metrics) =>
-      _box.put(keyCachedDashboardMetrics, metrics);
+      _box.put(_outletScopedKey(keyCachedDashboardMetrics), metrics);
 
   // Cached Expenses List
   static const String keyCachedExpenses = 'cached_expenses_list';
   List<Map<String, dynamic>>? getCachedExpenses() {
-    final raw = _box.get(keyCachedExpenses);
+    final raw = _box.get(_outletScopedKey(keyCachedExpenses));
     if (raw is List) {
       return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
     }
@@ -129,7 +131,7 @@ class LocalCacheService {
   }
 
   Future<void> setCachedExpenses(List<Map<String, dynamic>> expensesList) =>
-      _box.put(keyCachedExpenses, expensesList);
+      _box.put(_outletScopedKey(keyCachedExpenses), expensesList);
 
   // Cached Staff List
   static const String keyCachedStaff = 'cached_staff_list';
@@ -178,8 +180,50 @@ class LocalCacheService {
   String _storeScopedKey(String baseKey) =>
       '$baseKey::${getActiveStoreId() ?? 'none'}';
 
+  // Outlet scope (multi-outlet rollout) — per store, mirrors keyActiveStoreId.
+  static const String keyAllowedOutlets = 'allowed_outlets';
+  static const String keyActiveOutletId = 'active_outlet_id';
+  static const String keyAllOutletsScope = 'all_outlets_scope';
+
+  List<Map<String, dynamic>>? getAllowedOutlets() {
+    final raw = _box.get(_storeScopedKey(keyAllowedOutlets));
+    if (raw is List) {
+      return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return null;
+  }
+
+  /// Writes allowed outlets for an arbitrary (not necessarily active) store —
+  /// login caches every organization's outlets at once, the same way
+  /// [setCachedAvailableStores] already caches every store's summary.
+  Future<void> setAllowedOutletsForStore(
+    String storeId,
+    List<Map<String, dynamic>> outlets,
+  ) => _box.put('$keyAllowedOutlets::$storeId', outlets);
+
+  String? getActiveOutletId() =>
+      _box.get(_storeScopedKey(keyActiveOutletId)) as String?;
+  Future<void> setActiveOutletId(String outletId) =>
+      _box.put(_storeScopedKey(keyActiveOutletId), outletId);
+  Future<void> clearActiveOutletId() =>
+      _box.delete(_storeScopedKey(keyActiveOutletId));
+
+  bool isAllOutletsScope() =>
+      _box.get(_storeScopedKey(keyAllOutletsScope)) as bool? ?? false;
+  Future<void> setAllOutletsScope(bool value) =>
+      _box.put(_storeScopedKey(keyAllOutletsScope), value);
+  Future<void> clearAllOutletsScope() =>
+      _box.delete(_storeScopedKey(keyAllOutletsScope));
+
+  // Outlet-scoped key: switching the active outlet (or All-outlets scope)
+  // must not serve the previous scope's cached orders or resume its sync
+  // cursor — see keyCachedOrders/keyLastSyncCursor/keyCachedDashboardMetrics.
+  String _outletScopedKey(String baseKey) =>
+      '$baseKey::${getActiveStoreId() ?? 'none'}'
+      '::${getActiveOutletId() ?? (isAllOutletsScope() ? 'all' : 'none')}';
+
   List<Map<String, dynamic>>? getCachedOrders() {
-    final raw = _box.get(_storeScopedKey(keyCachedOrders));
+    final raw = _box.get(_outletScopedKey(keyCachedOrders));
     if (raw is List) {
       return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
     }
@@ -187,15 +231,16 @@ class LocalCacheService {
   }
 
   Future<void> setCachedOrders(List<Map<String, dynamic>> ordersList) =>
-      _box.put(_storeScopedKey(keyCachedOrders), ordersList);
+      _box.put(_outletScopedKey(keyCachedOrders), ordersList);
 
-  // Delta-sync cursor (opaque server-issued string) — also per store, so
-  // resuming sync after switching stores doesn't skip that store's changes.
+  // Delta-sync cursor (opaque server-issued string) — also per outlet scope,
+  // so resuming sync after switching scope doesn't skip the new scope's
+  // changes or replay the old scope's cursor.
   static const String keyLastSyncCursor = 'last_sync_cursor';
   String? getLastSyncCursor() =>
-      _box.get(_storeScopedKey(keyLastSyncCursor)) as String?;
+      _box.get(_outletScopedKey(keyLastSyncCursor)) as String?;
   Future<void> setLastSyncCursor(String cursor) =>
-      _box.put(_storeScopedKey(keyLastSyncCursor), cursor);
+      _box.put(_outletScopedKey(keyLastSyncCursor), cursor);
 
   // Cached In-Progress Cart
   static const String keyCachedCart = 'cached_cart_json';

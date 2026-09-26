@@ -16,8 +16,10 @@ import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
+import 'package:myshop/shared/widgets/outlet_switcher.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
@@ -64,6 +66,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     }
   }
 
+  LoadDashboardEvent _currentLoadDashboardEvent() {
+    if (_customFrom != null && _customTo != null) {
+      return LoadDashboardEvent(
+        from: DateFormatter.toIsoDateString(_customFrom!),
+        to: DateFormatter.toIsoDateString(_customTo!),
+      );
+    }
+    return LoadDashboardEvent();
+  }
+
   Future<void> _pickCustomDate({required bool isFrom}) async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -100,12 +112,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     });
     if (!mounted) return;
     if (_customFrom != null && _customTo != null) {
-      context.read<OwnerBloc>().add(
-        LoadDashboardEvent(
-          from: DateFormatter.toIsoDateString(_customFrom!),
-          to: DateFormatter.toIsoDateString(_customTo!),
-        ),
-      );
+      context.read<OwnerBloc>().add(_currentLoadDashboardEvent());
     }
   }
 
@@ -214,6 +221,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
+    final outletScopeCubit = context.watch<OutletScopeCubit?>();
+    final outletScope = outletScopeCubit?.state ?? const OutletScope.empty();
+    final hasOutletChoice =
+        outletScope.allowed.length > 1 || outletScope.isOwner;
     String storeName = 'MyShop';
     bool hasMultipleStores = false;
 
@@ -222,121 +233,71 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       hasMultipleStores = authState.availableStores.length > 1;
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        titleSpacing: 20,
-        title: const Text(
-          'Dashboard',
-          style: TextStyle(
-            fontFamily: AppTextStyles.fontDisplay,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.6,
-            color: AppColors.text,
-          ),
-        ),
-        actions: [
-          ValueListenableBuilder<SyncState>(
-            valueListenable: SyncManager.instance,
-            builder: (context, syncState, _) {
-              if (syncState.isSyncPaused || syncState.hasError) {
-                return IconButton(
-                  icon: const Icon(
-                    Icons.sync_problem_rounded,
-                    color: AppColors.danger,
-                    size: 20,
-                  ),
-                  tooltip: 'Retry sync',
-                  onPressed: () {
-                    SyncEngine.instance.retryNow();
-                    context.read<OwnerBloc>().add(LoadDashboardEvent());
-                    context.read<OrdersBloc>().add(LoadOrdersEvent());
-                  },
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: AppColors.mutedText,
-              size: 20,
-            ),
-            tooltip: 'Refresh',
-            onPressed: () {
-              context.read<OwnerBloc>().add(LoadDashboardEvent());
-              context.read<OrdersBloc>().add(LoadOrdersEvent());
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: AppColors.border, height: 1),
-        ),
-      ),
-      body: BlocBuilder<OwnerBloc, OwnerState>(
-        builder: (context, ownerState) {
-          final metrics = ownerState.metrics;
-          final ordersState = context.watch<OrdersBloc>().state;
-          final allOrders = ordersState.allOrders;
+    final body = BlocBuilder<OwnerBloc, OwnerState>(
+      builder: (context, ownerState) {
+        final metrics = ownerState.metrics;
+        final ordersState = context.watch<OrdersBloc>().state;
+        final allOrders = ordersState.allOrders;
 
-          return Column(
-            children: [
-              SyncStatusBar(
-                onSyncNow: () {
+        return Column(
+          children: [
+            SyncStatusBar(
+              onSyncNow: () {
+                context.read<OwnerBloc>().add(LoadDashboardEvent());
+                context.read<OrdersBloc>().add(LoadOrdersEvent());
+              },
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async {
                   context.read<OwnerBloc>().add(LoadDashboardEvent());
                   context.read<OrdersBloc>().add(LoadOrdersEvent());
                 },
-              ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () async {
-                    context.read<OwnerBloc>().add(LoadDashboardEvent());
-                    context.read<OrdersBloc>().add(LoadOrdersEvent());
-                  },
-                  child: CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      // 1. Workspace label + period selector row
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              InkWell(
-                                onTap: hasMultipleStores
-                                    ? () => StoreSwitcherDialog.show(context)
-                                    : null,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '${storeName.toUpperCase()} WORKSPACE',
-                                      style: const TextStyle(
-                                        fontFamily: AppTextStyles.fontBody,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.8,
-                                        color: AppColors.mutedText,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    // 1. Workspace label + period selector row
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (hasOutletChoice) ...[
+                              const OutletSwitcher(showAllOutletsOption: true),
+                              const SizedBox(height: 12),
+                            ],
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                InkWell(
+                                  onTap: hasMultipleStores
+                                      ? () => StoreSwitcherDialog.show(context)
+                                      : null,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${storeName.toUpperCase()} WORKSPACE',
+                                        style: const TextStyle(
+                                          fontFamily: AppTextStyles.fontBody,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.8,
+                                          color: AppColors.mutedText,
+                                        ),
                                       ),
-                                    ),
-                                    if (hasMultipleStores) ...[
-                                      const SizedBox(width: 4),
-                                      const Icon(
-                                        Icons.expand_more,
-                                        size: 14,
-                                        color: AppColors.mutedText,
-                                      ),
+                                      if (hasMultipleStores) ...[
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          Icons.expand_more,
+                                          size: 14,
+                                          color: AppColors.mutedText,
+                                        ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
-                              ),
                                 _PeriodSelectorPill(
                                   selectedPeriod: _selectedPeriod,
                                   customFrom: _customFrom,
@@ -358,8 +319,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                 ),
                               ],
                             ),
-                          ),
+                          ],
                         ),
+                      ),
+                    ),
 
                       // 1b. Inline Custom Date Selector (if period is 'custom')
                       if (_selectedPeriod == 'custom')
@@ -428,7 +391,76 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             ],
           );
         },
+      );
+
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        elevation: 0,
+        titleSpacing: 20,
+        title: const Text(
+          'Dashboard',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontDisplay,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.6,
+            color: AppColors.text,
+          ),
+        ),
+        actions: [
+          ValueListenableBuilder<SyncState>(
+            valueListenable: SyncManager.instance,
+            builder: (context, syncState, _) {
+              if (syncState.isSyncPaused || syncState.hasError) {
+                return IconButton(
+                  icon: const Icon(
+                    Icons.sync_problem_rounded,
+                    color: AppColors.danger,
+                    size: 20,
+                  ),
+                  tooltip: 'Retry sync',
+                  onPressed: () {
+                    SyncEngine.instance.retryNow();
+                    context.read<OwnerBloc>().add(LoadDashboardEvent());
+                    context.read<OrdersBloc>().add(LoadOrdersEvent());
+                  },
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: AppColors.mutedText,
+              size: 20,
+            ),
+            tooltip: 'Refresh',
+            onPressed: () {
+              context.read<OwnerBloc>().add(LoadDashboardEvent());
+              context.read<OrdersBloc>().add(LoadOrdersEvent());
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: AppColors.border, height: 1),
+        ),
       ),
+      body: outletScopeCubit != null
+          ? BlocListener<OutletScopeCubit, OutletScope>(
+              listenWhen: (prev, curr) =>
+                  prev.activeOutletId != curr.activeOutletId ||
+                  prev.allOutlets != curr.allOutlets,
+              listener: (context, state) {
+                context.read<OwnerBloc>().add(_currentLoadDashboardEvent());
+              },
+              child: body,
+            )
+          : body,
     );
   }
 
@@ -586,7 +618,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         children: [
           Expanded(
             child: _buildOperationChip(
-              label: 'Waiting',
+              label: 'Open orders',
               count: metrics.todo,
               indicatorColor: AppColors.warning,
               backgroundColor: AppColors.warningBg,
@@ -596,7 +628,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: _buildOperationChip(
-              label: 'Completed',
+              label: 'Delivered',
               count: metrics.completed,
               indicatorColor: AppColors.success,
               backgroundColor: AppColors.successBg,
@@ -840,7 +872,7 @@ class _SalesTrendChart extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     const Text(
-                      'Income',
+                      'Collected',
                       style: TextStyle(
                         fontFamily: AppTextStyles.fontBody,
                         fontSize: 11,
@@ -1062,7 +1094,7 @@ class _CashFlowChart extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Money in & expenses',
+                      'Collected vs expenses — this month',
                       style: TextStyle(
                         fontFamily: AppTextStyles.fontBody,
                         fontSize: 15,
@@ -1072,7 +1104,7 @@ class _CashFlowChart extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     const Text(
-                      'Received minus spent',
+                      'payments collected this month',
                       style: AppTextStyles.hint,
                     ),
                   ],
@@ -1084,7 +1116,7 @@ class _CashFlowChart extends StatelessWidget {
                 children: [
                   _buildLegendBadge(
                     color: AppColors.primary,
-                    label: 'Income',
+                    label: 'Collected',
                   ),
                   const SizedBox(width: 8),
                   _buildLegendBadge(
@@ -1236,7 +1268,7 @@ class _CashFlowChart extends StatelessWidget {
                       final valPaise = isIncome
                           ? cash[groupIndex].income
                           : cash[groupIndex].expenses;
-                      final label = isIncome ? 'Income' : 'Expenses';
+                      final label = isIncome ? 'Collected' : 'Expenses';
                       return BarTooltipItem(
                         '$label: ${CurrencyFormatter.format(valPaise)}',
                         const TextStyle(
@@ -1345,7 +1377,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
         sections.add(
           PieChartSectionData(
             value: readyCount.toDouble(),
-            color: AppColors.warning,
+            color: AppColors.violet,
             radius: 13,
             showTitle: false,
           ),
@@ -1442,7 +1474,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     _buildLegendItem(
-                      color: AppColors.warning,
+                      color: AppColors.violet,
                       label: 'Ready',
                       count: readyCount,
                     ),

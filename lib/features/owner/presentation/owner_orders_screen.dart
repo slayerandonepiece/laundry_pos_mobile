@@ -13,9 +13,12 @@ import 'package:myshop/features/orders/presentation/order_detail_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
+import 'package:myshop/features/shell/data/models/outlet_model.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
+import 'package:myshop/shared/widgets/outlet_switcher.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
@@ -236,8 +239,26 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     await bloc.stream.firstWhere((s) => !s.isLoading);
   }
 
-  void _startNewOrder(BuildContext context) {
-    context.read<CartBloc>().add(ResetSaleEvent());
+  Future<void> _startNewOrder(BuildContext context) async {
+    final scope = context.read<OutletScopeCubit>().state;
+    final String? chosenOutletId;
+
+    if (scope.allOutlets) {
+      chosenOutletId = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => _OutletSelectionSheet(outlets: scope.allowed),
+      );
+      if (chosenOutletId == null) {
+        return;
+      }
+    } else {
+      chosenOutletId = scope.activeOutletId;
+    }
+
+    if (!context.mounted) return;
+    context.read<CartBloc>().add(ResetSaleEvent(outletId: chosenOutletId));
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const CustomerDetailsScreen()));
   }
@@ -371,6 +392,9 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final outletScope = context.watch<OutletScopeCubit>().state;
+    final hasOutletChoice = outletScope.allowed.length > 1 || outletScope.isOwner;
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -443,6 +467,12 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Outlet switcher — hidden when there's no
+                              // choice to make (O5.1).
+                              if (hasOutletChoice) ...[
+                                const OutletSwitcher(showAllOutletsOption: true),
+                                const SizedBox(height: 12),
+                              ],
                               // Unified Sales summary card
                               _buildSalesSummaryCard(
                                 orderValue: orderValue,
@@ -718,6 +748,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                         context,
                         allOrders: state.allOrders,
                         filteredOrders: filteredOrders,
+                        outletScope: outletScope,
                       ),
                     ],
                   ),
@@ -934,10 +965,21 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     );
   }
 
+  /// Resolved outlet label for a row, or null to hide the line entirely —
+  /// only shown in All-outlets scope with more than one outlet (O5.3).
+  String? _resolveOutletLabel(Order order, OutletScope scope) {
+    if (!scope.allOutlets || scope.allowed.length <= 1) return null;
+    final outletId = order.outletId;
+    if (outletId == null || outletId.isEmpty) return 'Organization-wide';
+    final matches = scope.allowed.where((o) => o.id == outletId);
+    return matches.isEmpty ? null : matches.first.displayName;
+  }
+
   List<Widget> _buildOrdersSlivers(
     BuildContext context, {
     required List<Order> allOrders,
     required List<Order> filteredOrders,
+    required OutletScope outletScope,
   }) {
     if (allOrders.isEmpty) {
       return [
@@ -1000,6 +1042,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
             final order = filteredOrders[index];
             return _OwnerOrderCard(
               order: order,
+              outletLabel: _resolveOutletLabel(order, outletScope),
               onTap: () {
                 Navigator.push(
                   context,
@@ -1019,8 +1062,13 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
 class _OwnerOrderCard extends StatelessWidget {
   final Order order;
   final VoidCallback onTap;
+  final String? outletLabel;
 
-  const _OwnerOrderCard({required this.order, required this.onTap});
+  const _OwnerOrderCard({
+    required this.order,
+    required this.onTap,
+    this.outletLabel,
+  });
 
   Widget _buildPaymentPill() {
     if (order.balanceDue == 0) {
@@ -1101,7 +1149,8 @@ class _OwnerOrderCard extends StatelessWidget {
                 ],
                 const SizedBox(height: 4),
                 Text(
-                  '${order.lines.length} ${order.lines.length == 1 ? "service" : "services"} · due ${DateFormatter.formatShort(order.due)}',
+                  '${order.lines.length} ${order.lines.length == 1 ? "service" : "services"} · due ${DateFormatter.formatShort(order.due)}'
+                  '${outletLabel != null ? ' · $outletLabel' : ''}',
                   style: AppTextStyles.hint,
                 ),
               ],
@@ -1202,6 +1251,167 @@ class _PeriodSelector extends StatelessWidget {
           items: _labels.entries.map((e) {
             return DropdownMenuItem<String>(value: e.key, child: Text(e.value));
           }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _OutletSelectionSheet extends StatelessWidget {
+  final List<Outlet> outlets;
+
+  const _OutletSelectionSheet({required this.outlets});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 10,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 26,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: AppColors.controlBorder,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          const Text(
+            'Select outlet',
+            style: TextStyle(
+              fontFamily: AppTextStyles.fontDisplay,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.text,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ...outlets.map(
+            (outlet) => _OutletSelectionRow(
+              outlet: outlet,
+              onTap: () => Navigator.pop(context, outlet.id),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OutletSelectionRow extends StatelessWidget {
+  final Outlet outlet;
+  final VoidCallback onTap;
+
+  const _OutletSelectionRow({required this.outlet, required this.onTap});
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.isEmpty
+        ? '?'
+        : name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 64),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.neutralBg,
+                ),
+                child: Center(
+                  child: Text(
+                    _initials(outlet.displayName),
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontDisplay,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.mutedText,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      outlet.displayName,
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      outlet.outletCode,
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 11.5,
+                        color: AppColors.mutedText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (outlet.isDefault)
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryTint,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Default',
+                    style: TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -36,6 +36,9 @@ class FakeLocalCache extends LocalCacheService {
       _memory['active_store_id'] = s;
 
   @override
+  String? getActiveOutletId() => null;
+
+  @override
   Map<String, dynamic>? getCachedStoreProfile() =>
       _memory['cached_store_profile_json'] as Map<String, dynamic>?;
   @override

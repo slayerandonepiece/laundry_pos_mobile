@@ -19,7 +19,7 @@ class StorePaymentMethod {
       type:
           json['type']?.toString() ??
           (name.toUpperCase().contains('UPI') ? 'UPI' : 'Cash'),
-      active: json['active'] != false,
+      active: (json['active'] ?? json['enabled']) != false,
     );
   }
 

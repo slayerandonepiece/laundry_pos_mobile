@@ -155,7 +155,7 @@ class MoreScreen extends StatelessWidget {
                           if (unpaidExpenses > 0) ...[
                             StatusPill(
                               label: '$unpaidExpenses unpaid',
-                              variant: PillVariant.ready,
+                              variant: PillVariant.warning,
                             ),
                             const SizedBox(width: 8),
                           ],

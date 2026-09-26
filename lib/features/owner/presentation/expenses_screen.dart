@@ -8,12 +8,14 @@ import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/expense_model.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
 import 'package:myshop/shared/widgets/centred_dialog.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
+import 'package:myshop/shared/widgets/outlet_switcher.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
@@ -269,11 +271,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   void _showAddExpenseDialog(BuildContext context) {
     final bloc = context.read<OwnerBloc>();
+    final outletScopeCubit = context.read<OutletScopeCubit?>();
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            BlocProvider.value(value: bloc, child: const AddExpenseScreen()),
+        builder: (_) => MultiBlocProvider(
+          providers: [
+            BlocProvider<OwnerBloc>.value(value: bloc),
+            if (outletScopeCubit != null)
+              BlocProvider<OutletScopeCubit>.value(value: outletScopeCubit),
+          ],
+          child: const AddExpenseScreen(),
+        ),
       ),
     );
   }
@@ -282,8 +291,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final todayStart = _startOfDay(now);
+    final outletScopeCubit = context.watch<OutletScopeCubit?>();
+    final outletScope = outletScopeCubit?.state;
+    final hasOutletChoice =
+        outletScope != null &&
+        (outletScope.allowed.length > 1 || outletScope.isOwner);
 
-    return BlocConsumer<OwnerBloc, OwnerState>(
+    final content = BlocConsumer<OwnerBloc, OwnerState>(
       listener: (context, state) {
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -427,6 +441,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(20),
                     children: [
+                      // Outlet switcher — hidden when there's no
+                      // choice to make (O5.1).
+                      if (hasOutletChoice) ...[
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutletSwitcher(showAllOutletsOption: true),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       // 1. Period selector row
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -757,7 +780,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                             : 'Unpaid',
                                         variant: expense.isPaid
                                             ? PillVariant.paid
-                                            : PillVariant.ready,
+                                            : PillVariant.warning,
                                       ),
                                     ],
                                   ),
@@ -774,6 +797,21 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           ),
         );
       },
+    );
+
+    if (outletScopeCubit == null) {
+      return content;
+    }
+
+    return BlocListener<OutletScopeCubit, OutletScope>(
+      bloc: outletScopeCubit,
+      listenWhen: (prev, curr) =>
+          prev.activeOutletId != curr.activeOutletId ||
+          prev.allOutlets != curr.allOutlets,
+      listener: (context, state) {
+        context.read<OwnerBloc>().add(LoadExpensesEvent());
+      },
+      child: content,
     );
   }
 }
@@ -828,6 +866,21 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final outletScope = context.watch<OutletScopeCubit?>()?.state;
+    final String scopeHint;
+    if (outletScope == null ||
+        outletScope.allOutlets ||
+        outletScope.activeOutletId == null) {
+      scopeHint = 'This expense will be recorded as organization-wide.';
+    } else {
+      final activeOutlet = outletScope.allowed
+          .where((o) => o.id == outletScope.activeOutletId)
+          .firstOrNull;
+      final displayName =
+          activeOutlet?.displayName ?? outletScope.activeOutletId!;
+      scopeHint = 'This expense will be recorded against $displayName.';
+    }
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -930,6 +983,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              scopeHint,
+              style: AppTextStyles.hint,
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),

@@ -35,6 +35,7 @@ class CartState {
   final String searchQuery;
   final Map<String, CartItem> items; // keyed by productId
   final List<StorePaymentMethod> paymentMethods;
+  final String? outletId;
 
   // Customer Step
   final String customerPhone;
@@ -56,6 +57,7 @@ class CartState {
     this.searchQuery = '',
     this.items = const {},
     this.paymentMethods = const [],
+    this.outletId,
     this.customerPhone = '',
     this.customerName = '',
     DateTime? dueDate,
@@ -94,6 +96,8 @@ class CartState {
     String? searchQuery,
     Map<String, CartItem>? items,
     List<StorePaymentMethod>? paymentMethods,
+    String? outletId,
+    bool clearOutlet = false,
     String? customerPhone,
     String? customerName,
     DateTime? dueDate,
@@ -112,6 +116,7 @@ class CartState {
       searchQuery: searchQuery ?? this.searchQuery,
       items: items ?? this.items,
       paymentMethods: paymentMethods ?? this.paymentMethods,
+      outletId: clearOutlet ? null : (outletId ?? this.outletId),
       customerPhone: customerPhone ?? this.customerPhone,
       customerName: customerName ?? this.customerName,
       dueDate: dueDate ?? this.dueDate,

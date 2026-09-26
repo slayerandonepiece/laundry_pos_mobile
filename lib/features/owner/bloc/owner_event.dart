@@ -72,19 +72,6 @@ class TogglePaymentMethodEvent extends OwnerEvent {
   TogglePaymentMethodEvent({required this.id, required this.active});
 }
 
-class AddPaymentMethodEvent extends OwnerEvent {
-  final String name;
-
-  AddPaymentMethodEvent(this.name);
-}
-
-class RenamePaymentMethodEvent extends OwnerEvent {
-  final String id;
-  final String name;
-
-  RenamePaymentMethodEvent({required this.id, required this.name});
-}
-
 class LoadStoreProfileEvent extends OwnerEvent {}
 
 class UpdateStoreProfileEvent extends OwnerEvent {

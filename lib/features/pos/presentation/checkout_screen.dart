@@ -7,6 +7,7 @@ import '../../../core/utils/currency_formatter.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/step_progress_header.dart';
+import '../../shell/bloc/outlet_scope_cubit.dart';
 import '../bloc/cart_bloc.dart';
 import '../bloc/cart_event.dart';
 import '../bloc/cart_state.dart';
@@ -21,7 +22,8 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  String _selectedPaymentChoice = 'cash'; // 'cash' | 'upi' | 'delivery'
+  String? _selectedMethodId;
+  bool _isDelivery = false;
 
   void _handleBack(BuildContext context) {
     DiscardOrderDialog.show(
@@ -54,7 +56,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         },
         builder: (context, state) {
           final totalAmount = state.totalAmount;
-          final isPrepaid = _selectedPaymentChoice != 'delivery';
+          final outletScope = context.watch<OutletScopeCubit>().state;
+          final outletId = state.outletId;
+          final outlet = outletId != null
+              ? outletScope.allowed.where((o) => o.id == outletId).firstOrNull
+              : null;
+          final outletName = outlet?.displayName;
+
+          final hasSelection = _isDelivery ||
+              state.paymentMethods.any((m) => m.id == _selectedMethodId);
 
           return Scaffold(
             backgroundColor: AppColors.surface,
@@ -228,43 +238,86 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
                           const SizedBox(height: 22),
 
+                          if (outletName != null) ...[
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.storefront_outlined,
+                                  size: 16,
+                                  color: AppColors.mutedText,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    outletName,
+                                    style: const TextStyle(
+                                      fontFamily: AppTextStyles.fontBody,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.text,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
                           Text('PAYMENT METHOD', style: AppTextStyles.label),
                           const SizedBox(height: 10),
 
-                          // Cash Choice
-                          _buildPaymentOption(
-                            id: 'cash',
-                            title: 'Cash',
-                            subtitle: 'Pay full amount now',
-                            icon: Icons.payments_outlined,
-                            isSelected: _selectedPaymentChoice == 'cash',
-                            onTap: () =>
-                                setState(() => _selectedPaymentChoice = 'cash'),
-                          ),
-                          const SizedBox(height: 10),
+                          if (state.paymentMethods.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 10),
+                              child: Text(
+                                'No payment methods are enabled. Ask the owner to enable one in Profile → Payment methods.',
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.fontBody,
+                                  fontSize: 13,
+                                  color: AppColors.mutedText,
+                                  height: 1.4,
+                                ),
+                              ),
+                            )
+                          else
+                            ...state.paymentMethods.map((method) {
+                              final isSelected = !_isDelivery &&
+                                  _selectedMethodId == method.id;
+                              final icon = (method.type == 'UPI' ||
+                                      method.name
+                                          .toUpperCase()
+                                          .contains('UPI'))
+                                  ? Icons.qr_code_scanner_outlined
+                                  : (method.name.toLowerCase().contains('card')
+                                      ? Icons.credit_card_outlined
+                                      : Icons.payments_outlined);
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _buildPaymentOption(
+                                  id: method.id,
+                                  title: method.name,
+                                  subtitle: 'Pay full amount now',
+                                  icon: icon,
+                                  isSelected: isSelected,
+                                  onTap: () => setState(() {
+                                    _selectedMethodId = method.id;
+                                    _isDelivery = false;
+                                  }),
+                                ),
+                              );
+                            }),
 
-                          // UPI Choice
-                          _buildPaymentOption(
-                            id: 'upi',
-                            title: 'UPI',
-                            subtitle: 'Google Pay, PhonePe, Paytm',
-                            icon: Icons.qr_code_scanner_outlined,
-                            isSelected: _selectedPaymentChoice == 'upi',
-                            onTap: () =>
-                                setState(() => _selectedPaymentChoice = 'upi'),
-                          ),
-                          const SizedBox(height: 10),
-
-                          // Pay on delivery Choice
+                          // Pay on delivery Choice (always present)
                           _buildPaymentOption(
                             id: 'delivery',
                             title: 'Pay on delivery',
                             subtitle: 'Collect full amount at handover',
                             icon: Icons.schedule_outlined,
-                            isSelected: _selectedPaymentChoice == 'delivery',
-                            onTap: () => setState(
-                              () => _selectedPaymentChoice = 'delivery',
-                            ),
+                            isSelected: _isDelivery,
+                            onTap: () => setState(() {
+                              _selectedMethodId = null;
+                              _isDelivery = true;
+                            }),
                           ),
                         ],
                       ),
@@ -284,18 +337,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       vertical: 16,
                     ),
                     child: PrimaryButton(
-                      label: isPrepaid
-                          ? 'Place order · ${CurrencyFormatter.format(totalAmount)}'
-                          : 'Place order · Pay on delivery',
+                      label: _isDelivery
+                          ? 'Place order · Pay on delivery'
+                          : 'Place order · ${CurrencyFormatter.format(totalAmount)}',
                       isLoading: state.isSubmitting,
-                      onPressed: state.isSubmitting
+                      onPressed: (state.isSubmitting || !hasSelection)
                           ? null
                           : () {
-                              context.read<CartBloc>().add(
-                                SubmitOrderEvent(
-                                  paymentChoice: _selectedPaymentChoice,
-                                ),
-                              );
+                              if (_isDelivery) {
+                                context.read<CartBloc>().add(
+                                  SubmitOrderEvent(
+                                    paymentChoice: 'delivery',
+                                  ),
+                                );
+                              } else if (_selectedMethodId != null) {
+                                final method = state.paymentMethods
+                                    .where((m) => m.id == _selectedMethodId)
+                                    .firstOrNull;
+                                if (method != null) {
+                                  context.read<CartBloc>().add(
+                                    SubmitOrderEvent(
+                                      paymentChoice: 'prepaid',
+                                      paymentMethodName: method.name,
+                                    ),
+                                  );
+                                }
+                              }
                             },
                     ),
                   ),

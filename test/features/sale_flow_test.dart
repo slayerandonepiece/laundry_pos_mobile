@@ -245,9 +245,9 @@ void main() {
           cartBloc.stream.skip(1), // skip isLoading: true
           emits(
             predicate<dynamic>((state) {
+              // The bloc shows a friendly message, not the raw exception.
               return !state.isLoading &&
-                  state.error != null &&
-                  state.error!.contains('Network failed');
+                  state.error == 'Could not refresh products — try again';
             }),
           ),
         );
