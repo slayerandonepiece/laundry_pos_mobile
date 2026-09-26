@@ -176,7 +176,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       // (never awaited) so a slow or offline server can't hold up the
       // dialog-close path above. If it fails, that's fine: the payment and
       // status are already saved locally, and invoice generation is retried
-      // the next time this order's detail screen is opened.
+      // by SyncEngine after the next clean sync (retryMissingInvoices).
       () async {
         try {
           await ordersRepository.getOrCreateInvoice(event.orderCode);
@@ -186,8 +186,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           // number shows up on screen now instead of only next reopen.
           if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
         } catch (_) {
-          // Ignored — invoice generation retried the next time this
-          // order's detail screen is opened.
+          // Ignored — invoice generation retried by SyncEngine after the
+          // next clean sync (retryMissingInvoices).
         }
       }();
 
@@ -238,8 +238,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       // server-assigned) — it can't be made local-first. Fire-and-forget
       // (never awaited) so a slow or offline server can't hold up the
       // dialog-close path above. If it fails, the status/payment are
-      // already saved locally, and invoice generation is retried the next
-      // time this order's detail screen is opened.
+      // already saved locally, and invoice generation is retried by
+      // SyncEngine after the next clean sync (retryMissingInvoices).
       () async {
         try {
           await ordersRepository.getOrCreateInvoice(event.orderCode);
@@ -249,8 +249,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           // number shows up on screen now instead of only next reopen.
           if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
         } catch (_) {
-          // Ignored — invoice generation retried the next time this
-          // order's detail screen is opened.
+          // Ignored — invoice generation retried by SyncEngine after the
+          // next clean sync (retryMissingInvoices).
         }
       }();
 

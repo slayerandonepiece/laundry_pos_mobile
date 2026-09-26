@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
@@ -16,6 +18,7 @@ class _FakeOwnerRepository implements OwnerRepository {
   List<StaffMember>? cachedStaff;
   List<StorePaymentMethod>? cachedMethods;
   StoreProfile? cachedProfile;
+  bool shouldThrowOnStaff = false;
   final List<String> networkCalls = [];
 
   @override
@@ -47,6 +50,7 @@ class _FakeOwnerRepository implements OwnerRepository {
   @override
   Future<List<StaffMember>> listStaff() async {
     networkCalls.add('staff');
+    if (shouldThrowOnStaff) throw Exception('network error');
     return [];
   }
 
@@ -133,6 +137,28 @@ void main() {
       fillCache();
       await run(LoadDashboardEvent(from: '2026-09-01', to: '2026-09-10'));
       expect(repo.networkCalls, ['dashboard 2026-09-01-2026-09-10']);
+    });
+
+    test('LoadStaffEvent completes done on success, failure, and cache-only path', () async {
+      // 1. Cache-only path
+      fillCache();
+      final cCache = Completer<void>();
+      bloc.add(LoadStaffEvent(refresh: false, done: cCache));
+      await cCache.future;
+      expect(cCache.isCompleted, isTrue);
+
+      // 2. Refresh success path
+      final cSuccess = Completer<void>();
+      bloc.add(LoadStaffEvent(refresh: true, done: cSuccess));
+      await cSuccess.future;
+      expect(cSuccess.isCompleted, isTrue);
+
+      // 3. Refresh failure path
+      repo.shouldThrowOnStaff = true;
+      final cFail = Completer<void>();
+      bloc.add(LoadStaffEvent(refresh: true, done: cFail));
+      await cFail.future;
+      expect(cFail.isCompleted, isTrue);
     });
   });
 }

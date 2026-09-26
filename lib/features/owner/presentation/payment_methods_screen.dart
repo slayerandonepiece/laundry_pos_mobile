@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -31,6 +33,15 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             SnackBar(
               content: Text(state.actionMessage!),
               backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -91,16 +102,28 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
+                    final done = Completer<void>();
                     context.read<OwnerBloc>().add(
-                      LoadPaymentMethodsEvent(refresh: true),
+                      LoadPaymentMethodsEvent(refresh: true, done: done),
                     );
+                    await done.future;
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(20),
                     children: [
                       // Existing payment methods list
-                      if (methods.isNotEmpty) ...[
+                      if (state.isLoading && methods.isEmpty) ...[
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ] else if (methods.isNotEmpty) ...[
                         ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),

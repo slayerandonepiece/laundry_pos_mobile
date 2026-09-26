@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -73,6 +75,15 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
             ),
           );
         }
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       },
       builder: (context, state) {
         final displayName = _nameController.text.isNotEmpty
@@ -134,9 +145,11 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                 child: RefreshIndicator(
                   onRefresh: () async {
                     _isInitialized = false;
+                    final done = Completer<void>();
                     context.read<OwnerBloc>().add(
-                      LoadStoreProfileEvent(refresh: true),
+                      LoadStoreProfileEvent(refresh: true, done: done),
                     );
+                    await done.future;
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

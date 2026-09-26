@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
+import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
@@ -15,12 +16,27 @@ import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
+import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 
+class _NoOpSyncEngine extends SyncEngine {
+  _NoOpSyncEngine({
+    required super.ordersRepository,
+    required super.ownerRepository,
+  }) : super.internal();
+
+  @override
+  Future<void> retryNow() async {}
+
+  @override
+  Future<void> trigger({bool forceFromStart = false}) async {}
+}
+
 class FakeDashboardOwnerRepository implements OwnerRepository {
   DashboardMetrics metrics;
+  bool shouldThrow = false;
 
   FakeDashboardOwnerRepository({required this.metrics});
 
@@ -28,7 +44,10 @@ class FakeDashboardOwnerRepository implements OwnerRepository {
   Future<DashboardMetrics> getDashboardMetrics({
     String? from,
     String? to,
-  }) async => metrics;
+  }) async {
+    if (shouldThrow) throw Exception('Network error');
+    return metrics;
+  }
 
   @override
   DashboardMetrics? getCachedDashboardMetricsSync() => null;
@@ -62,6 +81,9 @@ class MockOrdersBloc extends Bloc<OrdersEvent, OrdersState>
   MockOrdersBloc([List<Order> orders = const []])
     : super(OrdersState(allOrders: orders)) {
     on<LoadOrdersEvent>((event, emit) {});
+    on<RefreshOrdersEvent>(
+      (event, emit) => emit(state.copyWith(isLoading: false)),
+    );
   }
 
   @override
@@ -144,6 +166,10 @@ void main() {
         ),
       ];
 
+      SyncEngine.instance = _NoOpSyncEngine(
+        ordersRepository: mockOrdersRepo,
+        ownerRepository: fakeOwnerRepo,
+      );
       ownerBloc = OwnerBloc(ownerRepository: fakeOwnerRepo);
       ordersBloc = OrdersBloc(ordersRepository: mockOrdersRepo);
       authBloc = MockAuthBloc();
@@ -617,6 +643,67 @@ void main() {
         // Inline From / To selector appears
         expect(find.text('FROM'), findsOneWidget);
         expect(find.text('TO'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '13. Dashboard alone shows its own load error SnackBar when route is current',
+      (tester) async {
+        fakeOwnerRepo.shouldThrow = true;
+        ownerBloc = OwnerBloc(ownerRepository: fakeOwnerRepo);
+
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(
+          find.text('Could not load dashboard — try again'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      '14. Dashboard does not show error SnackBar when another route with an OwnerBloc listener is pushed on top',
+      (tester) async {
+        ownerBloc = OwnerBloc(ownerRepository: fakeOwnerRepo);
+
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pump();
+
+        // Push a second route on top with its own OwnerBloc error listener.
+        final navContext = tester.element(find.byType(OwnerDashboardScreen));
+        Navigator.of(navContext).push(
+          MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              body: BlocListener<OwnerBloc, OwnerState>(
+                listener: (context, state) {
+                  if (state.error != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(state.error!)),
+                    );
+                  }
+                },
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Emit an error while the second route is on top.
+        fakeOwnerRepo.shouldThrow = true;
+        ownerBloc.add(LoadDashboardEvent(refresh: true));
+        await tester.pumpAndSettle();
+
+        const error = 'Could not load dashboard — try again';
+        expect(find.text(error), findsOneWidget);
+
+        // Advance past the first SnackBar's display duration and exit animation;
+        // no second queued SnackBar from the backgrounded dashboard should appear.
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+        expect(find.text(error), findsNothing);
       },
     );
   });

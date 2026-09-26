@@ -416,38 +416,6 @@ class OwnerRepository {
     return StaffMember.fromJson(Map<String, dynamic>.from(response as Map));
   }
 
-  Future<StaffMember> _createStaffOffline({
-    required String name,
-    required String username,
-    required String password,
-  }) async {
-    final localId = 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
-    final localStaff = StaffMember(
-      id: localId,
-      name: name.trim(),
-      username: username.trim(),
-      active: true,
-    );
-    final cached = localCache.getCachedStaff() ?? [];
-    cached.insert(0, localStaff.toJson());
-    await localCache.setCachedStaff(cached);
-
-    await localCache.enqueueOwnerAction({
-      'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
-      'type': 'create_staff',
-      'payload': {
-        'localId': localId,
-        'name': name.trim(),
-        'username': username.trim(),
-        'password': password,
-      },
-      'queuedAt': DateTime.now().toIso8601String(),
-    });
-
-    SyncEngine.instance.trigger();
-    return localStaff;
-  }
-
   /// Adds a new staff member with a generated or chosen temporary password
   Future<StaffMember> createStaff({
     required String name,
@@ -456,11 +424,7 @@ class OwnerRepository {
   }) async {
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
-      return _createStaffOffline(
-        name: name,
-        username: username,
-        password: password,
-      );
+      throw Exception('Adding staff needs an internet connection');
     }
 
     try {
@@ -476,11 +440,7 @@ class OwnerRepository {
     } catch (e) {
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
       if (reallyOffline) {
-        return _createStaffOffline(
-          name: name,
-          username: username,
-          password: password,
-        );
+        throw Exception('Adding staff needs an internet connection');
       }
       rethrow;
     }
@@ -941,7 +901,36 @@ class OwnerRepository {
     final idMap = <String, String>{};
     var allSuccess = true;
 
-    for (final action in queue) {
+    Future<void> rewriteQueuedId(
+      String field,
+      String localId,
+      String serverId,
+    ) async {
+      for (var j = 0; j < queue.length; j++) {
+        final p = Map<String, dynamic>.from(queue[j]['payload'] as Map? ?? {});
+        if (p[field]?.toString() == localId) {
+          p[field] = serverId;
+          queue[j] = {...queue[j], 'payload': p};
+        }
+      }
+      final persisted = localCache.getPendingOwnerActionsQueue();
+      var changed = false;
+      final rewritten = persisted.map((a) {
+        final p = Map<String, dynamic>.from(a['payload'] as Map? ?? {});
+        if (p[field]?.toString() == localId) {
+          p[field] = serverId;
+          changed = true;
+          return {...a, 'payload': p};
+        }
+        return a;
+      }).toList();
+      if (changed) {
+        await localCache.setPendingOwnerActionsQueue(rewritten);
+      }
+    }
+
+    for (var i = 0; i < queue.length; i++) {
+      final action = queue[i];
       final actionId = action['clientActionId']?.toString() ?? '';
       final type = action['type']?.toString() ?? '';
       final payload = Map<String, dynamic>.from(
@@ -965,6 +954,7 @@ class OwnerRepository {
             );
             if (localId != null && localId.isNotEmpty) {
               idMap[localId] = serverExpense.id;
+              await rewriteQueuedId('expenseId', localId, serverExpense.id);
               final cached = localCache.getCachedExpenses() ?? [];
               final idx = cached.indexWhere(
                 (e) => e['id']?.toString() == localId,
@@ -1006,6 +996,7 @@ class OwnerRepository {
             );
             if (localId != null && localId.isNotEmpty) {
               idMap[localId] = serverStaff.id;
+              await rewriteQueuedId('employeeId', localId, serverStaff.id);
               final cached = localCache.getCachedStaff() ?? [];
               final idx = cached.indexWhere(
                 (s) => s['id']?.toString() == localId,

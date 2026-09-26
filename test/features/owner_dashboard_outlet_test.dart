@@ -141,6 +141,9 @@ class FakeOrdersBloc extends Bloc<OrdersEvent, OrdersState>
   FakeOrdersBloc([List<Order> orders = const []])
     : super(OrdersState(allOrders: orders)) {
     on<LoadOrdersEvent>((event, emit) {});
+    on<RefreshOrdersEvent>(
+      (event, emit) => emit(state.copyWith(isLoading: false)),
+    );
   }
 
   @override

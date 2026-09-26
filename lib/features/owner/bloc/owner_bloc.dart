@@ -30,35 +30,41 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadDashboardEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    // Opening the screen shows the cache only; the network is used on
-    // refresh, for a custom date range (only the default period is cached),
-    // or when nothing is cached yet.
-    final isCustomRange = event.from != null || event.to != null;
-    final cachedMetrics = isCustomRange
-        ? null
-        : ownerRepository.getCachedDashboardMetricsSync();
-    if (cachedMetrics != null) {
-      emit(state.copyWith(metrics: cachedMetrics, error: null));
-      if (!event.refresh) return;
-    } else {
-      emit(state.copyWith(isLoading: true, error: null));
-    }
     try {
-      final metrics = await ownerRepository.getDashboardMetrics(
-        from: event.from,
-        to: event.to,
-      );
-      emit(state.copyWith(isLoading: false, metrics: metrics));
-    } catch (e) {
-      AppLogger.log(_tag, 'load dashboard failed', error: e);
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: cachedMetrics == null
-              ? 'Could not load dashboard — try again'
-              : null,
-        ),
-      );
+      // Opening the screen shows the cache only; the network is used on
+      // refresh, for a custom date range (only the default period is cached),
+      // or when nothing is cached yet.
+      final isCustomRange = event.from != null || event.to != null;
+      final cachedMetrics = isCustomRange
+          ? null
+          : ownerRepository.getCachedDashboardMetricsSync();
+      if (cachedMetrics != null) {
+        emit(state.copyWith(metrics: cachedMetrics, error: null));
+        if (!event.refresh) return;
+      } else {
+        emit(state.copyWith(isLoading: true, error: null));
+      }
+      try {
+        final metrics = await ownerRepository.getDashboardMetrics(
+          from: event.from,
+          to: event.to,
+        );
+        emit(state.copyWith(isLoading: false, metrics: metrics));
+      } catch (e) {
+        AppLogger.log(_tag, 'load dashboard failed', error: e);
+        emit(
+          state.copyWith(
+            isLoading: false,
+            error: cachedMetrics == null
+                ? 'Could not load dashboard — try again'
+                : null,
+          ),
+        );
+      }
+    } finally {
+      if (event.done != null && !event.done!.isCompleted) {
+        event.done!.complete();
+      }
     }
   }
 
@@ -66,26 +72,32 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadExpensesEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    final cachedExpenses = ownerRepository.getCachedExpensesSync();
-    if (cachedExpenses != null) {
-      emit(state.copyWith(expenses: cachedExpenses, error: null));
-      if (!event.refresh) return;
-    } else {
-      emit(state.copyWith(isLoading: true, error: null));
-    }
     try {
-      final expenses = await ownerRepository.listExpenses();
-      emit(state.copyWith(isLoading: false, expenses: expenses));
-    } catch (e) {
-      AppLogger.log(_tag, 'load expenses failed', error: e);
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: cachedExpenses == null
-              ? 'Could not load expenses — try again'
-              : null,
-        ),
-      );
+      final cachedExpenses = ownerRepository.getCachedExpensesSync();
+      if (cachedExpenses != null) {
+        emit(state.copyWith(expenses: cachedExpenses, error: null));
+        if (!event.refresh) return;
+      } else {
+        emit(state.copyWith(isLoading: true, error: null));
+      }
+      try {
+        final expenses = await ownerRepository.listExpenses();
+        emit(state.copyWith(isLoading: false, expenses: expenses));
+      } catch (e) {
+        AppLogger.log(_tag, 'load expenses failed', error: e);
+        emit(
+          state.copyWith(
+            isLoading: false,
+            error: cachedExpenses == null
+                ? 'Could not load expenses — try again'
+                : null,
+          ),
+        );
+      }
+    } finally {
+      if (event.done != null && !event.done!.isCompleted) {
+        event.done!.complete();
+      }
     }
   }
 
@@ -141,26 +153,32 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadStaffEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    final cachedStaff = ownerRepository.getCachedStaffSync();
-    if (cachedStaff != null) {
-      emit(state.copyWith(staff: cachedStaff, error: null));
-      if (!event.refresh) return;
-    } else {
-      emit(state.copyWith(isLoading: true, error: null));
-    }
     try {
-      final staff = await ownerRepository.listStaff();
-      emit(state.copyWith(isLoading: false, staff: staff));
-    } catch (e) {
-      AppLogger.log(_tag, 'load staff failed', error: e);
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: cachedStaff == null
-              ? 'Could not load staff — try again'
-              : null,
-        ),
-      );
+      final cachedStaff = ownerRepository.getCachedStaffSync();
+      if (cachedStaff != null) {
+        emit(state.copyWith(staff: cachedStaff, error: null));
+        if (!event.refresh) return;
+      } else {
+        emit(state.copyWith(isLoading: true, error: null));
+      }
+      try {
+        final staff = await ownerRepository.listStaff();
+        emit(state.copyWith(isLoading: false, staff: staff));
+      } catch (e) {
+        AppLogger.log(_tag, 'load staff failed', error: e);
+        emit(
+          state.copyWith(
+            isLoading: false,
+            error: cachedStaff == null
+                ? 'Could not load staff — try again'
+                : null,
+          ),
+        );
+      }
+    } finally {
+      if (event.done != null && !event.done!.isCompleted) {
+        event.done!.complete();
+      }
     }
   }
 
@@ -185,10 +203,15 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       );
     } catch (e) {
       AppLogger.log(_tag, 'add staff failed', error: e);
+      final isOfflineError = e.toString().contains(
+        'Adding staff needs an internet connection',
+      );
       emit(
         state.copyWith(
           isLoading: false,
-          error: 'Could not add staff — try again',
+          error: isOfflineError
+              ? 'Adding staff needs an internet connection'
+              : 'Could not add staff — try again',
         ),
       );
     }
@@ -242,26 +265,32 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadPaymentMethodsEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    final cachedMethods = ownerRepository.getCachedPaymentMethodsSync();
-    if (cachedMethods != null) {
-      emit(state.copyWith(paymentMethods: cachedMethods, error: null));
-      if (!event.refresh) return;
-    } else {
-      emit(state.copyWith(isLoading: true, error: null));
-    }
     try {
-      final methods = await ownerRepository.listPaymentMethods();
-      emit(state.copyWith(isLoading: false, paymentMethods: methods));
-    } catch (e) {
-      AppLogger.log(_tag, 'load payment methods failed', error: e);
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: cachedMethods == null
-              ? 'Could not load payment methods — try again'
-              : null,
-        ),
-      );
+      final cachedMethods = ownerRepository.getCachedPaymentMethodsSync();
+      if (cachedMethods != null) {
+        emit(state.copyWith(paymentMethods: cachedMethods, error: null));
+        if (!event.refresh) return;
+      } else {
+        emit(state.copyWith(isLoading: true, error: null));
+      }
+      try {
+        final methods = await ownerRepository.listPaymentMethods();
+        emit(state.copyWith(isLoading: false, paymentMethods: methods));
+      } catch (e) {
+        AppLogger.log(_tag, 'load payment methods failed', error: e);
+        emit(
+          state.copyWith(
+            isLoading: false,
+            error: cachedMethods == null
+                ? 'Could not load payment methods — try again'
+                : null,
+          ),
+        );
+      }
+    } finally {
+      if (event.done != null && !event.done!.isCompleted) {
+        event.done!.complete();
+      }
     }
   }
 
@@ -285,26 +314,32 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadStoreProfileEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    final cachedProfile = ownerRepository.getCachedStoreProfileSync();
-    if (cachedProfile != null) {
-      emit(state.copyWith(storeProfile: cachedProfile, error: null));
-      if (!event.refresh) return;
-    } else {
-      emit(state.copyWith(isLoading: true, error: null));
-    }
     try {
-      final profile = await ownerRepository.getStoreProfile();
-      emit(state.copyWith(isLoading: false, storeProfile: profile));
-    } catch (e) {
-      AppLogger.log(_tag, 'load store profile failed', error: e);
-      emit(
-        state.copyWith(
-          isLoading: false,
-          error: cachedProfile == null
-              ? 'Could not load store profile — try again'
-              : null,
-        ),
-      );
+      final cachedProfile = ownerRepository.getCachedStoreProfileSync();
+      if (cachedProfile != null) {
+        emit(state.copyWith(storeProfile: cachedProfile, error: null));
+        if (!event.refresh) return;
+      } else {
+        emit(state.copyWith(isLoading: true, error: null));
+      }
+      try {
+        final profile = await ownerRepository.getStoreProfile();
+        emit(state.copyWith(isLoading: false, storeProfile: profile));
+      } catch (e) {
+        AppLogger.log(_tag, 'load store profile failed', error: e);
+        emit(
+          state.copyWith(
+            isLoading: false,
+            error: cachedProfile == null
+                ? 'Could not load store profile — try again'
+                : null,
+          ),
+        );
+      }
+    } finally {
+      if (event.done != null && !event.done!.isCompleted) {
+        event.done!.complete();
+      }
     }
   }
 

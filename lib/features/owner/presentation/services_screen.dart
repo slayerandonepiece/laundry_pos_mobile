@@ -58,6 +58,13 @@ class _ServicesScreenState extends State<ServicesScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not load services — try again'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 

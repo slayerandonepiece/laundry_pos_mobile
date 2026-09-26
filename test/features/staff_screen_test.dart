@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,11 +14,16 @@ class FakeOwnerRepository extends OwnerRepository {
   Map<String, dynamic>? lastCreatedStaff;
   Map<String, dynamic>? lastUpdatedStaff;
   String? lastToggledId;
+  Future<List<StaffMember>> Function()? listStaffOverride;
 
   FakeOwnerRepository() : super(apiClient: ApiClient());
 
   @override
+  List<StaffMember>? getCachedStaffSync() => null;
+
+  @override
   Future<List<StaffMember>> listStaff() async {
+    if (listStaffOverride != null) return listStaffOverride!();
     return staff;
   }
 
@@ -300,5 +307,29 @@ void main() {
       expect(fakeRepo.lastToggledId, 'emp-1');
       expect(fakeRepo.staff.firstWhere((m) => m.id == 'emp-1').active, isFalse);
     });
+
+    testWidgets(
+      'Shows first-load spinner while loading with empty cache and SnackBar on failure',
+      (tester) async {
+        fakeRepo.staff = [];
+        final completer = Completer<List<StaffMember>>();
+        fakeRepo.listStaffOverride = () => completer.future;
+        ownerBloc = OwnerBloc(ownerRepository: fakeRepo);
+
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pump();
+
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+        completer.completeError(Exception('Network down'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          find.text('Could not load staff — try again'),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }

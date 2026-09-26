@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -308,6 +310,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             ),
           );
         }
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       },
       builder: (context, state) {
         final allExpenses = state.expenses;
@@ -439,9 +450,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
+                    final done = Completer<void>();
                     context.read<OwnerBloc>().add(
-                      LoadExpensesEvent(refresh: true),
+                      LoadExpensesEvent(refresh: true, done: done),
                     );
+                    await done.future;
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -677,7 +690,16 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       const SizedBox(height: 16),
 
                       // 5. Ledger list or Empty state
-                      if (displayedExpenses.isEmpty)
+                      if (state.isLoading && allExpenses.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        )
+                      else if (displayedExpenses.isEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 30),
                           child: EmptyState(

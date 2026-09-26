@@ -30,6 +30,7 @@ class MockApiClient implements ApiClient {
   final List<dynamic> patchBodies = [];
   bool shouldThrow = false;
   Exception? errorToThrow;
+  void Function(String url)? onPost;
 
   @override
   Future<dynamic> get(
@@ -52,6 +53,7 @@ class MockApiClient implements ApiClient {
   }) async {
     postUrls.add(url);
     postBodies.add(body);
+    onPost?.call(url);
     if (shouldThrow) throw errorToThrow ?? Exception('Network failure');
     for (final entry in responses.entries) {
       if (url.contains(entry.key)) return entry.value;
@@ -167,38 +169,28 @@ void main() {
     );
 
     test(
-      'createStaff offline: queues action and optimistically updates cache',
+      'createStaff offline: throws and does not queue or cache password',
       () async {
         mockConnectivity.mockOffline = true;
 
-        final staff = await ownerRepo.createStaff(
-          name: 'Jane Operator',
-          username: 'jane_op',
-          password: 'secret_password_123',
+        await expectLater(
+          () => ownerRepo.createStaff(
+            name: 'Jane Operator',
+            username: 'jane_op',
+            password: 'secret_password_123',
+          ),
+          throwsA(
+            predicate(
+              (e) => e.toString().contains(
+                'Adding staff needs an internet connection',
+              ),
+            ),
+          ),
         );
 
-        // 1. Returned staff member has placeholder ID
-        expect(staff.id.startsWith('LOCAL-'), isTrue);
-        expect(staff.name, 'Jane Operator');
-        expect(staff.username, 'jane_op');
-        expect(staff.active, isTrue);
-
-        // 2. LocalCache is optimistically updated
-        final cached = localCache.getCachedStaff();
-        expect(cached, isNotNull);
-        expect(cached!.length, 1);
-        expect(cached.first['id'], staff.id);
-        expect(cached.first['name'], 'Jane Operator');
-
-        // 3. Action is appended to owner actions queue
-        final queue = localCache.getPendingOwnerActionsQueue();
-        expect(queue.length, 1);
-        expect(queue.first['type'], 'create_staff');
-        expect(queue.first['payload']['username'], 'jane_op');
-        expect(queue.first['payload']['localId'], staff.id);
-
-        // 4. Combined pending count reflects queued action
-        expect(localCache.getTotalPendingCount(), 1);
+        expect(localCache.getPendingOwnerActionsQueue(), isEmpty);
+        expect(localCache.getCachedStaff(), isNull);
+        expect(localCache.getTotalPendingCount(), 0);
       },
     );
 
@@ -355,13 +347,27 @@ void main() {
       expect(cached.any((e) => e['id'] == localExpense.id), isFalse);
     });
 
-    test('processPendingOwnerActions replays create_staff and reconciles placeholder in cache', () async {
-      mockConnectivity.mockOffline = true;
-      final localStaff = await ownerRepo.createStaff(
-        name: 'Sam Tech',
-        username: 'sam_tech',
-        password: 'password123',
-      );
+    test('processPendingOwnerActions replays legacy queued create_staff and reconciles placeholder in cache', () async {
+      const localStaffId = 'LOCAL-legacy-staff-1';
+      await localCache.setCachedStaff([
+        {
+          'id': localStaffId,
+          'name': 'Sam Tech',
+          'username': 'sam_tech',
+          'active': true,
+        },
+      ]);
+      await localCache.enqueueOwnerAction({
+        'clientActionId': 'owner_legacy_staff',
+        'type': 'create_staff',
+        'payload': {
+          'localId': localStaffId,
+          'name': 'Sam Tech',
+          'username': 'sam_tech',
+          'password': 'password123',
+        },
+        'queuedAt': DateTime.now().toIso8601String(),
+      });
       expect(localCache.getPendingOwnerActionsQueue().length, 1);
 
       mockConnectivity.mockOffline = false;
@@ -381,7 +387,7 @@ void main() {
       final cached = localCache.getCachedStaff();
       expect(cached!.length, 1);
       expect(cached.first['id'], 'staff_srv_888');
-      expect(cached.any((s) => s['id'] == localStaff.id), isFalse);
+      expect(cached.any((s) => s['id'] == localStaffId), isFalse);
     });
 
     test('Dependent action resolution: createExpense offline then markExpensePaid offline resolves ID on drain', () async {
@@ -427,6 +433,59 @@ void main() {
           ApiEndpoints.markExpensePaid('exp_srv_999'),
         ),
         isTrue,
+      );
+    });
+
+    test('Dependent action resolution across runs: create_expense rewrites remaining mark_expense_paid payload when drain stops mid-way', () async {
+      mockConnectivity.mockOffline = true;
+
+      final localExpense = await ownerRepo.createExpense(
+        title: 'Water Bill',
+        category: 'Utilities',
+        amount: 3200,
+        due: '2026-09-25',
+        monthly: true,
+      );
+      await ownerRepo.markExpensePaid(localExpense.id);
+      expect(localCache.getPendingOwnerActionsQueue().length, 2);
+
+      // First drain: create_expense succeeds, then phone goes offline on mark_expense_paid
+      mockConnectivity.mockOffline = false;
+      mockApiClient.responses[ApiEndpoints.expenses] = {
+        'id': 'exp_srv_777',
+        'title': 'Water Bill',
+        'category': 'Utilities',
+        'amount': 3200,
+        'due': '2026-09-25',
+        'monthly': true,
+      };
+      mockApiClient.onPost = (url) {
+        if (url == ApiEndpoints.markExpensePaid('exp_srv_777')) {
+          mockConnectivity.mockOffline = true;
+          throw Exception('Connection lost');
+        }
+      };
+
+      final firstRun = await ownerRepo.processPendingOwnerActions();
+      expect(firstRun, isFalse);
+
+      // Remaining queued mark_expense_paid has rewritten expenseId
+      final remaining = localCache.getPendingOwnerActionsQueue();
+      expect(remaining.length, 1);
+      expect(remaining.first['type'], 'mark_expense_paid');
+      expect(remaining.first['payload']['expenseId'], 'exp_srv_777');
+
+      // Second drain: back online, mark_expense_paid succeeds with exp_srv_777
+      mockConnectivity.mockOffline = false;
+      mockApiClient.onPost = null;
+      mockApiClient.postUrls.clear();
+
+      final secondRun = await ownerRepo.processPendingOwnerActions();
+      expect(secondRun, isTrue);
+      expect(localCache.getPendingOwnerActionsQueue(), isEmpty);
+      expect(
+        mockApiClient.postUrls,
+        contains(ApiEndpoints.markExpensePaid('exp_srv_777')),
       );
     });
 

@@ -235,9 +235,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
           body: RefreshIndicator(
             onRefresh: () async {
-              context.read<OrdersBloc>().add(
-                LoadOrderDetailEvent(order.orderCode),
-              );
+              final bloc = context.read<OrdersBloc>();
+              bloc.add(LoadOrderDetailEvent(order.orderCode));
+              await bloc.stream.firstWhere((s) => !s.isLoading);
             },
             child: ListView(
               padding: const EdgeInsets.all(20),

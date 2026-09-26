@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -233,7 +235,20 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       hasMultipleStores = authState.availableStores.length > 1;
     }
 
-    final body = BlocBuilder<OwnerBloc, OwnerState>(
+    final body = BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          curr.error != null && (ModalRoute.of(context)?.isCurrent ?? true),
+      listener: (context, ownerState) {
+        if (ownerState.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ownerState.error!),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      },
       builder: (context, ownerState) {
         final metrics = ownerState.metrics;
         final ordersState = context.watch<OrdersBloc>().state;
@@ -252,10 +267,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: () async {
+                  final done = Completer<void>();
+                  final ordersBloc = context.read<OrdersBloc>();
                   context.read<OwnerBloc>().add(
-                    LoadDashboardEvent(refresh: true),
+                    LoadDashboardEvent(refresh: true, done: done),
                   );
-                  context.read<OrdersBloc>().add(LoadOrdersEvent());
+                  ordersBloc.add(RefreshOrdersEvent());
+                  await Future.wait([
+                    done.future,
+                    ordersBloc.stream.firstWhere((s) => !s.isLoading),
+                  ]);
                 },
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -430,7 +451,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     context.read<OwnerBloc>().add(
                       LoadDashboardEvent(refresh: true),
                     );
-                    context.read<OrdersBloc>().add(LoadOrdersEvent());
+                    context.read<OrdersBloc>().add(RefreshOrdersEvent());
                   },
                 );
               }
@@ -446,7 +467,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             tooltip: 'Refresh',
             onPressed: () {
               context.read<OwnerBloc>().add(LoadDashboardEvent(refresh: true));
-              context.read<OrdersBloc>().add(LoadOrdersEvent());
+              context.read<OrdersBloc>().add(RefreshOrdersEvent());
             },
           ),
           const SizedBox(width: 8),

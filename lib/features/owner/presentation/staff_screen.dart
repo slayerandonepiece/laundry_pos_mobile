@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -68,6 +70,15 @@ class _StaffScreenState extends State<StaffScreen> {
             SnackBar(
               content: Text(state.actionMessage!),
               backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -154,9 +165,11 @@ class _StaffScreenState extends State<StaffScreen> {
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
+                    final done = Completer<void>();
                     context.read<OwnerBloc>().add(
-                      LoadStaffEvent(refresh: true),
+                      LoadStaffEvent(refresh: true, done: done),
                     );
+                    await done.future;
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -235,7 +248,16 @@ class _StaffScreenState extends State<StaffScreen> {
                       const SizedBox(height: 16),
 
                       // 3. Employee cards or empty state
-                      if (staff.isEmpty)
+                      if (state.isLoading && staff.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        )
+                      else if (staff.isEmpty)
                         const Padding(
                           padding: EdgeInsets.only(top: 40),
                           child: EmptyState(

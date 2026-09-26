@@ -1,3 +1,5 @@
+import 'dart:async';
+
 abstract class OwnerEvent {}
 
 // Load* events read the local cache only (network only when nothing is
@@ -7,14 +9,16 @@ class LoadDashboardEvent extends OwnerEvent {
   final String? from;
   final String? to;
   final bool refresh;
+  final Completer<void>? done;
 
-  LoadDashboardEvent({this.from, this.to, this.refresh = false});
+  LoadDashboardEvent({this.from, this.to, this.refresh = false, this.done});
 }
 
 class LoadExpensesEvent extends OwnerEvent {
   final bool refresh;
+  final Completer<void>? done;
 
-  LoadExpensesEvent({this.refresh = false});
+  LoadExpensesEvent({this.refresh = false, this.done});
 }
 
 class AddExpenseEvent extends OwnerEvent {
@@ -41,8 +45,9 @@ class MarkExpensePaidEvent extends OwnerEvent {
 
 class LoadStaffEvent extends OwnerEvent {
   final bool refresh;
+  final Completer<void>? done;
 
-  LoadStaffEvent({this.refresh = false});
+  LoadStaffEvent({this.refresh = false, this.done});
 }
 
 class AddStaffEvent extends OwnerEvent {
@@ -77,8 +82,9 @@ class UpdateStaffEvent extends OwnerEvent {
 
 class LoadPaymentMethodsEvent extends OwnerEvent {
   final bool refresh;
+  final Completer<void>? done;
 
-  LoadPaymentMethodsEvent({this.refresh = false});
+  LoadPaymentMethodsEvent({this.refresh = false, this.done});
 }
 
 class TogglePaymentMethodEvent extends OwnerEvent {
@@ -90,8 +96,9 @@ class TogglePaymentMethodEvent extends OwnerEvent {
 
 class LoadStoreProfileEvent extends OwnerEvent {
   final bool refresh;
+  final Completer<void>? done;
 
-  LoadStoreProfileEvent({this.refresh = false});
+  LoadStoreProfileEvent({this.refresh = false, this.done});
 }
 
 class UpdateStoreProfileEvent extends OwnerEvent {

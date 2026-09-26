@@ -6,6 +6,7 @@ import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
+import 'package:myshop/core/sync/app_resume_sync.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/theme/app_theme.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
@@ -110,6 +111,7 @@ class _MyShopAppState extends State<MyShopApp> {
   late final CartBloc _cartBloc;
   late final OrdersBloc _ordersBloc;
   late final OwnerBloc _ownerBloc;
+  late final AppResumeSync _appResumeSync;
 
   /// The setup (syncing) screen runs on a fresh login and when the active
   /// outlet scope has never been synced to this phone (no cached order
@@ -164,6 +166,7 @@ class _MyShopAppState extends State<MyShopApp> {
   void initState() {
     super.initState();
     ConnectivityService.instance.start();
+    _appResumeSync = AppResumeSync();
 
     _authBloc = AuthBloc(
       authRepository: widget.authRepository,
@@ -211,6 +214,7 @@ class _MyShopAppState extends State<MyShopApp> {
 
   @override
   void dispose() {
+    _appResumeSync.dispose();
     ConnectivityService.instance.dispose();
     _authBloc.close();
     _outletScopeCubit.close();

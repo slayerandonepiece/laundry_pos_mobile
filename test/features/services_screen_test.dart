@@ -12,14 +12,19 @@ import 'package:myshop/shared/widgets/app_text_field.dart';
 class FakePosRepository extends PosRepository {
   List<Product> products = [];
   int listProductsCallCount = 0;
+  bool shouldThrowOnList = false;
 
   FakePosRepository({required List<Product> initialProducts})
     : products = initialProducts,
       super(apiClient: ApiClient(), localCache: LocalCacheService());
 
   @override
+  List<Product> getCachedProductsList() => [];
+
+  @override
   Future<List<Product>> listProducts() async {
     listProductsCallCount++;
+    if (shouldThrowOnList) throw Exception('Failed to load services');
     return products;
   }
 }
@@ -498,5 +503,21 @@ void main() {
       expect(find.byType(ListView), findsOneWidget);
       expect(find.byType(GridView), findsNothing);
     });
+
+    testWidgets(
+      'Shows error SnackBar when listProducts throws',
+      (tester) async {
+        fakePosRepo.shouldThrowOnList = true;
+
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          find.text('Could not load services — try again'),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }
