@@ -107,6 +107,7 @@ void main() {
     Hive.init(tempDir.path);
     await Hive.openBox(LocalCacheService.boxName);
     localCache = LocalCacheService();
+    await localCache.setActiveStoreId('store_1');
     mockConnectivity = MockConnectivityService(mockOffline: false);
     ConnectivityService.instance = mockConnectivity;
     mockApiClient = MockApiClient();

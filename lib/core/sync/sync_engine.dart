@@ -91,6 +91,14 @@ class SyncEngine {
   }
 
   Future<void> _runSync() async {
+    String? activeStoreId;
+    try {
+      activeStoreId = _localCache.getActiveStoreId();
+    } catch (_) {}
+    if (activeStoreId == null) {
+      AppLogger.log(_tag, '_runSync(): not signed in -> skipping');
+      return;
+    }
     AppLogger.log(_tag, '_runSync(): start');
     if (ConnectivityService.instance.isOffline) {
       var count = 0;

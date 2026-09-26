@@ -62,5 +62,24 @@ void main() {
         {'id': 'EL-1', 'offlineId': 'u2'},
       );
     });
+
+    test('mergeServerJson keeps cached invoice when server has none', () {
+      const cachedInv = {'exists': true, 'invoiceSeq': 12};
+      const serverInv = {'exists': true, 'invoiceSeq': 99};
+      expect(
+        Order.mergeServerJson(
+          {'id': 'EL-1', 'invoice': cachedInv},
+          {'id': 'EL-1'},
+        ),
+        {'id': 'EL-1', 'invoice': cachedInv},
+      );
+      expect(
+        Order.mergeServerJson(
+          {'id': 'EL-1', 'invoice': cachedInv},
+          {'id': 'EL-1', 'invoice': serverInv},
+        ),
+        {'id': 'EL-1', 'invoice': serverInv},
+      );
+    });
   });
 }

@@ -1,11 +1,13 @@
 class StorePaymentMethod {
   final String id;
+  final String code;
   final String name;
   final String type;
   final bool active;
 
   StorePaymentMethod({
     required this.id,
+    this.code = '',
     required this.name,
     String? type,
     this.active = true,
@@ -15,6 +17,7 @@ class StorePaymentMethod {
     final name = json['name']?.toString() ?? '';
     return StorePaymentMethod(
       id: json['id']?.toString() ?? '',
+      code: json['code']?.toString() ?? '',
       name: name,
       type:
           json['type']?.toString() ??
@@ -24,6 +27,12 @@ class StorePaymentMethod {
   }
 
   Map<String, dynamic> toJson() {
-    return {'id': id, 'name': name, 'type': type, 'active': active};
+    return {
+      'id': id,
+      'code': code,
+      'name': name,
+      'type': type,
+      'active': active,
+    };
   }
 }

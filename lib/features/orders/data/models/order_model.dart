@@ -226,17 +226,22 @@ class Order {
   }
 
   /// A server order map merged over the cached one: keeps the cached
-  /// offline id when the server has none (a web order edited in the app).
+  /// offline id and invoice when the server has none.
   static Map<String, dynamic> mergeServerJson(
     Map<String, dynamic>? cached,
     Map<String, dynamic> server,
   ) {
     final serverOff = server['offlineId']?.toString() ?? '';
     final cachedOff = cached?['offlineId']?.toString() ?? '';
-    if (serverOff.isEmpty && cachedOff.isNotEmpty) {
-      return {...server, 'offlineId': cachedOff};
-    }
-    return server;
+    final keepOff = serverOff.isEmpty && cachedOff.isNotEmpty;
+    final cachedInv = cached?['invoice'];
+    final keepInv = server['invoice'] == null && cachedInv != null;
+    if (!keepOff && !keepInv) return server;
+    return {
+      ...server,
+      if (keepOff) 'offlineId': cachedOff,
+      if (keepInv) 'invoice': cachedInv,
+    };
   }
   DateTime get createdAt => DateTime.tryParse(date)?.toLocal() ?? DateTime.now();
   DateTime get dueDateTime => DateTime.tryParse(due)?.toLocal() ?? DateTime.now();

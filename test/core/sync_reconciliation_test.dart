@@ -69,6 +69,7 @@ void main() {
     Hive.init(tempDir.path);
     await Hive.openBox(LocalCacheService.boxName);
     localCache = LocalCacheService();
+    await localCache.setActiveStoreId('store_1');
     mockApiClient = MockApiClient();
     repository = OrdersRepository(
       apiClient: mockApiClient,
@@ -618,6 +619,67 @@ void main() {
       final cached = repository.getCachedOrdersList();
       expect(cached.any((o) => o.id == 'EL-RUN2'), isTrue);
     });
+
+    test(
+      'SyncEngine skips sync when not signed in and runs once active store is set',
+      () async {
+        await localCache.clearActiveStoreId();
+        await localCache.setPendingSyncQueue([
+          {
+            'type': 'update_status',
+            'clientActionId': 'act_unauth_1',
+            'orderCode': 'EL-100',
+            'status': 'Ready',
+          },
+        ]);
+        mockApiClient.postResponse = {'results': []};
+        mockApiClient.getResponse = {'orders': [], 'nextCursor': null};
+
+        await SyncEngine.instance.trigger();
+
+        expect(mockApiClient.getCallCount, 0);
+        expect(mockApiClient.postCallCount, 0);
+
+        await localCache.setActiveStoreId('store_1');
+        await SyncEngine.instance.trigger();
+
+        expect(mockApiClient.postCallCount, 1);
+        expect(mockApiClient.getCallCount, 1);
+      },
+    );
+
+    test(
+      'syncOrdersDelta preserves cached invoice when server order omits invoice',
+      () async {
+        await localCache.setCachedOrders([
+          {
+            'id': 'EL-1001',
+            'status': 'Delivered',
+            'lines': [],
+            'payments': [],
+            'invoice': {'exists': true, 'invoiceSeq': 42},
+          },
+        ]);
+
+        mockApiClient.getResponse = {
+          'orders': [
+            {
+              'id': 'EL-1001',
+              'status': 'Delivered',
+              'lines': [],
+              'payments': [],
+            },
+          ],
+          'nextCursor': null,
+        };
+
+        expect(await repository.syncOrdersDelta(), isTrue);
+
+        final cached = repository.getCachedOrdersList().single;
+        expect(cached.invoice, isNotNull);
+        expect(cached.invoice!.invoiceSeq, 42);
+      },
+    );
   });
 
   group('Two ids per order (offlineId)', () {

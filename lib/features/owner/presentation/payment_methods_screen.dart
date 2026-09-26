@@ -137,11 +137,13 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                                             color: AppColors.text,
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          method.type,
-                                          style: AppTextStyles.hint,
-                                        ),
+                                        if (method.code.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            method.code,
+                                            style: AppTextStyles.hint,
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
