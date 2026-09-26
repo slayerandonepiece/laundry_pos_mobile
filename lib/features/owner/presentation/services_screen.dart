@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
+import 'package:myshop/core/utils/idempotency.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/pos/data/models/product_model.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
@@ -682,6 +683,8 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
   late List<_TierEntry> _tiers;
   bool _isSaving = false;
   String? _errorMessage;
+  late final String _productId =
+      widget.product?.id ?? IdempotencyKeyGenerator.generate();
 
   bool get _isEditing => widget.product != null;
 
@@ -797,6 +800,7 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
         );
       } else {
         await context.read<OwnerRepository>().createProduct(
+          id: _productId,
           name: name,
           category: _category,
           unit: _unit,

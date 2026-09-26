@@ -21,7 +21,7 @@ import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
-import 'package:myshop/shared/widgets/outlet_switcher.dart';
+import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
@@ -224,9 +224,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     final outletScopeCubit = context.watch<OutletScopeCubit?>();
-    final outletScope = outletScopeCubit?.state ?? const OutletScope.empty();
-    final hasOutletChoice =
-        outletScope.allowed.length > 1 || outletScope.isOwner;
     String storeName = 'MyShop';
     bool hasMultipleStores = false;
 
@@ -237,8 +234,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
 
     final body = BlocConsumer<OwnerBloc, OwnerState>(
       listenWhen: (prev, curr) =>
-          curr.error != null && (ModalRoute.of(context)?.isCurrent ?? true),
+          curr.error != null &&
+          curr.messageSection == OwnerSection.dashboard &&
+          (ModalRoute.of(context)?.isCurrent ?? true),
       listener: (context, ownerState) {
+        if (ownerState.messageSection != OwnerSection.dashboard) return;
         if (ownerState.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -288,10 +288,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (hasOutletChoice) ...[
-                              const OutletSwitcher(showAllOutletsOption: true),
-                              const SizedBox(height: 12),
-                            ],
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -424,15 +420,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         backgroundColor: AppColors.surface,
         elevation: 0,
         titleSpacing: 20,
-        title: const Text(
-          'Dashboard',
-          style: TextStyle(
-            fontFamily: AppTextStyles.fontDisplay,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.6,
-            color: AppColors.text,
-          ),
+        title: const OutletTitleSwitcher(
+          screenLabel: 'Dashboard',
+          showAllOutletsOption: true,
         ),
         actions: [
           ValueListenableBuilder<SyncState>(

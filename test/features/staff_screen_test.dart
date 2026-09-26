@@ -32,11 +32,13 @@ class FakeOwnerRepository extends OwnerRepository {
     required String name,
     required String username,
     required String password,
+    String? idempotencyKey,
   }) async {
     lastCreatedStaff = {
       'name': name,
       'username': username,
       'password': password,
+      'idempotencyKey': idempotencyKey,
     };
     final newMember = StaffMember(
       id: 'emp-${DateTime.now().millisecondsSinceEpoch}',

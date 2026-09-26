@@ -27,7 +27,11 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          curr.messageSection == OwnerSection.paymentMethods &&
+          (curr.error != null || curr.actionMessage != null),
       listener: (context, state) {
+        if (state.messageSection != OwnerSection.paymentMethods) return;
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -113,7 +117,8 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                     padding: const EdgeInsets.all(20),
                     children: [
                       // Existing payment methods list
-                      if (state.isLoading && methods.isEmpty) ...[
+                      if (state.loading.contains(OwnerSection.paymentMethods) &&
+                          methods.isEmpty) ...[
                         const Padding(
                           padding: EdgeInsets.only(top: 40),
                           child: Center(

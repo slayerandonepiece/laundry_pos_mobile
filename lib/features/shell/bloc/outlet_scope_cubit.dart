@@ -114,6 +114,12 @@ class OutletScopeCubit extends Cubit<OutletScope> {
     );
   }
 
+  bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) =>
+      _localCache.hasCachedOrdersFor(
+        outletId: outletId,
+        allOutlets: allOutlets,
+      );
+
   /// Applies the O3 initial-scope defaults right after a fresh login, then
   /// hydrates from what was just written.
   void adoptFromLogin({required bool isOwner}) {

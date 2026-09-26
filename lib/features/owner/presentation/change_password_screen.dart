@@ -33,7 +33,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          curr.messageSection == OwnerSection.profile &&
+          (curr.error != null || curr.actionMessage != null),
       listener: (context, state) {
+        if (state.messageSection != OwnerSection.profile) return;
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -165,7 +169,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
               PrimaryButton(
                 label: 'Update password',
-                isLoading: state.isLoading,
+                isLoading: state.loading.contains(OwnerSection.profile),
                 onPressed: () {
                   final current = _currentPasswordController.text;
                   final newPass = _newPasswordController.text;

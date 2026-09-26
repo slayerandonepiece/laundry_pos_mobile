@@ -119,7 +119,10 @@ class OrdersRepository {
   }
 
   /// Fetches single order details including invoice state
-  Future<Order> getOrderDetail(String orderCode) async {
+  Future<Order> getOrderDetail(
+    String orderCode, {
+    bool fallbackToCache = true,
+  }) async {
     try {
       final response = await _apiClient.get(
         ApiEndpoints.orderDetail(orderCode),
@@ -131,6 +134,7 @@ class OrdersRepository {
       }
       throw Exception('Failed to load order details');
     } catch (_) {
+      if (!fallbackToCache) rethrow;
       final cached = _localCache.getCachedOrders();
       if (cached != null) {
         final match = cached.firstWhere(

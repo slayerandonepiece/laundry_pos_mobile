@@ -15,7 +15,7 @@ import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
-import 'package:myshop/shared/widgets/outlet_switcher.dart';
+import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 
 class FakeLocalCache extends LocalCacheService {
 
@@ -91,6 +91,9 @@ class FakeLocalCache extends LocalCacheService {
   Future<void> clearAllOutletsScope() async {
     allOutletsScope = false;
   }
+
+  @override
+  bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) => true;
 }
 
 class FakeDashboardOwnerRepository implements OwnerRepository {
@@ -252,7 +255,7 @@ void main() {
       await tester.pumpWidget(buildScreen(cubit));
       await pumpDashboard(tester);
 
-      expect(find.byType(OutletSwitcher), findsOneWidget);
+      expect(find.byType(OutletTitleSwitcher), findsOneWidget);
       expect(find.text('All outlets'), findsOneWidget);
     });
 
@@ -295,6 +298,50 @@ void main() {
       expect(ownerBloc.loadDashboardEvents.length, 2);
       expect(fakeOwnerRepo.calls, isEmpty);
     });
+
+    testWidgets(
+      'Picking an outlet on the Dashboard switcher also updates the Orders switcher via shared OutletScopeCubit',
+      (tester) async {
+        final cache = FakeLocalCache();
+        final cubit = OutletScopeCubit(localCache: cache)..hydrate();
+        addTearDown(cubit.close);
+
+        final outlet2Name = cubit.state.allowed[1].displayName;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BlocProvider<OutletScopeCubit>.value(
+              value: cubit,
+              child: const Scaffold(
+                body: Column(
+                  children: [
+                    OutletTitleSwitcher(
+                      screenLabel: 'Dashboard',
+                      showAllOutletsOption: true,
+                    ),
+                    OutletTitleSwitcher(
+                      screenLabel: 'Orders',
+                      showAllOutletsOption: true,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('All outlets'), findsNWidgets(2));
+
+        await tester.tap(find.text('All outlets').first);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text(outlet2Name));
+        await tester.pumpAndSettle();
+
+        expect(find.text(outlet2Name), findsNWidgets(2));
+        expect(find.text('All outlets'), findsNothing);
+      },
+    );
 
     testWidgets(
       'New M0 vocabulary labels render and old labels do not appear',

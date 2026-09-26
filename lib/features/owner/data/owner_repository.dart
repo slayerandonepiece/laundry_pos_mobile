@@ -6,6 +6,7 @@ import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
+import 'package:myshop/core/utils/idempotency.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/models/expense_model.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
@@ -27,7 +28,7 @@ class OwnerRepository {
   DashboardMetrics? getCachedDashboardMetricsSync() {
     try {
       final cached = localCache.getCachedDashboardMetrics();
-      if (cached == null || cached.isEmpty) return null;
+      if (cached == null) return null;
       return DashboardMetrics.fromJson(cached);
     } catch (_) {
       return null;
@@ -111,7 +112,7 @@ class OwnerRepository {
   List<Expense>? getCachedExpensesSync() {
     try {
       final cached = localCache.getCachedExpenses();
-      if (cached == null || cached.isEmpty) return null;
+      if (cached == null) return null;
       return cached.map((e) => Expense.fromJson(e)).toList();
     } catch (_) {
       return null;
@@ -123,7 +124,7 @@ class OwnerRepository {
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       final cached = localCache.getCachedExpenses();
-      if (cached != null && cached.isNotEmpty) {
+      if (cached != null) {
         final expenses = cached.map((e) => Expense.fromJson(e)).toList();
         final pendingCount = localCache.getTotalPendingCount();
         SyncManager.instance.setOffline(
@@ -153,7 +154,7 @@ class OwnerRepository {
     } catch (e) {
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
       final cached = localCache.getCachedExpenses();
-      if (cached != null && cached.isNotEmpty) {
+      if (cached != null) {
         final expenses = cached.map((e) => Expense.fromJson(e)).toList();
         final pendingCount = localCache.getTotalPendingCount();
         if (reallyOffline) {
@@ -180,8 +181,12 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    String? idempotencyKey,
     String? outletHeader,
   }) async {
+    final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+        ? idempotencyKey.trim()
+        : IdempotencyKeyGenerator.generate();
     final response = await apiClient.post(
       ApiEndpoints.expenses,
       headers: outletHeader != null ? {'X-Outlet-Id': outletHeader} : null,
@@ -191,6 +196,7 @@ class OwnerRepository {
         'amount': amount,
         'due': due,
         'monthly': monthly,
+        'idempotencyKey': key,
       },
     );
     return Expense.fromJson(Map<String, dynamic>.from(response as Map));
@@ -202,6 +208,7 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    required String idempotencyKey,
   }) async {
     final localId = 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
     final localExpense = Expense(
@@ -229,6 +236,7 @@ class OwnerRepository {
         'amount': amount,
         'due': due,
         'monthly': monthly,
+        'idempotencyKey': idempotencyKey,
       },
       'queuedAt': DateTime.now().toIso8601String(),
     });
@@ -244,7 +252,11 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    String? idempotencyKey,
   }) async {
+    final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+        ? idempotencyKey.trim()
+        : IdempotencyKeyGenerator.generate();
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       return _createExpenseOffline(
@@ -253,6 +265,7 @@ class OwnerRepository {
         amount: amount,
         due: due,
         monthly: monthly,
+        idempotencyKey: key,
       );
     }
 
@@ -263,6 +276,7 @@ class OwnerRepository {
         amount: amount,
         due: due,
         monthly: monthly,
+        idempotencyKey: key,
       );
       final cached = localCache.getCachedExpenses() ?? [];
       cached.insert(0, expense.toJson());
@@ -277,6 +291,7 @@ class OwnerRepository {
           amount: amount,
           due: due,
           monthly: monthly,
+          idempotencyKey: key,
         );
       }
       rethrow;
@@ -338,7 +353,7 @@ class OwnerRepository {
   List<StaffMember>? getCachedStaffSync() {
     try {
       final cached = localCache.getCachedStaff();
-      if (cached == null || cached.isEmpty) return null;
+      if (cached == null) return null;
       return cached.map((s) => StaffMember.fromJson(s)).toList();
     } catch (_) {
       return null;
@@ -350,7 +365,7 @@ class OwnerRepository {
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       final cached = localCache.getCachedStaff();
-      if (cached != null && cached.isNotEmpty) {
+      if (cached != null) {
         final staff = cached.map((s) => StaffMember.fromJson(s)).toList();
         final pendingCount = localCache.getTotalPendingCount();
         SyncManager.instance.setOffline(
@@ -380,7 +395,7 @@ class OwnerRepository {
     } catch (e) {
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
       final cached = localCache.getCachedStaff();
-      if (cached != null && cached.isNotEmpty) {
+      if (cached != null) {
         final staff = cached.map((s) => StaffMember.fromJson(s)).toList();
         final pendingCount = localCache.getTotalPendingCount();
         if (reallyOffline) {
@@ -404,13 +419,18 @@ class OwnerRepository {
     required String name,
     required String username,
     required String password,
+    String? idempotencyKey,
   }) async {
+    final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+        ? idempotencyKey.trim()
+        : IdempotencyKeyGenerator.generate();
     final response = await apiClient.post(
       ApiEndpoints.employees,
       body: {
         'name': name.trim(),
         'username': username.trim(),
         'password': password,
+        'idempotencyKey': key,
       },
     );
     return StaffMember.fromJson(Map<String, dynamic>.from(response as Map));
@@ -421,7 +441,11 @@ class OwnerRepository {
     required String name,
     required String username,
     required String password,
+    String? idempotencyKey,
   }) async {
+    final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+        ? idempotencyKey.trim()
+        : IdempotencyKeyGenerator.generate();
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       throw Exception('Adding staff needs an internet connection');
@@ -432,6 +456,7 @@ class OwnerRepository {
         name: name,
         username: username,
         password: password,
+        idempotencyKey: key,
       );
       final cached = localCache.getCachedStaff() ?? [];
       cached.insert(0, staff.toJson());
@@ -447,25 +472,50 @@ class OwnerRepository {
   }
 
   Future<void> _toggleStaffActiveDirect(String employeeId) async {
-    await apiClient.patch(
+    await apiClient.post(
       ApiEndpoints.toggleEmployeeActive(employeeId),
       body: {},
     );
   }
 
-  Future<void> _toggleStaffActiveOffline(String employeeId) async {
+  Future<void> _setStaffActiveDirect({
+    required String employeeId,
+    required String name,
+    required String username,
+    required bool active,
+  }) async {
+    await apiClient.put(
+      ApiEndpoints.employeeDetail(employeeId),
+      body: {
+        'name': name.trim(),
+        'username': username.trim(),
+        'active': active,
+      },
+    );
+  }
+
+  Future<void> _setStaffActiveOffline({
+    required String employeeId,
+    required String name,
+    required String username,
+    required bool active,
+  }) async {
     final cached = localCache.getCachedStaff() ?? [];
     final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
     if (idx != -1) {
-      final currentActive = cached[idx]['active'] != false;
-      cached[idx] = {...cached[idx], 'active': !currentActive};
+      cached[idx] = {...cached[idx], 'active': active};
       await localCache.setCachedStaff(cached);
     }
 
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
-      'type': 'toggle_staff_active',
-      'payload': {'employeeId': employeeId},
+      'type': 'set_staff_active',
+      'payload': {
+        'employeeId': employeeId,
+        'name': name.trim(),
+        'username': username.trim(),
+        'active': active,
+      },
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
@@ -474,25 +524,50 @@ class OwnerRepository {
 
   /// Toggles active status of employee
   Future<void> toggleStaffActive(String employeeId) async {
+    final cached = localCache.getCachedStaff() ?? [];
+    final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
+    final name = idx != -1 ? (cached[idx]['name']?.toString() ?? '') : '';
+    final username = idx != -1
+        ? (cached[idx]['username']?.toString() ?? '')
+        : '';
+    final currentActive = idx != -1 ? (cached[idx]['active'] != false) : true;
+    final newActive = !currentActive;
+
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
-      await _toggleStaffActiveOffline(employeeId);
+      await _setStaffActiveOffline(
+        employeeId: employeeId,
+        name: name,
+        username: username,
+        active: newActive,
+      );
       return;
     }
 
     try {
-      await _toggleStaffActiveDirect(employeeId);
-      final cached = localCache.getCachedStaff() ?? [];
-      final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
-      if (idx != -1) {
-        final currentActive = cached[idx]['active'] != false;
-        cached[idx] = {...cached[idx], 'active': !currentActive};
-        await localCache.setCachedStaff(cached);
+      await _setStaffActiveDirect(
+        employeeId: employeeId,
+        name: name,
+        username: username,
+        active: newActive,
+      );
+      final freshCached = localCache.getCachedStaff() ?? [];
+      final freshIdx = freshCached.indexWhere(
+        (s) => s['id']?.toString() == employeeId,
+      );
+      if (freshIdx != -1) {
+        freshCached[freshIdx] = {...freshCached[freshIdx], 'active': newActive};
+        await localCache.setCachedStaff(freshCached);
       }
     } catch (e) {
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
       if (reallyOffline) {
-        await _toggleStaffActiveOffline(employeeId);
+        await _setStaffActiveOffline(
+          employeeId: employeeId,
+          name: name,
+          username: username,
+          active: newActive,
+        );
         return;
       }
       rethrow;
@@ -503,10 +578,19 @@ class OwnerRepository {
     required String employeeId,
     required String name,
     required String username,
+    bool? active,
   }) async {
-    final response = await apiClient.patch(
+    final cached = localCache.getCachedStaff() ?? [];
+    final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
+    final resolvedActive =
+        active ?? (idx != -1 ? (cached[idx]['active'] != false) : true);
+    final response = await apiClient.put(
       ApiEndpoints.employeeDetail(employeeId),
-      body: {'name': name.trim(), 'username': username.trim()},
+      body: {
+        'name': name.trim(),
+        'username': username.trim(),
+        'active': resolvedActive,
+      },
     );
     return StaffMember.fromJson(Map<String, dynamic>.from(response as Map));
   }
@@ -543,6 +627,7 @@ class OwnerRepository {
         'employeeId': employeeId,
         'name': name.trim(),
         'username': username.trim(),
+        'active': member.active,
       },
       'queuedAt': DateTime.now().toIso8601String(),
     });
@@ -596,7 +681,7 @@ class OwnerRepository {
   List<StorePaymentMethod>? getCachedPaymentMethodsSync() {
     try {
       final cached = localCache.getCachedPaymentMethods();
-      if (cached == null || cached.isEmpty) return null;
+      if (cached == null) return null;
       return cached.map((m) => StorePaymentMethod.fromJson(m)).toList();
     } catch (_) {
       return null;
@@ -791,14 +876,14 @@ class OwnerRepository {
     required String name,
     required String email,
   }) async {
-    final response = await apiClient.patch(
+    final response = await apiClient.put(
       ApiEndpoints.profile,
       body: {
-        'storeName': storeName.trim(),
-        'address': address.trim(),
-        'phone': phone.trim(),
         'name': name.trim(),
+        'phone': phone.trim(),
         'email': email.trim(),
+        'store': storeName.trim(),
+        'address': address.trim(),
       },
     );
     return StoreProfile.fromJson(Map<String, dynamic>.from(response as Map));
@@ -948,6 +1033,7 @@ class OwnerRepository {
               amount: (payload['amount'] as num?)?.toInt() ?? 0,
               due: payload['due']?.toString() ?? '',
               monthly: payload['monthly'] == true,
+              idempotencyKey: payload['idempotencyKey']?.toString(),
               outletHeader: action.containsKey('outletId')
                   ? (action['outletId'] as String? ?? kNoOutletHeader)
                   : null,
@@ -993,6 +1079,7 @@ class OwnerRepository {
               name: payload['name']?.toString() ?? '',
               username: payload['username']?.toString() ?? '',
               password: payload['password']?.toString() ?? '',
+              idempotencyKey: payload['idempotencyKey']?.toString(),
             );
             if (localId != null && localId.isNotEmpty) {
               idMap[localId] = serverStaff.id;
@@ -1010,6 +1097,28 @@ class OwnerRepository {
             }
             break;
 
+          case 'set_staff_active':
+            final rawId = payload['employeeId']?.toString() ?? '';
+            final resolvedId = idMap[rawId] ?? rawId;
+            final newActive = payload['active'] == true;
+            await _setStaffActiveDirect(
+              employeeId: resolvedId,
+              name: payload['name']?.toString() ?? '',
+              username: payload['username']?.toString() ?? '',
+              active: newActive,
+            );
+            final cached = localCache.getCachedStaff() ?? [];
+            final idx = cached.indexWhere(
+              (s) =>
+                  s['id']?.toString() == resolvedId ||
+                  s['id']?.toString() == rawId,
+            );
+            if (idx != -1) {
+              cached[idx] = {...cached[idx], 'active': newActive};
+              await localCache.setCachedStaff(cached);
+            }
+            break;
+
           case 'toggle_staff_active':
             final rawId = payload['employeeId']?.toString() ?? '';
             final resolvedId = idMap[rawId] ?? rawId;
@@ -1023,6 +1132,7 @@ class OwnerRepository {
               employeeId: resolvedId,
               name: payload['name']?.toString() ?? '',
               username: payload['username']?.toString() ?? '',
+              active: payload['active'] as bool?,
             );
             final cached = localCache.getCachedStaff() ?? [];
             final idx = cached.indexWhere(
@@ -1160,8 +1270,8 @@ class OwnerRepository {
     );
   }
 
-  /// Creates a new catalogue service/product
-  Future<Product> createProduct({
+  Future<Product> _upsertProduct({
+    required String id,
     required String name,
     required String category,
     required String unit,
@@ -1170,19 +1280,53 @@ class OwnerRepository {
     bool? active,
     int? extra,
   }) async {
-    final response = await apiClient.post(
-      ApiEndpoints.products,
-      body: {
-        'name': name.trim(),
-        'category': category.trim(),
-        'unit': unit,
-        'price': price,
-        if (slabs.isNotEmpty) 'slabs': slabs,
-        'active': ?active,
-        'extra': ?extra,
-      },
-    );
+    final isWeight = unit.trim().toLowerCase() == 'weight';
+    final body = isWeight
+        ? <String, dynamic>{
+            'id': id,
+            'name': name.trim(),
+            'category': category.trim(),
+            'active': active ?? true,
+            'type': 'weight',
+            'slabs': slabs,
+            'extra': extra ?? 0,
+          }
+        : <String, dynamic>{
+            'id': id,
+            'name': name.trim(),
+            'category': category.trim(),
+            'active': active ?? true,
+            'type': 'item',
+            'price': price,
+          };
+    final response = await apiClient.post(ApiEndpoints.products, body: body);
     return Product.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  /// Creates a new catalogue service/product
+  Future<Product> createProduct({
+    String? id,
+    required String name,
+    required String category,
+    required String unit,
+    required int price,
+    List<Map<String, dynamic>> slabs = const [],
+    bool? active,
+    int? extra,
+  }) async {
+    final productId = (id != null && id.trim().isNotEmpty)
+        ? id.trim()
+        : IdempotencyKeyGenerator.generate();
+    return _upsertProduct(
+      id: productId,
+      name: name,
+      category: category,
+      unit: unit,
+      price: price,
+      slabs: slabs,
+      active: active,
+      extra: extra,
+    );
   }
 
   /// Updates an existing product
@@ -1196,18 +1340,15 @@ class OwnerRepository {
     bool? active,
     int? extra,
   }) async {
-    final response = await apiClient.patch(
-      '${ApiEndpoints.products}/$id',
-      body: {
-        'name': name.trim(),
-        'category': category.trim(),
-        'unit': unit,
-        'price': price,
-        'slabs': slabs,
-        'active': ?active,
-        'extra': ?extra,
-      },
+    return _upsertProduct(
+      id: id,
+      name: name,
+      category: category,
+      unit: unit,
+      price: price,
+      slabs: slabs,
+      active: active,
+      extra: extra,
     );
-    return Product.fromJson(Map<String, dynamic>.from(response as Map));
   }
 }

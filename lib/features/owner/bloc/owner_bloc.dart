@@ -26,6 +26,14 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     on<ChangePasswordSubmittedEvent>(_onChangePasswordSubmitted);
   }
 
+  Set<OwnerSection> _addLoading(OwnerSection section) => {
+    ...state.loading,
+    section,
+  };
+
+  Set<OwnerSection> _removeLoading(OwnerSection section) =>
+      {...state.loading}..remove(section);
+
   Future<void> _onLoadDashboard(
     LoadDashboardEvent event,
     Emitter<OwnerState> emit,
@@ -42,22 +50,34 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         emit(state.copyWith(metrics: cachedMetrics, error: null));
         if (!event.refresh) return;
       } else {
-        emit(state.copyWith(isLoading: true, error: null));
+        emit(
+          state.copyWith(
+            loading: _addLoading(OwnerSection.dashboard),
+            error: null,
+          ),
+        );
       }
       try {
         final metrics = await ownerRepository.getDashboardMetrics(
           from: event.from,
           to: event.to,
         );
-        emit(state.copyWith(isLoading: false, metrics: metrics));
-      } catch (e) {
-        AppLogger.log(_tag, 'load dashboard failed', error: e);
         emit(
           state.copyWith(
-            isLoading: false,
-            error: cachedMetrics == null
-                ? 'Could not load dashboard — try again'
-                : null,
+            loading: _removeLoading(OwnerSection.dashboard),
+            metrics: metrics,
+          ),
+        );
+      } catch (e) {
+        AppLogger.log(_tag, 'load dashboard failed', error: e);
+        final err = cachedMetrics == null
+            ? 'Could not load dashboard — try again'
+            : null;
+        emit(
+          state.copyWith(
+            loading: _removeLoading(OwnerSection.dashboard),
+            error: err,
+            messageSection: err != null ? OwnerSection.dashboard : null,
           ),
         );
       }
@@ -78,19 +98,31 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         emit(state.copyWith(expenses: cachedExpenses, error: null));
         if (!event.refresh) return;
       } else {
-        emit(state.copyWith(isLoading: true, error: null));
+        emit(
+          state.copyWith(
+            loading: _addLoading(OwnerSection.expenses),
+            error: null,
+          ),
+        );
       }
       try {
         final expenses = await ownerRepository.listExpenses();
-        emit(state.copyWith(isLoading: false, expenses: expenses));
-      } catch (e) {
-        AppLogger.log(_tag, 'load expenses failed', error: e);
         emit(
           state.copyWith(
-            isLoading: false,
-            error: cachedExpenses == null
-                ? 'Could not load expenses — try again'
-                : null,
+            loading: _removeLoading(OwnerSection.expenses),
+            expenses: expenses,
+          ),
+        );
+      } catch (e) {
+        AppLogger.log(_tag, 'load expenses failed', error: e);
+        final err = cachedExpenses == null
+            ? 'Could not load expenses — try again'
+            : null;
+        emit(
+          state.copyWith(
+            loading: _removeLoading(OwnerSection.expenses),
+            error: err,
+            messageSection: err != null ? OwnerSection.expenses : null,
           ),
         );
       }
@@ -105,7 +137,12 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     AddExpenseEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    emit(
+      state.copyWith(
+        loading: _addLoading(OwnerSection.expenses),
+        error: null,
+      ),
+    );
     try {
       await ownerRepository.createExpense(
         title: event.title,
@@ -113,21 +150,24 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         amount: event.amount,
         due: event.due,
         monthly: event.monthly,
+        idempotencyKey: event.idempotencyKey,
       );
       final updated = await ownerRepository.listExpenses();
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.expenses),
           expenses: updated,
           actionMessage: 'Expense recorded successfully',
+          messageSection: OwnerSection.expenses,
         ),
       );
     } catch (e) {
       AppLogger.log(_tag, 'add expense failed', error: e);
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.expenses),
           error: 'Could not add expense — try again',
+          messageSection: OwnerSection.expenses,
         ),
       );
     }
@@ -137,15 +177,32 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     MarkExpensePaidEvent event,
     Emitter<OwnerState> emit,
   ) async {
+    emit(
+      state.copyWith(
+        loading: _addLoading(OwnerSection.expenses),
+        error: null,
+      ),
+    );
     try {
       await ownerRepository.markExpensePaid(event.expenseId);
       final updated = await ownerRepository.listExpenses();
       emit(
-        state.copyWith(expenses: updated, actionMessage: 'Expense marked paid'),
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.expenses),
+          expenses: updated,
+          actionMessage: 'Expense marked paid',
+          messageSection: OwnerSection.expenses,
+        ),
       );
     } catch (e) {
       AppLogger.log(_tag, 'mark expense paid failed', error: e);
-      emit(state.copyWith(error: 'Could not mark expense paid — try again'));
+      emit(
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.expenses),
+          error: 'Could not mark expense paid — try again',
+          messageSection: OwnerSection.expenses,
+        ),
+      );
     }
   }
 
@@ -159,19 +216,31 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         emit(state.copyWith(staff: cachedStaff, error: null));
         if (!event.refresh) return;
       } else {
-        emit(state.copyWith(isLoading: true, error: null));
+        emit(
+          state.copyWith(
+            loading: _addLoading(OwnerSection.staff),
+            error: null,
+          ),
+        );
       }
       try {
         final staff = await ownerRepository.listStaff();
-        emit(state.copyWith(isLoading: false, staff: staff));
-      } catch (e) {
-        AppLogger.log(_tag, 'load staff failed', error: e);
         emit(
           state.copyWith(
-            isLoading: false,
-            error: cachedStaff == null
-                ? 'Could not load staff — try again'
-                : null,
+            loading: _removeLoading(OwnerSection.staff),
+            staff: staff,
+          ),
+        );
+      } catch (e) {
+        AppLogger.log(_tag, 'load staff failed', error: e);
+        final err = cachedStaff == null
+            ? 'Could not load staff — try again'
+            : null;
+        emit(
+          state.copyWith(
+            loading: _removeLoading(OwnerSection.staff),
+            error: err,
+            messageSection: err != null ? OwnerSection.staff : null,
           ),
         );
       }
@@ -186,19 +255,26 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     AddStaffEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    emit(
+      state.copyWith(
+        loading: _addLoading(OwnerSection.staff),
+        error: null,
+      ),
+    );
     try {
       await ownerRepository.createStaff(
         name: event.name,
         username: event.username,
         password: event.password,
+        idempotencyKey: event.idempotencyKey,
       );
       final updated = await ownerRepository.listStaff();
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.staff),
           staff: updated,
           actionMessage: 'Staff member added successfully',
+          messageSection: OwnerSection.staff,
         ),
       );
     } catch (e) {
@@ -208,10 +284,11 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       );
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.staff),
           error: isOfflineError
               ? 'Adding staff needs an internet connection'
               : 'Could not add staff — try again',
+          messageSection: OwnerSection.staff,
         ),
       );
     }
@@ -221,13 +298,30 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     ToggleStaffActiveEvent event,
     Emitter<OwnerState> emit,
   ) async {
+    emit(
+      state.copyWith(
+        loading: _addLoading(OwnerSection.staff),
+        error: null,
+      ),
+    );
     try {
       await ownerRepository.toggleStaffActive(event.employeeId);
       final updated = await ownerRepository.listStaff();
-      emit(state.copyWith(staff: updated));
+      emit(
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.staff),
+          staff: updated,
+        ),
+      );
     } catch (e) {
       AppLogger.log(_tag, 'toggle staff active failed', error: e);
-      emit(state.copyWith(error: 'Could not update staff status — try again'));
+      emit(
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.staff),
+          error: 'Could not update staff status — try again',
+          messageSection: OwnerSection.staff,
+        ),
+      );
     }
   }
 
@@ -235,7 +329,12 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     UpdateStaffEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    emit(
+      state.copyWith(
+        loading: _addLoading(OwnerSection.staff),
+        error: null,
+      ),
+    );
     try {
       await ownerRepository.updateStaff(
         employeeId: event.employeeId,
@@ -245,17 +344,19 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       final updated = await ownerRepository.listStaff();
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.staff),
           staff: updated,
           actionMessage: 'Staff member updated successfully',
+          messageSection: OwnerSection.staff,
         ),
       );
     } catch (e) {
       AppLogger.log(_tag, 'update staff failed', error: e);
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.staff),
           error: 'Could not update staff — try again',
+          messageSection: OwnerSection.staff,
         ),
       );
     }
@@ -271,19 +372,31 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         emit(state.copyWith(paymentMethods: cachedMethods, error: null));
         if (!event.refresh) return;
       } else {
-        emit(state.copyWith(isLoading: true, error: null));
+        emit(
+          state.copyWith(
+            loading: _addLoading(OwnerSection.paymentMethods),
+            error: null,
+          ),
+        );
       }
       try {
         final methods = await ownerRepository.listPaymentMethods();
-        emit(state.copyWith(isLoading: false, paymentMethods: methods));
-      } catch (e) {
-        AppLogger.log(_tag, 'load payment methods failed', error: e);
         emit(
           state.copyWith(
-            isLoading: false,
-            error: cachedMethods == null
-                ? 'Could not load payment methods — try again'
-                : null,
+            loading: _removeLoading(OwnerSection.paymentMethods),
+            paymentMethods: methods,
+          ),
+        );
+      } catch (e) {
+        AppLogger.log(_tag, 'load payment methods failed', error: e);
+        final err = cachedMethods == null
+            ? 'Could not load payment methods — try again'
+            : null;
+        emit(
+          state.copyWith(
+            loading: _removeLoading(OwnerSection.paymentMethods),
+            error: err,
+            messageSection: err != null ? OwnerSection.paymentMethods : null,
           ),
         );
       }
@@ -298,14 +411,29 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     TogglePaymentMethodEvent event,
     Emitter<OwnerState> emit,
   ) async {
+    emit(
+      state.copyWith(
+        loading: _addLoading(OwnerSection.paymentMethods),
+        error: null,
+      ),
+    );
     try {
       await ownerRepository.togglePaymentMethod(event.id, event.active);
       final updated = await ownerRepository.listPaymentMethods();
-      emit(state.copyWith(paymentMethods: updated));
+      emit(
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.paymentMethods),
+          paymentMethods: updated,
+        ),
+      );
     } catch (e) {
       AppLogger.log(_tag, 'toggle payment method failed', error: e);
       emit(
-        state.copyWith(error: 'Could not update payment method — try again'),
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.paymentMethods),
+          error: 'Could not update payment method — try again',
+          messageSection: OwnerSection.paymentMethods,
+        ),
       );
     }
   }
@@ -320,19 +448,31 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         emit(state.copyWith(storeProfile: cachedProfile, error: null));
         if (!event.refresh) return;
       } else {
-        emit(state.copyWith(isLoading: true, error: null));
+        emit(
+          state.copyWith(
+            loading: _addLoading(OwnerSection.profile),
+            error: null,
+          ),
+        );
       }
       try {
         final profile = await ownerRepository.getStoreProfile();
-        emit(state.copyWith(isLoading: false, storeProfile: profile));
-      } catch (e) {
-        AppLogger.log(_tag, 'load store profile failed', error: e);
         emit(
           state.copyWith(
-            isLoading: false,
-            error: cachedProfile == null
-                ? 'Could not load store profile — try again'
-                : null,
+            loading: _removeLoading(OwnerSection.profile),
+            storeProfile: profile,
+          ),
+        );
+      } catch (e) {
+        AppLogger.log(_tag, 'load store profile failed', error: e);
+        final err = cachedProfile == null
+            ? 'Could not load store profile — try again'
+            : null;
+        emit(
+          state.copyWith(
+            loading: _removeLoading(OwnerSection.profile),
+            error: err,
+            messageSection: err != null ? OwnerSection.profile : null,
           ),
         );
       }
@@ -347,7 +487,12 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     UpdateStoreProfileEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    emit(
+      state.copyWith(
+        loading: _addLoading(OwnerSection.profile),
+        error: null,
+      ),
+    );
     try {
       final profile = await ownerRepository.updateStoreProfile(
         storeName: event.storeName,
@@ -358,17 +503,19 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       );
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.profile),
           storeProfile: profile,
           actionMessage: 'Store profile updated',
+          messageSection: OwnerSection.profile,
         ),
       );
     } catch (e) {
       AppLogger.log(_tag, 'update store profile failed', error: e);
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.profile),
           error: 'Could not update store profile — try again',
+          messageSection: OwnerSection.profile,
         ),
       );
     }
@@ -378,7 +525,12 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     ChangePasswordSubmittedEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(state.copyWith(isLoading: true, error: null));
+    emit(
+      state.copyWith(
+        loading: _addLoading(OwnerSection.profile),
+        error: null,
+      ),
+    );
     try {
       await ownerRepository.changePassword(
         currentPassword: event.currentPassword,
@@ -386,16 +538,18 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       );
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.profile),
           actionMessage: 'Password changed successfully',
+          messageSection: OwnerSection.profile,
         ),
       );
     } catch (e) {
       AppLogger.log(_tag, 'change password failed', error: e);
       emit(
         state.copyWith(
-          isLoading: false,
+          loading: _removeLoading(OwnerSection.profile),
           error: 'Could not change password — try again',
+          messageSection: OwnerSection.profile,
         ),
       );
     }

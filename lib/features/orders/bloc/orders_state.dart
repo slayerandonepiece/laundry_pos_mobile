@@ -19,6 +19,7 @@ class OrdersState {
   final bool isUpdatingStatus;
   final bool isCollectingPayment;
   final String? actionSuccessMessage;
+  final bool loadFailed;
 
   OrdersState({
     this.isLoading = false,
@@ -30,6 +31,7 @@ class OrdersState {
     this.isUpdatingStatus = false,
     this.isCollectingPayment = false,
     this.actionSuccessMessage,
+    this.loadFailed = false,
   });
 
   List<Order> get filteredOrders {
@@ -77,6 +79,7 @@ class OrdersState {
     bool? isUpdatingStatus,
     bool? isCollectingPayment,
     String? actionSuccessMessage,
+    bool? loadFailed,
     bool clearSelectedOrder = false,
   }) {
     return OrdersState(
@@ -91,6 +94,7 @@ class OrdersState {
       isUpdatingStatus: isUpdatingStatus ?? this.isUpdatingStatus,
       isCollectingPayment: isCollectingPayment ?? this.isCollectingPayment,
       actionSuccessMessage: actionSuccessMessage,
+      loadFailed: loadFailed ?? this.loadFailed,
     );
   }
 }

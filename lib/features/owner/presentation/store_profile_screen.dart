@@ -42,6 +42,10 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          (curr.storeProfile != null && !_isInitialized) ||
+          (curr.messageSection == OwnerSection.profile &&
+              (curr.error != null || curr.actionMessage != null)),
       listener: (context, state) {
         if (state.storeProfile != null && !_isInitialized) {
           _nameController.text = state.storeProfile!.storeName;
@@ -49,6 +53,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           _phoneController.text = state.storeProfile!.phone;
           _isInitialized = true;
         }
+        if (state.messageSection != OwnerSection.profile) return;
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -182,7 +187,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
                       PrimaryButton(
                         label: 'Save profile',
-                        isLoading: state.isLoading,
+                        isLoading: state.loading.contains(OwnerSection.profile),
                         onPressed: () {
                           final name = _nameController.text.trim();
                           final address = _addressController.text.trim();

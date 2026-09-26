@@ -57,6 +57,10 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     }
 
     return BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          (curr.storeProfile != null && !_isInitialized) ||
+          (curr.messageSection == OwnerSection.profile &&
+              (curr.error != null || curr.actionMessage != null)),
       listener: (context, state) {
         if (state.storeProfile != null && !_isInitialized) {
           _nameController.text = state.storeProfile!.name.isNotEmpty
@@ -66,6 +70,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
           _emailController.text = state.storeProfile!.email;
           _isInitialized = true;
         }
+        if (state.messageSection != OwnerSection.profile) return;
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -219,7 +224,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
 
                       PrimaryButton(
                         label: 'Save changes',
-                        isLoading: state.isLoading,
+                        isLoading: state.loading.contains(OwnerSection.profile),
                         onPressed: () {
                           final name = _nameController.text.trim();
                           final phone = _phoneController.text.trim();

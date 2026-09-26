@@ -2,6 +2,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/sync/sync_engine.dart';
+import '../../../core/sync/sync_manager.dart';
+import '../data/models/order_model.dart';
 import '../data/orders_repository.dart';
 import 'orders_event.dart';
 import 'orders_state.dart';
@@ -33,16 +35,28 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   ) async {
     final cachedOrders = ordersRepository.getCachedOrdersList();
     if (cachedOrders.isNotEmpty) {
-      emit(state.copyWith(allOrders: cachedOrders, error: null));
+      emit(
+        state.copyWith(
+          allOrders: cachedOrders,
+          loadFailed: false,
+          error: null,
+        ),
+      );
       return;
     }
 
     emit(state.copyWith(isLoading: true, error: null));
     await SyncEngine.instance.trigger();
+    final orders = ordersRepository.getCachedOrdersList();
+    final syncState = SyncManager.instance.value;
+    final loadFailed =
+        orders.isEmpty &&
+        (syncState.isOffline || syncState.hasError || syncState.isSyncPaused);
     emit(
       state.copyWith(
         isLoading: false,
-        allOrders: ordersRepository.getCachedOrdersList(),
+        allOrders: orders,
+        loadFailed: loadFailed,
       ),
     );
   }
@@ -58,10 +72,16 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   ) async {
     emit(state.copyWith(isLoading: true, error: null));
     await SyncEngine.instance.retryNow();
+    final orders = ordersRepository.getCachedOrdersList();
+    final syncState = SyncManager.instance.value;
+    final loadFailed =
+        orders.isEmpty &&
+        (syncState.isOffline || syncState.hasError || syncState.isSyncPaused);
     emit(
       state.copyWith(
         isLoading: false,
-        allOrders: ordersRepository.getCachedOrdersList(),
+        allOrders: orders,
+        loadFailed: loadFailed,
       ),
     );
   }
@@ -80,7 +100,10 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   ) async {
     emit(state.copyWith(isLoading: true, error: null));
     try {
-      final order = await ordersRepository.getOrderDetail(event.orderCode);
+      final order = await ordersRepository.getOrderDetail(
+        event.orderCode,
+        fallbackToCache: false,
+      );
       emit(state.copyWith(isLoading: false, selectedOrder: order));
     } catch (e) {
       AppLogger.log(
@@ -88,6 +111,25 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         'getOrderDetail(${event.orderCode}) failed',
         error: e,
       );
+      Order? cached;
+      try {
+        for (final o in ordersRepository.getCachedOrdersList()) {
+          if (o.id == event.orderCode || o.offlineId == event.orderCode) {
+            cached = o;
+            break;
+          }
+        }
+      } catch (_) {}
+      if (cached != null) {
+        emit(
+          state.copyWith(
+            isLoading: false,
+            selectedOrder: cached,
+            error: 'Could not refresh — showing the saved copy',
+          ),
+        );
+        return;
+      }
       emit(
         state.copyWith(
           isLoading: false,

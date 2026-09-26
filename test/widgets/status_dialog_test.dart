@@ -28,7 +28,10 @@ class MockOrdersRepository implements OrdersRepository {
   }
 
   @override
-  Future<Order> getOrderDetail(String orderCode) async {
+  Future<Order> getOrderDetail(
+    String orderCode, {
+    bool fallbackToCache = true,
+  }) async {
     return Order(
       id: orderCode,
       name: 'Vikram Shetty',

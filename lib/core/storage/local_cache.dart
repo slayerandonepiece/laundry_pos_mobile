@@ -290,6 +290,13 @@ class LocalCacheService {
   Future<void> setCachedOrders(List<Map<String, dynamic>> ordersList) =>
       _box.put(_outletScopedKey(keyCachedOrders), ordersList);
 
+  bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) {
+    final key =
+        '$keyCachedOrders::${getActiveStoreId() ?? 'none'}'
+        '::${allOutlets ? 'all' : (outletId ?? 'none')}';
+    return _box.get(key) is List;
+  }
+
   /// The server code (`EL-…`) of a cached order carrying [offlineId], looked
   /// up across every outlet scope's cached orders; null while unsynced or
   /// unknown. Queued actions keep the offline id they were written with, so

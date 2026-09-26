@@ -18,7 +18,7 @@ import 'package:myshop/features/shell/data/models/outlet_model.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
-import 'package:myshop/shared/widgets/outlet_switcher.dart';
+import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
@@ -393,7 +393,6 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
   @override
   Widget build(BuildContext context) {
     final outletScope = context.watch<OutletScopeCubit>().state;
-    final hasOutletChoice = outletScope.allowed.length > 1 || outletScope.isOwner;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -401,15 +400,9 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
         backgroundColor: AppColors.surface,
         elevation: 0,
         titleSpacing: 20,
-        title: const Text(
-          'Orders',
-          style: TextStyle(
-            fontFamily: AppTextStyles.fontDisplay,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.6,
-            color: AppColors.text,
-          ),
+        title: const OutletTitleSwitcher(
+          screenLabel: 'Orders',
+          showAllOutletsOption: true,
         ),
         actions: [
           Padding(
@@ -467,12 +460,6 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Outlet switcher — hidden when there's no
-                              // choice to make (O5.1).
-                              if (hasOutletChoice) ...[
-                                const OutletSwitcher(showAllOutletsOption: true),
-                                const SizedBox(height: 12),
-                              ],
                               // Unified Sales summary card
                               _buildSalesSummaryCard(
                                 orderValue: orderValue,
@@ -749,6 +736,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                         allOrders: state.allOrders,
                         filteredOrders: filteredOrders,
                         outletScope: outletScope,
+                        loadFailed: state.loadFailed,
                       ),
                     ],
                   ),
@@ -980,6 +968,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     required List<Order> allOrders,
     required List<Order> filteredOrders,
     required OutletScope outletScope,
+    bool loadFailed = false,
   }) {
     if (allOrders.isEmpty) {
       return [
@@ -988,13 +977,21 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
           child: Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: EmptyState(
-                icon: Icons.receipt_long_outlined,
-                title: 'No orders yet',
-                subtitle: 'Orders will appear here as soon as you take a sale.',
-                actionLabel: 'Take a sale',
-                onAction: () => _startNewOrder(context),
-              ),
+              child: loadFailed
+                  ? const EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: "Can't load orders",
+                      subtitle:
+                          "You're offline or the server can't be reached. Pull down to try again.",
+                    )
+                  : EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'No orders yet',
+                      subtitle:
+                          'Orders will appear here as soon as you take a sale.',
+                      actionLabel: 'Take a sale',
+                      onAction: () => _startNewOrder(context),
+                    ),
             ),
           ),
         ),

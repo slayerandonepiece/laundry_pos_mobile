@@ -27,6 +27,7 @@ class AddExpenseEvent extends OwnerEvent {
   final int amount;
   final String due;
   final bool monthly;
+  final String? idempotencyKey;
 
   AddExpenseEvent({
     required this.title,
@@ -34,6 +35,7 @@ class AddExpenseEvent extends OwnerEvent {
     required this.amount,
     required this.due,
     this.monthly = false,
+    this.idempotencyKey,
   });
 }
 
@@ -54,11 +56,13 @@ class AddStaffEvent extends OwnerEvent {
   final String name;
   final String username;
   final String password;
+  final String? idempotencyKey;
 
   AddStaffEvent({
     required this.name,
     required this.username,
     required this.password,
+    this.idempotencyKey,
   });
 }
 
