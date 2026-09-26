@@ -401,7 +401,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
                 tooltip: 'Refresh',
                 onPressed: () {
-                  context.read<OwnerBloc>().add(LoadExpensesEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadExpensesEvent(refresh: true),
+                  );
                 },
               ),
               Padding(
@@ -429,13 +431,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             children: [
               SyncStatusBar(
                 onSyncNow: () {
-                  context.read<OwnerBloc>().add(LoadExpensesEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadExpensesEvent(refresh: true),
+                  );
                 },
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    context.read<OwnerBloc>().add(LoadExpensesEvent());
+                    context.read<OwnerBloc>().add(
+                      LoadExpensesEvent(refresh: true),
+                    );
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

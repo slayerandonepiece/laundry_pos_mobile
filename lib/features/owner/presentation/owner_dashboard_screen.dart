@@ -243,14 +243,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           children: [
             SyncStatusBar(
               onSyncNow: () {
-                context.read<OwnerBloc>().add(LoadDashboardEvent());
+                context.read<OwnerBloc>().add(
+                  LoadDashboardEvent(refresh: true),
+                );
                 context.read<OrdersBloc>().add(LoadOrdersEvent());
               },
             ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: () async {
-                  context.read<OwnerBloc>().add(LoadDashboardEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadDashboardEvent(refresh: true),
+                  );
                   context.read<OrdersBloc>().add(LoadOrdersEvent());
                 },
                 child: CustomScrollView(
@@ -312,7 +316,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                     });
                                     if (val != 'custom') {
                                       context.read<OwnerBloc>().add(
-                                        LoadDashboardEvent(),
+                                        LoadDashboardEvent(refresh: true),
                                       );
                                     }
                                   },
@@ -423,7 +427,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   tooltip: 'Retry sync',
                   onPressed: () {
                     SyncEngine.instance.retryNow();
-                    context.read<OwnerBloc>().add(LoadDashboardEvent());
+                    context.read<OwnerBloc>().add(
+                      LoadDashboardEvent(refresh: true),
+                    );
                     context.read<OrdersBloc>().add(LoadOrdersEvent());
                   },
                 );
@@ -439,7 +445,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             ),
             tooltip: 'Refresh',
             onPressed: () {
-              context.read<OwnerBloc>().add(LoadDashboardEvent());
+              context.read<OwnerBloc>().add(LoadDashboardEvent(refresh: true));
               context.read<OrdersBloc>().add(LoadOrdersEvent());
             },
           ),

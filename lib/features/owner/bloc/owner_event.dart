@@ -1,13 +1,21 @@
 abstract class OwnerEvent {}
 
+// Load* events read the local cache only (network only when nothing is
+// cached yet); refresh: true is for pull-to-refresh, Refresh and Sync now.
+
 class LoadDashboardEvent extends OwnerEvent {
   final String? from;
   final String? to;
+  final bool refresh;
 
-  LoadDashboardEvent({this.from, this.to});
+  LoadDashboardEvent({this.from, this.to, this.refresh = false});
 }
 
-class LoadExpensesEvent extends OwnerEvent {}
+class LoadExpensesEvent extends OwnerEvent {
+  final bool refresh;
+
+  LoadExpensesEvent({this.refresh = false});
+}
 
 class AddExpenseEvent extends OwnerEvent {
   final String title;
@@ -31,7 +39,11 @@ class MarkExpensePaidEvent extends OwnerEvent {
   MarkExpensePaidEvent(this.expenseId);
 }
 
-class LoadStaffEvent extends OwnerEvent {}
+class LoadStaffEvent extends OwnerEvent {
+  final bool refresh;
+
+  LoadStaffEvent({this.refresh = false});
+}
 
 class AddStaffEvent extends OwnerEvent {
   final String name;
@@ -63,7 +75,11 @@ class UpdateStaffEvent extends OwnerEvent {
   });
 }
 
-class LoadPaymentMethodsEvent extends OwnerEvent {}
+class LoadPaymentMethodsEvent extends OwnerEvent {
+  final bool refresh;
+
+  LoadPaymentMethodsEvent({this.refresh = false});
+}
 
 class TogglePaymentMethodEvent extends OwnerEvent {
   final String id;
@@ -72,7 +88,11 @@ class TogglePaymentMethodEvent extends OwnerEvent {
   TogglePaymentMethodEvent({required this.id, required this.active});
 }
 
-class LoadStoreProfileEvent extends OwnerEvent {}
+class LoadStoreProfileEvent extends OwnerEvent {
+  final bool refresh;
+
+  LoadStoreProfileEvent({this.refresh = false});
+}
 
 class UpdateStoreProfileEvent extends OwnerEvent {
   final String storeName;

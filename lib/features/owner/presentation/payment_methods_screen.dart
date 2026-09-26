@@ -67,7 +67,9 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                 ),
                 tooltip: 'Refresh',
                 onPressed: () {
-                  context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadPaymentMethodsEvent(refresh: true),
+                  );
                 },
               ),
               const SizedBox(width: 8),
@@ -81,13 +83,17 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             children: [
               SyncStatusBar(
                 onSyncNow: () {
-                  context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadPaymentMethodsEvent(refresh: true),
+                  );
                 },
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                    context.read<OwnerBloc>().add(
+                      LoadPaymentMethodsEvent(refresh: true),
+                    );
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

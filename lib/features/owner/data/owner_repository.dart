@@ -74,7 +74,11 @@ class OwnerRepository {
         final metrics = DashboardMetrics.fromJson(
           Map<String, dynamic>.from(response),
         );
-        await localCache.setCachedDashboardMetrics(metrics.toJson());
+        // Only the default period is cached — it's what the dashboard opens
+        // with; a custom range is always fetched.
+        if (query['from'] == null && query['to'] == null) {
+          await localCache.setCachedDashboardMetrics(metrics.toJson());
+        }
         SyncManager.instance.completeSync();
         return metrics;
       }

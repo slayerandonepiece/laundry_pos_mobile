@@ -54,7 +54,11 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
 
   Future<void> _loadPaymentMethods() async {
     try {
-      final methods = await context.read<PosRepository>().listPaymentMethods();
+      // Local first: the network is asked only if methods were never synced.
+      final repo = context.read<PosRepository>();
+      final methods =
+          repo.getCachedPaymentMethodsList() ??
+          await repo.listPaymentMethods();
       if (!mounted) return;
       setState(() {
         _methods = methods;

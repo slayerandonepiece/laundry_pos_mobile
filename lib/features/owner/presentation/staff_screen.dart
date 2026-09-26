@@ -120,7 +120,7 @@ class _StaffScreenState extends State<StaffScreen> {
                 ),
                 tooltip: 'Refresh',
                 onPressed: () {
-                  context.read<OwnerBloc>().add(LoadStaffEvent());
+                  context.read<OwnerBloc>().add(LoadStaffEvent(refresh: true));
                 },
               ),
               Padding(
@@ -148,13 +148,15 @@ class _StaffScreenState extends State<StaffScreen> {
             children: [
               SyncStatusBar(
                 onSyncNow: () {
-                  context.read<OwnerBloc>().add(LoadStaffEvent());
+                  context.read<OwnerBloc>().add(LoadStaffEvent(refresh: true));
                 },
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    context.read<OwnerBloc>().add(LoadStaffEvent());
+                    context.read<OwnerBloc>().add(
+                      LoadStaffEvent(refresh: true),
+                    );
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

@@ -30,12 +30,16 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadDashboardEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    // Render whatever is cached immediately (no spinner) so charts don't sit
-    // blank while the network round-trip is in flight, then let the network
-    // fetch below silently replace it once it resolves.
-    final cachedMetrics = ownerRepository.getCachedDashboardMetricsSync();
+    // Opening the screen shows the cache only; the network is used on
+    // refresh, for a custom date range (only the default period is cached),
+    // or when nothing is cached yet.
+    final isCustomRange = event.from != null || event.to != null;
+    final cachedMetrics = isCustomRange
+        ? null
+        : ownerRepository.getCachedDashboardMetricsSync();
     if (cachedMetrics != null) {
       emit(state.copyWith(metrics: cachedMetrics, error: null));
+      if (!event.refresh) return;
     } else {
       emit(state.copyWith(isLoading: true, error: null));
     }
@@ -65,6 +69,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     final cachedExpenses = ownerRepository.getCachedExpensesSync();
     if (cachedExpenses != null) {
       emit(state.copyWith(expenses: cachedExpenses, error: null));
+      if (!event.refresh) return;
     } else {
       emit(state.copyWith(isLoading: true, error: null));
     }
@@ -139,6 +144,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     final cachedStaff = ownerRepository.getCachedStaffSync();
     if (cachedStaff != null) {
       emit(state.copyWith(staff: cachedStaff, error: null));
+      if (!event.refresh) return;
     } else {
       emit(state.copyWith(isLoading: true, error: null));
     }
@@ -239,6 +245,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     final cachedMethods = ownerRepository.getCachedPaymentMethodsSync();
     if (cachedMethods != null) {
       emit(state.copyWith(paymentMethods: cachedMethods, error: null));
+      if (!event.refresh) return;
     } else {
       emit(state.copyWith(isLoading: true, error: null));
     }
@@ -281,6 +288,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     final cachedProfile = ownerRepository.getCachedStoreProfileSync();
     if (cachedProfile != null) {
       emit(state.copyWith(storeProfile: cachedProfile, error: null));
+      if (!event.refresh) return;
     } else {
       emit(state.copyWith(isLoading: true, error: null));
     }

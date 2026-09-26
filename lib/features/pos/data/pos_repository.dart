@@ -32,6 +32,17 @@ class PosRepository {
     }
   }
 
+  /// Enabled payment methods from the local cache, or null if they were
+  /// never synced to this phone.
+  List<StorePaymentMethod>? getCachedPaymentMethodsList() {
+    final cached = _localCache.getCachedPaymentMethods();
+    if (cached == null) return null;
+    return cached
+        .map((m) => StorePaymentMethod.fromJson(m))
+        .where((m) => m.active)
+        .toList();
+  }
+
   /// Fetches product catalogue for current active store with local cache
   Future<List<Product>> listProducts() async {
     final isOffline = await ConnectivityService.instance.checkIsOffline();

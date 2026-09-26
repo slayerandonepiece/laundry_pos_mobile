@@ -281,7 +281,8 @@ void main() {
       expect(cubit.state.activeOutletId, 'outlet_1');
       expect(cubit.state.allOutlets, isFalse);
       expect(ownerBloc.loadDashboardEvents.length, 1);
-      expect(fakeOwnerRepo.calls.length, 1);
+      // Local-first: switching outlet reads the cache, no network call.
+      expect(fakeOwnerRepo.calls, isEmpty);
 
       // Switch back to All outlets
       cubit.selectAllOutlets();
@@ -289,7 +290,7 @@ void main() {
 
       expect(cubit.state.allOutlets, isTrue);
       expect(ownerBloc.loadDashboardEvents.length, 2);
-      expect(fakeOwnerRepo.calls.length, 2);
+      expect(fakeOwnerRepo.calls, isEmpty);
     });
 
     testWidgets(

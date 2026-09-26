@@ -61,6 +61,9 @@ class _FakePosLocalCache implements LocalCacheService {
 class _FakePosRepo implements PosRepository {
   List<Product> products = [];
   List<StorePaymentMethod> paymentMethods = [];
+  // Null = never synced, so LoadCatalogEvent fetches.
+  List<StorePaymentMethod>? cachedPaymentMethods;
+  int listPaymentMethodsCalls = 0;
   bool throwOnPaymentMethods = false;
   String? lastPassedOutletId;
   String? lastPassedPaymentMethodName;
@@ -72,7 +75,12 @@ class _FakePosRepo implements PosRepository {
   Future<List<Product>> listProducts() async => products;
 
   @override
+  List<StorePaymentMethod>? getCachedPaymentMethodsList() =>
+      cachedPaymentMethods;
+
+  @override
   Future<List<StorePaymentMethod>> listPaymentMethods() async {
+    listPaymentMethodsCalls++;
     if (throwOnPaymentMethods) {
       throw Exception('Failed to load payment methods');
     }
@@ -199,6 +207,22 @@ void main() {
           }),
         ),
       );
+    });
+
+    test('LoadCatalogEvent uses cached payment methods without the network', () async {
+      fakeRepo.cachedPaymentMethods = [
+        StorePaymentMethod.fromJson({'id': 'pm_c', 'name': 'Card', 'enabled': true}),
+      ];
+      bloc.add(LoadCatalogEvent());
+      await expectLater(
+        bloc.stream,
+        emitsThrough(
+          predicate<dynamic>(
+            (state) => state.paymentMethods.map((m) => m.name).join() == 'Card',
+          ),
+        ),
+      );
+      expect(fakeRepo.listPaymentMethodsCalls, 0);
     });
 
     test('LoadCatalogEvent payment methods error defaults to empty list and does not fail catalog', () async {

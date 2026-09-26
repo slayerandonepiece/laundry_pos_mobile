@@ -39,12 +39,15 @@ class CartBloc extends Bloc<CartEvent, CartState> {
       emit(state.copyWith(allProducts: cachedProducts, error: null));
     }
 
-    // Payment methods are best-effort: a failure must not break the catalog.
-    List<StorePaymentMethod> paymentMethods = [];
-    try {
-      paymentMethods = await posRepository.listPaymentMethods();
-    } catch (_) {
-      paymentMethods = [];
+    // Payment methods also come from the cache; fetched only if never
+    // synced. Best-effort: a failure must not break the catalog.
+    var paymentMethods = posRepository.getCachedPaymentMethodsList();
+    if (paymentMethods == null) {
+      try {
+        paymentMethods = await posRepository.listPaymentMethods();
+      } catch (_) {
+        paymentMethods = [];
+      }
     }
 
     if (cachedProducts.isNotEmpty) {

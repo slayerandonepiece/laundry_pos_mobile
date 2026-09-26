@@ -108,7 +108,9 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                 tooltip: 'Refresh',
                 onPressed: () {
                   _isInitialized = false;
-                  context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadStoreProfileEvent(refresh: true),
+                  );
                 },
               ),
               const SizedBox(width: 8),
@@ -123,14 +125,18 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
               SyncStatusBar(
                 onSyncNow: () {
                   _isInitialized = false;
-                  context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadStoreProfileEvent(refresh: true),
+                  );
                 },
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
                     _isInitialized = false;
-                    context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                    context.read<OwnerBloc>().add(
+                      LoadStoreProfileEvent(refresh: true),
+                    );
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

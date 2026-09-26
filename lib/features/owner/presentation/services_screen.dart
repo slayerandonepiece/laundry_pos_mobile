@@ -37,11 +37,14 @@ class _ServicesScreenState extends State<ServicesScreen> {
     super.dispose();
   }
 
-  Future<void> _loadServices() async {
+  /// Opens from the local cache; the network only on [refresh] (pull to
+  /// refresh, after a save) or when nothing is cached yet.
+  Future<void> _loadServices({bool refresh = false}) async {
     final posRepository = context.read<PosRepository>();
     final cached = posRepository.getCachedProductsList();
     if (cached.isNotEmpty) {
       setState(() => _products = cached);
+      if (!refresh) return;
     } else {
       setState(() => _isLoading = true);
     }
@@ -74,7 +77,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
       MaterialPageRoute(
         builder: (_) => RepositoryProvider.value(
           value: repo,
-          child: ServiceFormScreen(onSaved: _loadServices),
+          child: ServiceFormScreen(
+            onSaved: () => _loadServices(refresh: true),
+          ),
         ),
       ),
     );
@@ -87,7 +92,10 @@ class _ServicesScreenState extends State<ServicesScreen> {
       MaterialPageRoute(
         builder: (_) => RepositoryProvider.value(
           value: repo,
-          child: ServiceFormScreen(product: product, onSaved: _loadServices),
+          child: ServiceFormScreen(
+            product: product,
+            onSaved: () => _loadServices(refresh: true),
+          ),
         ),
       ),
     );
@@ -310,7 +318,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                 ),
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: _loadServices,
+                    onRefresh: () => _loadServices(refresh: true),
                     child: filtered.isEmpty
                         ? ListView(
                             padding: const EdgeInsets.all(40),

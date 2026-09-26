@@ -227,6 +227,9 @@ class StubPosRepository implements PosRepository {
   ];
 
   @override
+  List<StorePaymentMethod>? getCachedPaymentMethodsList() => [];
+
+  @override
   Future<List<StorePaymentMethod>> listPaymentMethods() async => [];
 
   @override
