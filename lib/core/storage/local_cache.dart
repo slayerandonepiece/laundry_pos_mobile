@@ -417,8 +417,23 @@ class LocalCacheService {
   Future<void> put(String key, dynamic value) => _box.put(key, value);
   Future<void> delete(String key) => _box.delete(key);
 
-  /// Clears cache on logout
+  // Outlet an employee picked, per user + organization. Kept across
+  // logout (see [clear]) so the next sign-in skips the outlet picker.
+  static const String keyRememberedOutlet = 'remembered_outlet';
+  String? getRememberedOutlet(String userId, String storeId) =>
+      _box.get('$keyRememberedOutlet::$userId::$storeId') as String?;
+  Future<void> setRememberedOutlet(
+    String userId,
+    String storeId,
+    String outletId,
+  ) => _box.put('$keyRememberedOutlet::$userId::$storeId', outletId);
+
+  /// Clears cache on logout, except remembered outlet choices.
   Future<void> clear() async {
-    await _box.clear();
+    await _box.deleteAll(
+      _box.keys.where(
+        (k) => !(k is String && k.startsWith(keyRememberedOutlet)),
+      ),
+    );
   }
 }

@@ -12,6 +12,8 @@ import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/models/expense_model.dart';
+import 'package:myshop/features/owner/data/models/payment_method_model.dart';
+import 'package:myshop/features/owner/data/models/staff_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/pos/data/models/product_model.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
@@ -36,7 +38,28 @@ class FakeLocalCache extends LocalCacheService {
       _memory['active_store_id'] = s;
 
   @override
-  String? getActiveOutletId() => null;
+  String? getActiveOutletId() => _memory['active_outlet_id'] as String?;
+
+  @override
+  List<Map<String, dynamic>>? getAllowedOutlets() =>
+      _memory['allowed_outlets'] as List<Map<String, dynamic>>?;
+
+  @override
+  List<Map<String, dynamic>>? getCachedPaymentMethods() =>
+      _memory['cached_payment_methods_list'] as List<Map<String, dynamic>>?;
+  @override
+  Future<void> setCachedPaymentMethods(List<Map<String, dynamic>> m) async =>
+      _memory['cached_payment_methods_list'] = m;
+
+  @override
+  Map<String, dynamic>? getCachedDashboardMetrics() =>
+      _memory['cached_dashboard_metrics_json'] as Map<String, dynamic>?;
+  @override
+  List<Map<String, dynamic>>? getCachedExpenses() =>
+      _memory['cached_expenses_list'] as List<Map<String, dynamic>>?;
+  @override
+  List<Map<String, dynamic>>? getCachedStaff() =>
+      _memory['cached_staff_list'] as List<Map<String, dynamic>>?;
 
   @override
   Map<String, dynamic>? getCachedStoreProfile() =>
@@ -87,6 +110,7 @@ class FakeLocalCache extends LocalCacheService {
 class FakeAuthRepository extends AuthRepository {
   bool fetchStoreDetailsShouldFail = false;
   int fetchStoreDetailsCallCount = 0;
+  int refreshOutletContextCallCount = 0;
   final FakeLocalCache localCache;
 
   FakeAuthRepository({required this.localCache})
@@ -95,6 +119,14 @@ class FakeAuthRepository extends AuthRepository {
         secureStorage: FakeSecureStorage(),
         localCache: localCache,
       );
+
+  @override
+  Future<List<Map<String, dynamic>>?> refreshOutletContext() async {
+    refreshOutletContextCallCount++;
+    return [
+      {'id': 'o1', 'displayName': 'Main Road'},
+    ];
+  }
 
   @override
   Future<Map<String, dynamic>> fetchStoreDetails() async {
@@ -117,6 +149,7 @@ class FakeAuthRepository extends AuthRepository {
 class FakePosRepository extends PosRepository {
   bool listProductsShouldFail = false;
   int listProductsCallCount = 0;
+  int listPaymentMethodsCallCount = 0;
   final FakeLocalCache localCache;
 
   FakePosRepository({required this.localCache})
@@ -142,28 +175,30 @@ class FakePosRepository extends PosRepository {
     );
     return products;
   }
+
+  @override
+  Future<List<StorePaymentMethod>> listPaymentMethods() async {
+    listPaymentMethodsCallCount++;
+    await localCache.setCachedPaymentMethods([
+      {'id': 'pm1', 'code': 'CASH', 'name': 'Cash', 'enabled': true},
+    ]);
+    return [];
+  }
 }
 
 class FakeOrdersRepository extends OrdersRepository {
-  bool fetchRecentOrdersShouldFail = false;
-  int fetchRecentOrdersCallCount = 0;
-  int lastLimitPassed = 0;
-  String lastSortPassed = '';
+  bool syncAllOrdersShouldFail = false;
+  int syncAllOrdersCallCount = 0;
   final FakeLocalCache localCache;
 
   FakeOrdersRepository({required this.localCache})
     : super(apiClient: ApiClient(), localCache: localCache);
 
   @override
-  Future<List<Order>> fetchRecentOrders({
-    int limit = 30,
-    String sort = 'recent',
-  }) async {
-    fetchRecentOrdersCallCount++;
-    lastLimitPassed = limit;
-    lastSortPassed = sort;
-    if (fetchRecentOrdersShouldFail) {
-      throw Exception('Network error loading recent orders');
+  Future<void> syncAllOrders() async {
+    syncAllOrdersCallCount++;
+    if (syncAllOrdersShouldFail) {
+      throw Exception('Network error syncing orders');
     }
     final orders = [
       Order(
@@ -178,7 +213,6 @@ class FakeOrdersRepository extends OrdersRepository {
       ),
     ];
     await localCache.setCachedOrders(orders.map((o) => o.toJson()).toList());
-    return orders;
   }
 }
 
@@ -187,6 +221,7 @@ class FakeOwnerRepository extends OwnerRepository {
   int getDashboardMetricsCallCount = 0;
   bool listExpensesShouldFail = false;
   int listExpensesCallCount = 0;
+  int listStaffCallCount = 0;
 
   FakeOwnerRepository() : super(apiClient: ApiClient());
 
@@ -208,6 +243,12 @@ class FakeOwnerRepository extends OwnerRepository {
     if (listExpensesShouldFail) {
       throw Exception('Network error loading expenses');
     }
+    return [];
+  }
+
+  @override
+  Future<List<StaffMember>> listStaff() async {
+    listStaffCallCount++;
     return [];
   }
 }
@@ -295,312 +336,187 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Employee happy path: 4 steps resolve sequentially and invoke onCompleted',
-      (tester) async {
-        bool completedCalled = false;
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: BootstrapScreen(
-              authState: employeeState,
-              authRepository: fakeAuthRepo,
-              posRepository: fakePosRepo,
-              ordersRepository: fakeOrdersRepo,
-              ownerRepository: fakeOwnerRepo,
-              localCache: fakeCache,
-              connectivityService: fakeConnectivity,
-              onCompleted: () {
-                completedCalled = true;
-              },
-            ),
-          ),
-        );
-
-        // Verify header and 4 checklist items render (not owner steps)
-        expect(find.text('Setting things up'), findsOneWidget);
-        expect(
-          find.text('Just a moment while we get your store ready'),
-          findsOneWidget,
-        );
-        expect(find.text('Finding your store'), findsOneWidget);
-        expect(find.text('Loading store details'), findsOneWidget);
-        expect(find.text('Loading products'), findsOneWidget);
-        expect(find.text('Loading recent orders'), findsOneWidget);
-        expect(find.text('Loading dashboard'), findsNothing);
-        expect(find.text('Loading expenses'), findsNothing);
-
-        // Step 1: finishes after short frame delay
-        await tester.pump(const Duration(milliseconds: 250));
-        expect(find.text('Express Laundry Demo'), findsOneWidget);
-
-        // Let steps 2, 3, 4 resolve
-        await tester.pump(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 400));
-
-        // Check repositories were called
-        expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1);
-        expect(fakePosRepo.listProductsCallCount, 1);
-        expect(fakeOrdersRepo.fetchRecentOrdersCallCount, 1);
-        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 0);
-        expect(fakeOwnerRepo.listExpensesCallCount, 0);
-        expect(fakeOrdersRepo.lastLimitPassed, 30);
-        expect(fakeOrdersRepo.lastSortPassed, 'recent');
-
-        // Check local cache was updated
-        expect(fakeCache.getCachedStoreProfile(), isNotNull);
-        expect(fakeCache.getCachedProducts()?.length, 1);
-        expect(fakeCache.getCachedOrders()?.length, 1);
-
-        // Verify onCompleted callback was invoked
-        expect(completedCalled, isTrue);
-      },
-    );
-
-    testWidgets(
-      'Owner happy path: 6 steps resolve sequentially and invoke onCompleted',
-      (tester) async {
-        bool completedCalled = false;
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: BootstrapScreen(
-              authState: ownerState,
-              authRepository: fakeAuthRepo,
-              posRepository: fakePosRepo,
-              ordersRepository: fakeOrdersRepo,
-              ownerRepository: fakeOwnerRepo,
-              localCache: fakeCache,
-              connectivityService: fakeConnectivity,
-              onCompleted: () {
-                completedCalled = true;
-              },
-            ),
-          ),
-        );
-
-        // Verify header and all 6 checklist items render
-        expect(find.text('Setting things up'), findsOneWidget);
-        expect(find.text('Finding your store'), findsOneWidget);
-        expect(find.text('Loading store details'), findsOneWidget);
-        expect(find.text('Loading products'), findsOneWidget);
-        expect(find.text('Loading recent orders'), findsOneWidget);
-        expect(find.text('Loading dashboard'), findsOneWidget);
-        expect(find.text('Loading expenses'), findsOneWidget);
-
-        // Step 1: finishes after short frame delay
-        await tester.pump(const Duration(milliseconds: 250));
-
-        // Let steps 2, 3, 4, 5, 6 resolve
-        await tester.pump(const Duration(milliseconds: 300)); // Step 2
-        await tester.pump(const Duration(milliseconds: 300)); // Step 3
-        await tester.pump(const Duration(milliseconds: 300)); // Step 4
-        await tester.pump(const Duration(milliseconds: 300)); // Step 5
-        await tester.pump(const Duration(milliseconds: 300)); // Step 6
-        await tester.pump(const Duration(milliseconds: 400)); // Finish delay
-
-        // Check all repositories were called, including owner repo methods
-        expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1);
-        expect(fakePosRepo.listProductsCallCount, 1);
-        expect(fakeOrdersRepo.fetchRecentOrdersCallCount, 1);
-        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 1);
-        expect(fakeOwnerRepo.listExpensesCallCount, 1);
-
-        expect(completedCalled, isTrue);
-      },
-    );
-
-    testWidgets(
-      'Owner step 5 failure: displays error state, Retry button, and retries dashboard',
-      (tester) async {
-        fakeOwnerRepo.getDashboardMetricsShouldFail = true;
-        bool completedCalled = false;
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: BootstrapScreen(
-              authState: ownerState,
-              authRepository: fakeAuthRepo,
-              posRepository: fakePosRepo,
-              ordersRepository: fakeOrdersRepo,
-              ownerRepository: fakeOwnerRepo,
-              localCache: fakeCache,
-              connectivityService: fakeConnectivity,
-              onCompleted: () {
-                completedCalled = true;
-              },
-            ),
-          ),
-        );
-
-        await tester.pump(const Duration(milliseconds: 250)); // Step 1
-        await tester.pump(const Duration(milliseconds: 300)); // Step 2
-        await tester.pump(const Duration(milliseconds: 300)); // Step 3
-        await tester.pump(const Duration(milliseconds: 300)); // Step 4
-        await tester.pump(const Duration(milliseconds: 300)); // Step 5 fails
-
-        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 1);
-        expect(fakeOwnerRepo.listExpensesCallCount, 0);
-        expect(find.text('Failed to load dashboard'), findsOneWidget);
-        expect(find.text('Retry'), findsOneWidget);
-        expect(completedCalled, isFalse);
-
-        // Fix dashboard and tap Retry
-        fakeOwnerRepo.getDashboardMetricsShouldFail = false;
-        await tester.tap(find.text('Retry'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300)); // Step 5 retries
-        await tester.pump(const Duration(milliseconds: 300)); // Step 6 runs
-        await tester.pump(const Duration(milliseconds: 400)); // Finish delay
-
-        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 2);
-        expect(fakeOwnerRepo.listExpensesCallCount, 1);
-        expect(completedCalled, isTrue);
-      },
-    );
-
-    testWidgets(
-      'Owner step 6 failure: displays error state, Retry button, and retries expenses',
-      (tester) async {
-        fakeOwnerRepo.listExpensesShouldFail = true;
-        bool completedCalled = false;
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: BootstrapScreen(
-              authState: ownerState,
-              authRepository: fakeAuthRepo,
-              posRepository: fakePosRepo,
-              ordersRepository: fakeOrdersRepo,
-              ownerRepository: fakeOwnerRepo,
-              localCache: fakeCache,
-              connectivityService: fakeConnectivity,
-              onCompleted: () {
-                completedCalled = true;
-              },
-            ),
-          ),
-        );
-
-        await tester.pump(const Duration(milliseconds: 250)); // Step 1
-        await tester.pump(const Duration(milliseconds: 300)); // Step 2
-        await tester.pump(const Duration(milliseconds: 300)); // Step 3
-        await tester.pump(const Duration(milliseconds: 300)); // Step 4
-        await tester.pump(const Duration(milliseconds: 300)); // Step 5 succeeds
-        await tester.pump(const Duration(milliseconds: 300)); // Step 6 fails
-
-        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 1);
-        expect(fakeOwnerRepo.listExpensesCallCount, 1);
-        expect(find.text('Failed to load expenses'), findsOneWidget);
-        expect(find.text('Retry'), findsOneWidget);
-        expect(completedCalled, isFalse);
-
-        // Fix expenses and tap Retry
-        fakeOwnerRepo.listExpensesShouldFail = false;
-        await tester.tap(find.text('Retry'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300)); // Step 6 retries
-        await tester.pump(const Duration(milliseconds: 400)); // Finish delay
-
-        expect(fakeOwnerRepo.listExpensesCallCount, 2);
-        expect(completedCalled, isTrue);
-      },
-    );
-
-    testWidgets(
-      'Step failure: displays error state, Retry button, and retries only that step',
-      (tester) async {
-        fakePosRepo.listProductsShouldFail = true;
-        bool completedCalled = false;
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: BootstrapScreen(
-              authState: employeeState,
-              authRepository: fakeAuthRepo,
-              posRepository: fakePosRepo,
-              ordersRepository: fakeOrdersRepo,
-              ownerRepository: fakeOwnerRepo,
-              localCache: fakeCache,
-              connectivityService: fakeConnectivity,
-              onCompleted: () {
-                completedCalled = true;
-              },
-            ),
-          ),
-        );
-
-        await tester.pump(const Duration(milliseconds: 250));
-        await tester.pump(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
-
-        // Step 1 and Step 2 succeeded
-        expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1);
-        expect(fakePosRepo.listProductsCallCount, 1);
-
-        // Step 3 failed
-        expect(find.text('Failed to load products'), findsOneWidget);
-        expect(find.text('Retry'), findsOneWidget);
-        expect(find.text('Continue anyway'), findsOneWidget);
-        expect(completedCalled, isFalse);
-
-        // Fix product loading and tap Retry
-        fakePosRepo.listProductsShouldFail = false;
-        await tester.tap(find.text('Retry'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 400));
-
-        // Verify only step 3 and subsequent step 4 were run
-        expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1); // Not restarted
-        expect(fakePosRepo.listProductsCallCount, 2);
-        expect(fakeOrdersRepo.fetchRecentOrdersCallCount, 1);
-        expect(completedCalled, isTrue);
-      },
-    );
-
-    testWidgets('Continue anyway button allows proceeding when error occurs', (
-      tester,
-    ) async {
-      fakeOrdersRepo.fetchRecentOrdersShouldFail = true;
-      bool completedCalled = false;
-
-      await tester.pumpWidget(
+    Widget screen(AuthenticatedState state, VoidCallback onCompleted) =>
         MaterialApp(
           home: BootstrapScreen(
-            authState: employeeState,
+            authState: state,
             authRepository: fakeAuthRepo,
             posRepository: fakePosRepo,
             ordersRepository: fakeOrdersRepo,
             ownerRepository: fakeOwnerRepo,
             localCache: fakeCache,
             connectivityService: fakeConnectivity,
-            onCompleted: () {
-              completedCalled = true;
-            },
+            onCompleted: onCompleted,
           ),
-        ),
+        );
+
+    testWidgets(
+      'Employee: outlet, then organization, services & prices, payment methods, orders',
+      (tester) async {
+        fakeCache._memory['active_outlet_id'] = 'o1';
+        fakeCache._memory['allowed_outlets'] = [
+          {'id': 'o1', 'displayName': 'Main Road'},
+          {'id': 'o2', 'displayName': 'Lake View'},
+        ];
+        bool completedCalled = false;
+
+        await tester.pumpWidget(
+          screen(employeeState, () => completedCalled = true),
+        );
+
+        expect(find.text('Setting things up'), findsOneWidget);
+        expect(
+          find.text('Just a moment while we sync your data'),
+          findsOneWidget,
+        );
+        expect(find.text('Opening your outlet'), findsOneWidget);
+        expect(find.text('Syncing organization details'), findsOneWidget);
+        expect(find.text('Syncing services & prices'), findsOneWidget);
+        expect(find.text('Syncing payment methods'), findsOneWidget);
+        expect(find.text('Syncing orders'), findsOneWidget);
+        expect(find.text('Fetching organization & outlets'), findsNothing);
+        expect(find.text('Syncing dashboard'), findsNothing);
+        expect(find.text('Syncing staff'), findsNothing);
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(find.text('Main Road'), findsOneWidget);
+        expect(fakeAuthRepo.refreshOutletContextCallCount, 0);
+        expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1);
+        expect(fakePosRepo.listProductsCallCount, 1);
+        expect(fakePosRepo.listPaymentMethodsCallCount, 1);
+        expect(fakeOrdersRepo.syncAllOrdersCallCount, 1);
+        expect(fakeOwnerRepo.getDashboardMetricsCallCount, 0);
+        expect(fakeOwnerRepo.listExpensesCallCount, 0);
+        expect(fakeOwnerRepo.listStaffCallCount, 0);
+
+        expect(fakeCache.getCachedStoreProfile(), isNotNull);
+        expect(fakeCache.getCachedProducts()?.length, 1);
+        expect(fakeCache.getCachedOrders()?.length, 1);
+        expect(completedCalled, isTrue);
+      },
+    );
+
+    testWidgets('Owner: all 8 steps run in order and invoke onCompleted', (
+      tester,
+    ) async {
+      bool completedCalled = false;
+
+      await tester.pumpWidget(screen(ownerState, () => completedCalled = true));
+
+      for (final title in [
+        'Fetching organization & outlets',
+        'Syncing organization details',
+        'Syncing services & prices',
+        'Syncing payment methods',
+        'Syncing orders',
+        'Syncing dashboard',
+        'Syncing expenses',
+        'Syncing staff',
+      ]) {
+        expect(find.text(title), findsOneWidget);
+      }
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Express Laundry Demo'), findsOneWidget);
+      expect(fakeAuthRepo.refreshOutletContextCallCount, 1);
+      expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1);
+      expect(fakePosRepo.listProductsCallCount, 1);
+      expect(fakePosRepo.listPaymentMethodsCallCount, 1);
+      expect(fakeOrdersRepo.syncAllOrdersCallCount, 1);
+      expect(fakeOwnerRepo.getDashboardMetricsCallCount, 1);
+      expect(fakeOwnerRepo.listExpensesCallCount, 1);
+      expect(fakeOwnerRepo.listStaffCallCount, 1);
+      expect(completedCalled, isTrue);
+    });
+
+    testWidgets('Owner step failure: error, Retry resumes from that step', (
+      tester,
+    ) async {
+      fakeOwnerRepo.getDashboardMetricsShouldFail = true;
+      bool completedCalled = false;
+
+      await tester.pumpWidget(screen(ownerState, () => completedCalled = true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(fakeOwnerRepo.getDashboardMetricsCallCount, 1);
+      expect(fakeOwnerRepo.listExpensesCallCount, 0);
+      expect(find.text("Couldn't sync dashboard"), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(completedCalled, isFalse);
+
+      fakeOwnerRepo.getDashboardMetricsShouldFail = false;
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(fakeOrdersRepo.syncAllOrdersCallCount, 1); // Not restarted
+      expect(fakeOwnerRepo.getDashboardMetricsCallCount, 2);
+      expect(fakeOwnerRepo.listExpensesCallCount, 1);
+      expect(fakeOwnerRepo.listStaffCallCount, 1);
+      expect(completedCalled, isTrue);
+    });
+
+    testWidgets('Step failure: retries only that step and the ones after it', (
+      tester,
+    ) async {
+      fakePosRepo.listProductsShouldFail = true;
+      bool completedCalled = false;
+
+      await tester.pumpWidget(
+        screen(employeeState, () => completedCalled = true),
       );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
-      await tester.pump(const Duration(milliseconds: 250));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.text('Failed to load orders'), findsOneWidget);
+      expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1);
+      expect(fakePosRepo.listProductsCallCount, 1);
+      expect(find.text("Couldn't sync services & prices"), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
       expect(find.text('Continue anyway'), findsOneWidget);
       expect(completedCalled, isFalse);
+
+      fakePosRepo.listProductsShouldFail = false;
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(fakeAuthRepo.fetchStoreDetailsCallCount, 1); // Not restarted
+      expect(fakePosRepo.listProductsCallCount, 2);
+      expect(fakeOrdersRepo.syncAllOrdersCallCount, 1);
+      expect(completedCalled, isTrue);
+    });
+
+    testWidgets('Continue anyway proceeds and marks the scope as set up', (
+      tester,
+    ) async {
+      fakeOrdersRepo.syncAllOrdersShouldFail = true;
+      bool completedCalled = false;
+
+      await tester.pumpWidget(
+        screen(employeeState, () => completedCalled = true),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text("Couldn't sync orders"), findsOneWidget);
+      expect(find.text('Continue anyway'), findsOneWidget);
+      expect(completedCalled, isFalse);
+      expect(fakeCache.getCachedOrders(), isNull);
 
       await tester.tap(find.text('Continue anyway'));
       await tester.pump(const Duration(milliseconds: 450));
 
+      expect(fakeCache.getCachedOrders(), isEmpty);
       expect(completedCalled, isTrue);
     });
 
     testWidgets(
-      'Offline immediate detection: switches to lighter cached state when cache exists',
+      'Offline with data on the phone: no network calls, cached rows',
       (tester) async {
         fakeConnectivity.mockOffline = true;
         fakeCache._memory['cached_store_profile_json'] = {
@@ -615,56 +531,30 @@ void main() {
             'category': 'Laundry',
           },
         ];
-        fakeCache._memory['cached_orders_list'] = [
-          {
-            'id': 'EL-99',
-            'name': 'Jane',
-            'phone': '9876543210',
-            'date': '2026-09-10',
-            'due': '2026-09-11',
-            'status': 'Delivered',
-            'lines': [],
-            'payments': [],
-          },
-        ];
+        fakeCache._memory['cached_payment_methods_list'] =
+            <Map<String, dynamic>>[];
+        fakeCache._memory['cached_orders_list'] = <Map<String, dynamic>>[];
 
         bool completedCalled = false;
 
         await tester.pumpWidget(
-          MaterialApp(
-            home: BootstrapScreen(
-              authState: employeeState,
-              authRepository: fakeAuthRepo,
-              posRepository: fakePosRepo,
-              ordersRepository: fakeOrdersRepo,
-              ownerRepository: fakeOwnerRepo,
-              localCache: fakeCache,
-              connectivityService: fakeConnectivity,
-              onCompleted: () {
-                completedCalled = true;
-              },
-            ),
-          ),
+          screen(employeeState, () => completedCalled = true),
         );
 
-        // Verify offline banner copy
         expect(
-          find.text('Offline · getting store ready from cached data'),
+          find.text('Offline · using data already on this phone'),
           findsOneWidget,
         );
 
-        await tester.pump(const Duration(milliseconds: 250));
-        await tester.pump(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
 
-        // No network calls made
         expect(fakeAuthRepo.fetchStoreDetailsCallCount, 0);
         expect(fakePosRepo.listProductsCallCount, 0);
-        expect(fakeOrdersRepo.fetchRecentOrdersCallCount, 0);
+        expect(fakePosRepo.listPaymentMethodsCallCount, 0);
+        expect(fakeOrdersRepo.syncAllOrdersCallCount, 0);
 
-        // All resolved from cache
-        expect(find.text('Using cached data'), findsNWidgets(3));
+        expect(find.text('Using cached data'), findsNWidgets(4));
         expect(completedCalled, isTrue);
       },
     );

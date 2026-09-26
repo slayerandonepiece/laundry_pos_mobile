@@ -51,18 +51,7 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
   late final LocalCacheService _localCache;
   late final ConnectivityService _connectivityService;
 
-  StepStatus _step1Status = StepStatus.pending;
-  StepStatus _step2Status = StepStatus.pending;
-  StepStatus _step3Status = StepStatus.pending;
-  StepStatus _step4Status = StepStatus.pending;
-  StepStatus _step5Status = StepStatus.pending;
-  StepStatus _step6Status = StepStatus.pending;
-
-  String? _step2Error;
-  String? _step3Error;
-  String? _step4Error;
-  String? _step5Error;
-  String? _step6Error;
+  late final List<_SetupStep> _steps;
 
   bool _isOffline = false;
   bool _canContinueAnyway = false;
@@ -88,10 +77,106 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
     _connectivityService =
         widget.connectivityService ?? ConnectivityService.instance;
     _isOffline = _connectivityService.isOffline;
+    _steps = _buildSteps();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startBootstrapSequence();
     });
+  }
+
+  /// Owner: organization & outlets, organization details, services &
+  /// prices, payment methods, orders, dashboard, expenses, staff.
+  /// Employee: their outlet, then organization details, services & prices,
+  /// payment methods and orders for it (docs/OFFLINE-ID-SYNC-PLAN.md §4).
+  List<_SetupStep> _buildSteps() {
+    final isOwner = widget.authState.isOwner;
+    final orgName = widget.authState.currentStore.storeName;
+    return [
+      if (isOwner)
+        _SetupStep(
+          title: 'Fetching organization & outlets',
+          errorText: "Couldn't fetch organization & outlets",
+          subtitle: orgName.isNotEmpty ? orgName : null,
+          hasCache: () => _localCache.getAllowedOutlets() != null,
+          run: () async {
+            final outlets = await _authRepository.refreshOutletContext();
+            if (outlets == null) throw Exception('No outlets returned');
+          },
+        )
+      else
+        _SetupStep(
+          title: 'Opening your outlet',
+          errorText: "Couldn't open your outlet",
+          subtitle: _activeOutletName(),
+          run: () async {},
+        ),
+      _SetupStep(
+        title: 'Syncing organization details',
+        errorText: "Couldn't sync organization details",
+        hasCache: () =>
+            (_localCache.getCachedStoreProfile() ??
+                    _localCache.getCachedStoreDetails())
+                ?.isNotEmpty ==
+            true,
+        run: () async => _authRepository.fetchStoreDetails(),
+      ),
+      _SetupStep(
+        title: 'Syncing services & prices',
+        errorText: "Couldn't sync services & prices",
+        hasCache: () => _localCache.getCachedProducts()?.isNotEmpty == true,
+        run: () async => _posRepository.listProducts(),
+      ),
+      _SetupStep(
+        title: 'Syncing payment methods',
+        errorText: "Couldn't sync payment methods",
+        hasCache: () => _localCache.getCachedPaymentMethods() != null,
+        run: () async {
+          // listPaymentMethods() falls back to the cache instead of
+          // throwing, so a failure shows up as nothing cached.
+          await _posRepository.listPaymentMethods();
+          if (_localCache.getCachedPaymentMethods() == null) {
+            throw Exception('Payment methods not loaded');
+          }
+        },
+      ),
+      _SetupStep(
+        title: 'Syncing orders',
+        errorText: "Couldn't sync orders",
+        hasCache: () => _localCache.getCachedOrders() != null,
+        run: _ordersRepository.syncAllOrders,
+      ),
+      if (isOwner) ...[
+        _SetupStep(
+          title: 'Syncing dashboard',
+          errorText: "Couldn't sync dashboard",
+          hasCache: () => _localCache.getCachedDashboardMetrics() != null,
+          run: () async => _ownerRepository.getDashboardMetrics(),
+        ),
+        _SetupStep(
+          title: 'Syncing expenses',
+          errorText: "Couldn't sync expenses",
+          hasCache: () => _localCache.getCachedExpenses() != null,
+          run: () async => _ownerRepository.listExpenses(),
+        ),
+        _SetupStep(
+          title: 'Syncing staff',
+          errorText: "Couldn't sync staff",
+          hasCache: () => _localCache.getCachedStaff() != null,
+          run: () async => _ownerRepository.listStaff(),
+        ),
+      ],
+    ];
+  }
+
+  String? _activeOutletName() {
+    final activeId = _localCache.getActiveOutletId();
+    for (final outlet in _localCache.getAllowedOutlets() ?? const []) {
+      if (outlet['id']?.toString() == activeId) {
+        final name = outlet['displayName']?.toString() ?? '';
+        if (name.isNotEmpty) return name;
+      }
+    }
+    return null;
   }
 
   Future<void> _startBootstrapSequence() async {
@@ -105,242 +190,54 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
       _isOffline = isOffline;
     });
 
-    // Step 1: Finding your store (instant from AuthenticatedState.currentStore)
-    setState(() {
-      _step1Status = StepStatus.active;
-    });
-    await Future.delayed(const Duration(milliseconds: 200));
-    if (!mounted) return;
-    setState(() {
-      _step1Status = StepStatus.done;
-    });
-
-    // Run remaining steps sequentially
-    await _executeStep2();
+    await _runFrom(0);
   }
 
-  // Step 2: Loading store details (GET /api/v1/profile)
-  Future<void> _executeStep2() async {
-    if (!mounted) return;
-    setState(() {
-      _step2Status = StepStatus.active;
-      _step2Error = null;
-    });
-
-    if (_isOffline) {
-      final cached =
-          _localCache.getCachedStoreProfile() ??
-          _localCache.getCachedStoreDetails();
-      if (cached != null && cached.isNotEmpty) {
-        setState(() {
-          _step2Status = StepStatus.offlineCached;
-        });
-        await _executeStep3();
-        return;
-      }
-    }
-
-    try {
-      await _authRepository.fetchStoreDetails();
+  /// Runs the steps from [index] on, in order. Offline with data already on
+  /// the phone, a step uses it without a network call; a failed step with
+  /// cached data falls back to it and carries on; a failed step without
+  /// stops here with Retry (resumes from this step) and "Continue anyway".
+  Future<void> _runFrom(int index) async {
+    for (var i = index; i < _steps.length; i++) {
       if (!mounted) return;
+      final step = _steps[i];
       setState(() {
-        _step2Status = StepStatus.done;
+        step.status = StepStatus.active;
+        step.error = null;
       });
-      await _executeStep3();
-    } catch (e) {
-      if (!mounted) return;
-      // Best effort check if cached store details are available
-      final cached =
-          _localCache.getCachedStoreProfile() ??
-          _localCache.getCachedStoreDetails();
-      if (cached != null && cached.isNotEmpty) {
-        setState(() {
-          _step2Status = StepStatus.offlineCached;
-          _canContinueAnyway = true;
-        });
-        await _executeStep3();
-      } else {
-        setState(() {
-          _step2Status = StepStatus.error;
-          _step2Error = 'Failed to load store details';
-          _canContinueAnyway = true;
-        });
+
+      if (_isOffline && step.hasCache?.call() == true) {
+        setState(() => step.status = StepStatus.offlineCached);
+        continue;
       }
-    }
-  }
 
-  // Step 3: Loading products (PosRepository.listProducts)
-  Future<void> _executeStep3() async {
-    if (!mounted) return;
-    setState(() {
-      _step3Status = StepStatus.active;
-      _step3Error = null;
-    });
-
-    if (_isOffline) {
-      final cached = _localCache.getCachedProducts();
-      if (cached != null && cached.isNotEmpty) {
-        setState(() {
-          _step3Status = StepStatus.offlineCached;
-        });
-        await _executeStep4();
-        return;
-      }
-    }
-
-    try {
-      await _posRepository.listProducts();
-      if (!mounted) return;
-      setState(() {
-        _step3Status = StepStatus.done;
-      });
-      await _executeStep4();
-    } catch (e) {
-      if (!mounted) return;
-      final cached = _localCache.getCachedProducts();
-      if (cached != null && cached.isNotEmpty) {
-        setState(() {
-          _step3Status = StepStatus.offlineCached;
-          _canContinueAnyway = true;
-        });
-        await _executeStep4();
-      } else {
-        setState(() {
-          _step3Status = StepStatus.error;
-          _step3Error = 'Failed to load products';
-          _canContinueAnyway = true;
-        });
-      }
-    }
-  }
-
-  // Step 4: Loading recent orders (GET /api/v1/orders?limit=30&sort=recent)
-  Future<void> _executeStep4() async {
-    if (!mounted) return;
-    setState(() {
-      _step4Status = StepStatus.active;
-      _step4Error = null;
-    });
-
-    if (_isOffline) {
-      final cached = _localCache.getCachedOrders();
-      if (cached != null && cached.isNotEmpty) {
-        setState(() {
-          _step4Status = StepStatus.offlineCached;
-        });
-        if (widget.authState.isOwner) {
-          await _executeStep5();
+      try {
+        await step.run();
+        if (!mounted) return;
+        setState(() => step.status = StepStatus.done);
+      } catch (_) {
+        if (!mounted) return;
+        if (step.hasCache?.call() == true) {
+          setState(() {
+            step.status = StepStatus.offlineCached;
+            _canContinueAnyway = true;
+          });
         } else {
-          await _finishAndNavigate();
+          setState(() {
+            step.status = StepStatus.error;
+            step.error = step.errorText;
+            _canContinueAnyway = true;
+          });
+          return;
         }
-        return;
       }
     }
-
-    try {
-      await _ordersRepository.fetchRecentOrders(limit: 30, sort: 'recent');
-      if (!mounted) return;
-      setState(() {
-        _step4Status = StepStatus.done;
-      });
-      if (widget.authState.isOwner) {
-        await _executeStep5();
-      } else {
-        await _finishAndNavigate();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      final cached = _localCache.getCachedOrders();
-      if (cached != null && cached.isNotEmpty) {
-        setState(() {
-          _step4Status = StepStatus.offlineCached;
-          _canContinueAnyway = true;
-        });
-        if (widget.authState.isOwner) {
-          await _executeStep5();
-        } else {
-          await _finishAndNavigate();
-        }
-      } else {
-        setState(() {
-          _step4Status = StepStatus.error;
-          _step4Error = 'Failed to load orders';
-          _canContinueAnyway = true;
-        });
-      }
-    }
+    await _finishAndNavigate();
   }
 
-  // Step 5: Loading dashboard (Owner only)
-  Future<void> _executeStep5() async {
-    if (!mounted) return;
-    setState(() {
-      _step5Status = StepStatus.active;
-      _step5Error = null;
-    });
-
-    try {
-      await _ownerRepository.getDashboardMetrics();
-      if (!mounted) return;
-      setState(() {
-        _step5Status = StepStatus.done;
-      });
-      await _executeStep6();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _step5Status = StepStatus.error;
-        _step5Error = 'Failed to load dashboard';
-        _canContinueAnyway = true;
-      });
-    }
-  }
-
-  // Step 6: Loading expenses (Owner only)
-  Future<void> _executeStep6() async {
-    if (!mounted) return;
-    setState(() {
-      _step6Status = StepStatus.active;
-      _step6Error = null;
-    });
-
-    try {
-      await _ownerRepository.listExpenses();
-      if (!mounted) return;
-      setState(() {
-        _step6Status = StepStatus.done;
-      });
-      await _finishAndNavigate();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _step6Status = StepStatus.error;
-        _step6Error = 'Failed to load expenses';
-        _canContinueAnyway = true;
-      });
-    }
-  }
-
-  bool get _allStepsCompleted {
-    final baseStepsCompleted =
-        (_step1Status == StepStatus.done) &&
-        (_step2Status == StepStatus.done ||
-            _step2Status == StepStatus.offlineCached) &&
-        (_step3Status == StepStatus.done ||
-            _step3Status == StepStatus.offlineCached) &&
-        (_step4Status == StepStatus.done ||
-            _step4Status == StepStatus.offlineCached);
-
-    if (!widget.authState.isOwner) {
-      return baseStepsCompleted;
-    }
-
-    return baseStepsCompleted &&
-        (_step5Status == StepStatus.done ||
-            _step5Status == StepStatus.offlineCached) &&
-        (_step6Status == StepStatus.done ||
-            _step6Status == StepStatus.offlineCached);
-  }
+  bool get _allStepsCompleted => _steps.every(
+    (s) => s.status == StepStatus.done || s.status == StepStatus.offlineCached,
+  );
 
   Future<void> _finishAndNavigate() async {
     if (_hasNavigated || !mounted) return;
@@ -362,52 +259,26 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
     }
   }
 
-  void _continueAnyway() {
-    _finishAndNavigate();
+  Future<void> _continueAnyway() async {
+    // An empty list marks this scope as set up, so the app doesn't route
+    // straight back here; the Orders screen syncs an empty list itself.
+    if (_localCache.getCachedOrders() == null) {
+      await _localCache.setCachedOrders([]);
+    }
+    await _finishAndNavigate();
   }
 
   @override
   Widget build(BuildContext context) {
-    final storeName = widget.authState.currentStore.storeName;
-
     final steps = [
-      _BootstrapStepItem(
-        title: 'Finding your store',
-        subtitle: storeName.isNotEmpty ? storeName : null,
-        status: _step1Status,
-      ),
-      _BootstrapStepItem(
-        title: 'Loading store details',
-        status: _step2Status,
-        errorText: _step2Error,
-        onRetry: _executeStep2,
-      ),
-      _BootstrapStepItem(
-        title: 'Loading products',
-        status: _step3Status,
-        errorText: _step3Error,
-        onRetry: _executeStep3,
-      ),
-      _BootstrapStepItem(
-        title: 'Loading recent orders',
-        status: _step4Status,
-        errorText: _step4Error,
-        onRetry: _executeStep4,
-      ),
-      if (widget.authState.isOwner) ...[
+      for (var i = 0; i < _steps.length; i++)
         _BootstrapStepItem(
-          title: 'Loading dashboard',
-          status: _step5Status,
-          errorText: _step5Error,
-          onRetry: _executeStep5,
+          title: _steps[i].title,
+          subtitle: _steps[i].subtitle,
+          status: _steps[i].status,
+          errorText: _steps[i].error,
+          onRetry: () => _runFrom(i),
         ),
-        _BootstrapStepItem(
-          title: 'Loading expenses',
-          status: _step6Status,
-          errorText: _step6Error,
-          onRetry: _executeStep6,
-        ),
-      ],
     ];
 
     return PopScope(
@@ -445,8 +316,8 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
                         const SizedBox(height: 8),
                         Text(
                           _isOffline
-                              ? 'Offline · getting store ready from cached data'
-                              : 'Just a moment while we get your store ready',
+                              ? 'Offline · using data already on this phone'
+                              : 'Just a moment while we sync your data',
                           style: AppTextStyles.bodyMedium.copyWith(
                             color: AppColors.mutedText,
                           ),
@@ -523,6 +394,27 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
       ),
     );
   }
+}
+
+class _SetupStep {
+  final String title;
+  final String errorText;
+  final String? subtitle;
+
+  /// Whether usable data for this step is already on the phone.
+  final bool Function()? hasCache;
+  final Future<void> Function() run;
+
+  StepStatus status = StepStatus.pending;
+  String? error;
+
+  _SetupStep({
+    required this.title,
+    required this.errorText,
+    this.subtitle,
+    this.hasCache,
+    required this.run,
+  });
 }
 
 class _BootstrapStepItem {

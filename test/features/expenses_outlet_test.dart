@@ -457,6 +457,21 @@ void main() {
 }
 
 class _WidgetFakeLocalCache extends LocalCacheService {
+
+  @override
+  Map<String, dynamic>? getCachedUser() => null;
+
+  final Map<String, String> _rememberedOutlets = {};
+  @override
+  String? getRememberedOutlet(String userId, String storeId) =>
+      _rememberedOutlets['$userId::$storeId'];
+  @override
+  Future<void> setRememberedOutlet(
+    String userId,
+    String storeId,
+    String outletId,
+  ) async => _rememberedOutlets['$userId::$storeId'] = outletId;
+
   final List<Map<String, dynamic>> allowedOutlets;
   String? activeOutletId;
   bool allOutletsScope = true;

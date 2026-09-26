@@ -782,4 +782,44 @@ void main() {
       },
     );
   });
+
+  group('Setup screen orders sync (syncAllOrders)', () {
+    test('pulls from the start and merges, keeping unsynced orders', () async {
+      await localCache.setLastSyncCursor('old-cursor');
+      await localCache.setCachedOrders([
+        {'id': '', 'offlineId': 'off-9', 'phone': '9000000000', 'isSynced': false},
+      ]);
+      final urls = <String>[];
+      mockApiClient.onGet = (url) async {
+        urls.add(url);
+        return {
+          'orders': [
+            {'id': 'EL-1', 'status': 'Pending', 'lines': [], 'payments': []},
+          ],
+          'nextCursor': null,
+        };
+      };
+
+      await repository.syncAllOrders();
+
+      expect(urls.single, isNot(contains('since=')));
+      final orders = repository.getCachedOrdersList();
+      expect(orders.map((o) => o.orderCode), ['off-9', 'EL-1']);
+    });
+
+    test('leaves an empty list behind when there are no orders', () async {
+      mockApiClient.getResponse = {'orders': [], 'nextCursor': null};
+      expect(localCache.getCachedOrders(), isNull);
+
+      await repository.syncAllOrders();
+
+      expect(localCache.getCachedOrders(), isEmpty);
+    });
+
+    test('throws when the server cannot be reached', () async {
+      mockApiClient.onGet = (_) async => throw Exception('offline');
+      await expectLater(repository.syncAllOrders(), throwsException);
+      expect(localCache.getCachedOrders(), isNull);
+    });
+  });
 }

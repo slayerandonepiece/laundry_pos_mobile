@@ -104,33 +104,17 @@ class OrdersRepository {
     return null;
   }
 
-  /// Fetches recent orders for active store from server and updates local cache
-  Future<List<Order>> fetchRecentOrders({
-    int limit = 30,
-    String sort = 'recent',
-  }) async {
-    try {
-      SyncManager.instance.startSync('Fetching latest from cloud...');
-      final response = await _apiClient.get(
-        '${ApiEndpoints.orders}?limit=$limit&sort=$sort',
-      );
-      if (response is List) {
-        final orders = response
-            .map((o) => Order.fromJson(Map<String, dynamic>.from(o as Map)))
-            .toList();
-        await _localCache.setCachedOrders(
-          orders.map((o) => o.toJson()).toList(),
-        );
-        SyncManager.instance.completeSync();
-        return orders;
-      }
-      throw Exception('Failed to load recent orders: invalid response');
-    } catch (_) {
-      final cached = _localCache.getCachedOrders();
-      if (cached != null && cached.isNotEmpty) {
-        return cached.map((o) => Order.fromJson(o)).toList();
-      }
-      rethrow;
+  /// Setup-screen orders sync for the active outlet scope: uploads pending
+  /// changes, then pulls every order from the start and merges it into the
+  /// cache — never replaces it, so unsynced orders stay listed. Leaves a
+  /// (possibly empty) cached list behind, which is how the app knows this
+  /// scope has been set up. Throws when the pull can't reach the server.
+  Future<void> syncAllOrders() async {
+    await processPendingSyncQueue();
+    final ok = await syncOrdersDelta(fromStart: true, maxBatches: 100);
+    if (!ok) throw Exception('Failed to sync orders');
+    if (_localCache.getCachedOrders() == null) {
+      await _localCache.setCachedOrders([]);
     }
   }
 
@@ -704,12 +688,20 @@ class OrdersRepository {
   /// whole order list every time. A row the server marks `deleted` (a
   /// cancelled order) is removed locally rather than upserted.
   ///
+  /// [fromStart] ignores the saved cursor and pulls from the beginning.
+  ///
   /// Returns true if it reached the server (even with zero new rows), false
   /// on a network failure.
-  Future<bool> syncOrdersDelta({int maxBatches = 10, int limit = 50}) async {
+  Future<bool> syncOrdersDelta({
+    int maxBatches = 10,
+    int limit = 50,
+    bool fromStart = false,
+  }) async {
     try {
       for (var i = 0; i < maxBatches; i++) {
-        final cursor = _localCache.getLastSyncCursor();
+        final cursor = fromStart && i == 0
+            ? null
+            : _localCache.getLastSyncCursor();
         final query = cursor == null
             ? 'limit=$limit'
             : 'since=${Uri.encodeComponent(cursor)}&limit=$limit';

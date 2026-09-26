@@ -9,6 +9,21 @@ import 'package:myshop/shared/widgets/outlet_switcher.dart';
 /// Real Hive can't be used here: its disk writes never complete under
 /// testWidgets' FakeAsync zone, and every later write/close queues behind them.
 class FakeLocalCache extends LocalCacheService {
+
+  @override
+  Map<String, dynamic>? getCachedUser() => null;
+
+  final Map<String, String> _rememberedOutlets = {};
+  @override
+  String? getRememberedOutlet(String userId, String storeId) =>
+      _rememberedOutlets['$userId::$storeId'];
+  @override
+  Future<void> setRememberedOutlet(
+    String userId,
+    String storeId,
+    String outletId,
+  ) async => _rememberedOutlets['$userId::$storeId'] = outletId;
+
   final Map<String, dynamic> _memory = {};
 
   String _scoped(String base) => '$base::${getActiveStoreId() ?? 'none'}';

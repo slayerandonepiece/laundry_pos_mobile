@@ -18,6 +18,21 @@ import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/shared/widgets/outlet_switcher.dart';
 
 class FakeLocalCache extends LocalCacheService {
+
+  @override
+  Map<String, dynamic>? getCachedUser() => null;
+
+  final Map<String, String> _rememberedOutlets = {};
+  @override
+  String? getRememberedOutlet(String userId, String storeId) =>
+      _rememberedOutlets['$userId::$storeId'];
+  @override
+  Future<void> setRememberedOutlet(
+    String userId,
+    String storeId,
+    String outletId,
+  ) async => _rememberedOutlets['$userId::$storeId'] = outletId;
+
   Map<String, dynamic>? storeDetails;
   List<Map<String, dynamic>>? allowedOutlets;
   String? activeOutletId;

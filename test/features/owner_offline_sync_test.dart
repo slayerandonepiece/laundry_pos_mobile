@@ -83,8 +83,11 @@ class MockOrdersRepository extends OrdersRepository {
   Future<bool> processPendingSyncQueue() async => true;
 
   @override
-  Future<bool> syncOrdersDelta({int maxBatches = 10, int limit = 50}) async =>
-      true;
+  Future<bool> syncOrdersDelta({
+    int maxBatches = 10,
+    int limit = 50,
+    bool fromStart = false,
+  }) async => true;
 
   @override
   Future<void> reviveDeadLetterQueue() async {}

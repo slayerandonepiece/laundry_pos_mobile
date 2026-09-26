@@ -111,6 +111,13 @@ class _MyShopAppState extends State<MyShopApp> {
   late final OrdersBloc _ordersBloc;
   late final OwnerBloc _ownerBloc;
 
+  /// The setup (syncing) screen runs on a fresh login and when the active
+  /// outlet scope has never been synced to this phone (no cached order
+  /// list yet — e.g. switching to a new outlet). Cold start otherwise opens
+  /// straight from local data.
+  bool _needsSetup(AuthenticatedState state) =>
+      state.isFreshLogin || widget.localCache.getCachedOrders() == null;
+
   Future<void> _handleOutletAccessLost() async {
     if (_rescoping) return;
     _rescoping = true;
@@ -278,9 +285,9 @@ class _MyShopAppState extends State<MyShopApp> {
                 listener: (context, scope) {
                   final authState = _authBloc.state;
                   if (authState is! AuthenticatedState ||
-                      authState.isFreshLogin) {
-                    // Fresh-login preload is BootstrapScreen's job, not
-                    // OrdersBloc/CartBloc's — see the listener above.
+                      _needsSetup(authState)) {
+                    // Fresh-login / new-outlet preload is BootstrapScreen's
+                    // job, not OrdersBloc/CartBloc's — see the listener above.
                     return;
                   }
                   if (!scope.missingCache &&
@@ -349,8 +356,12 @@ class _MyShopAppState extends State<MyShopApp> {
                       );
                     }
 
-                    if (state.isFreshLogin) {
+                    if (_needsSetup(state)) {
                       return BootstrapScreen(
+                        // A new scope (outlet switch) restarts the setup.
+                        key: ValueKey(
+                          scope.allOutlets ? 'all' : scope.activeOutletId,
+                        ),
                         authState: state,
                         authRepository: widget.authRepository,
                         posRepository: widget.posRepository,
