@@ -137,7 +137,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     return BlocConsumer<OrdersBloc, OrdersState>(
       listener: (context, state) {
         if (state.selectedOrder != null &&
-            state.selectedOrder!.orderCode == widget.initialOrder.orderCode) {
+            state.selectedOrder!.isSameOrder(widget.initialOrder)) {
           setState(() {
             _order = state.selectedOrder!;
           });
@@ -152,7 +152,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           );
           if (state.actionSuccessMessage == 'Status updated to Ready' &&
               state.selectedOrder != null &&
-              state.selectedOrder!.orderCode == widget.initialOrder.orderCode) {
+              state.selectedOrder!.isSameOrder(widget.initialOrder)) {
             // StatusDialog listens on this same bloc and pops itself on this
             // same state change. Its listener runs after this one, so
             // pushing the notify dialog synchronously here would land it on
@@ -185,7 +185,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         // match; otherwise it's a stale value left over from a different
         // order and must not override this screen's own _order.
         final order =
-            (state.selectedOrder?.orderCode == widget.initialOrder.orderCode
+            (state.selectedOrder?.isSameOrder(widget.initialOrder) == true
                 ? state.selectedOrder
                 : null) ??
             _order;
@@ -207,7 +207,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  order.orderCode,
+                  order.displayCode,
                   style: const TextStyle(
                     fontFamily: AppTextStyles.fontDisplay,
                     fontSize: 18,
@@ -235,9 +235,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
           body: RefreshIndicator(
             onRefresh: () async {
-              context.read<OrdersBloc>().add(
-                LoadOrderDetailEvent(order.orderCode),
-              );
+              final bloc = context.read<OrdersBloc>();
+              bloc.add(LoadOrderDetailEvent(order.orderCode));
+              await bloc.stream.firstWhere((s) => !s.isLoading);
             },
             child: ListView(
               padding: const EdgeInsets.all(20),
@@ -586,7 +586,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             const SizedBox(height: 4),
                             Text(
                               order.invoice?.invoiceNumber ??
-                                  'INV-${order.orderCode}',
+                                  'INV-${order.displayCode}',
                               style: const TextStyle(
                                 fontFamily: AppTextStyles.fontDisplay,
                                 fontSize: 15,
@@ -636,10 +636,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           onTap: () async {
                             final invoiceNo =
                                 order.invoice?.invoiceNumber ??
-                                'INV-${order.orderCode}';
+                                'INV-${order.displayCode}';
                             final text = Uri.encodeComponent(
                               'Hello ${order.name.isNotEmpty ? order.name : "Customer"},\n'
-                              'Your laundry order ${order.orderCode} ($invoiceNo) has been completed and delivered.\n'
+                              'Your laundry order ${order.displayCode} ($invoiceNo) has been completed and delivered.\n'
                               'Total: ${CurrencyFormatter.format(order.totalAmount)} (Paid in full).\n'
                               'Thank you for visiting $storeName!',
                             );

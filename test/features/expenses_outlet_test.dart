@@ -15,7 +15,7 @@ import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/expenses_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
-import 'package:myshop/shared/widgets/outlet_switcher.dart';
+import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 
 import '../helpers/mock_dio.dart';
 
@@ -406,8 +406,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // OutletSwitcher is mounted in ExpensesScreen header
-        expect(find.byType(OutletSwitcher), findsOneWidget);
+        // OutletTitleSwitcher is mounted in ExpensesScreen header
+        expect(find.byType(OutletTitleSwitcher), findsOneWidget);
         expect(find.text('All outlets'), findsOneWidget);
 
         // Open AddExpenseScreen in All-outlets scope
@@ -457,6 +457,21 @@ void main() {
 }
 
 class _WidgetFakeLocalCache extends LocalCacheService {
+
+  @override
+  Map<String, dynamic>? getCachedUser() => null;
+
+  final Map<String, String> _rememberedOutlets = {};
+  @override
+  String? getRememberedOutlet(String userId, String storeId) =>
+      _rememberedOutlets['$userId::$storeId'];
+  @override
+  Future<void> setRememberedOutlet(
+    String userId,
+    String storeId,
+    String outletId,
+  ) async => _rememberedOutlets['$userId::$storeId'] = outletId;
+
   final List<Map<String, dynamic>> allowedOutlets;
   String? activeOutletId;
   bool allOutletsScope = true;
@@ -494,4 +509,7 @@ class _WidgetFakeLocalCache extends LocalCacheService {
   Future<void> clearAllOutletsScope() async {
     allOutletsScope = false;
   }
+
+  @override
+  bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) => true;
 }

@@ -1,3 +1,6 @@
+> **Superseded (2026-09-26).** Historical note from 2026-09-11. Current state:
+> `docs/HANDOFF.md`; current offline-sync plan: `docs/OFFLINE-ID-SYNC-PLAN.md`.
+
 # Current Context & Offline Sync Status
 
 **Updated:** 2026-09-11

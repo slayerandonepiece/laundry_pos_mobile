@@ -58,7 +58,11 @@ class MockOrdersRepository extends OrdersRepository {
   }
 
   @override
-  Future<bool> syncOrdersDelta({int maxBatches = 10, int limit = 50}) async {
+  Future<bool> syncOrdersDelta({
+    int maxBatches = 10,
+    int limit = 50,
+    bool fromStart = false,
+  }) async {
     syncDeltaCallCount++;
     return true;
   }

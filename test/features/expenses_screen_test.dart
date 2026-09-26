@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
+import 'package:myshop/features/owner/bloc/owner_event.dart';
+import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/expense_model.dart';
+import 'package:myshop/features/owner/data/models/staff_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/expenses_screen.dart';
 import 'package:myshop/shared/widgets/centred_dialog.dart';
@@ -12,8 +17,15 @@ class FakeOwnerRepository extends OwnerRepository {
   List<Expense> expenses = [];
   String? lastMarkedPaidId;
   Map<String, dynamic>? lastCreatedExpense;
+  Future<List<StaffMember>> Function()? listStaffOverride;
 
   FakeOwnerRepository() : super(apiClient: ApiClient());
+
+  @override
+  Future<List<StaffMember>> listStaff() async {
+    if (listStaffOverride != null) return listStaffOverride!();
+    return [];
+  }
 
   @override
   Future<List<Expense>> listExpenses() async {
@@ -27,6 +39,7 @@ class FakeOwnerRepository extends OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    String? idempotencyKey,
   }) async {
     lastCreatedExpense = {
       'title': title,
@@ -34,6 +47,7 @@ class FakeOwnerRepository extends OwnerRepository {
       'amount': amount,
       'due': due,
       'monthly': monthly,
+      'idempotencyKey': idempotencyKey,
     };
     final newExpense = Expense(
       id: 'exp-${DateTime.now().millisecondsSinceEpoch}',
@@ -321,6 +335,54 @@ void main() {
         await pumpExpenses(tester);
 
         expect(fakeRepo.lastMarkedPaidId, 'exp-2');
+      },
+    );
+
+    testWidgets(
+      'Section isolation: staff loading and staff error do not show spinner or SnackBar on ExpensesScreen',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        fakeRepo.expenses = [];
+        final staffGate = Completer<void>();
+        fakeRepo.listStaffOverride = () async {
+          await staffGate.future;
+          throw Exception('Staff endpoint down');
+        };
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpExpenses(tester);
+
+        // Expenses loaded (empty) -> shows empty state, no spinner
+        expect(find.text('No expenses yet'), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+
+        // Trigger staff load on shared OwnerBloc -> loading contains OwnerSection.staff
+        ownerBloc.add(LoadStaffEvent());
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+        await tester.pump();
+
+        expect(ownerBloc.state.loading.contains(OwnerSection.staff), isTrue);
+
+        // ExpensesScreen must NOT show spinner while staff is loading
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.text('No expenses yet'), findsOneWidget);
+
+        // Release gate so staff load throws -> messageSection == OwnerSection.staff
+        staffGate.complete();
+        await pumpExpenses(tester);
+
+        expect(ownerBloc.state.messageSection, OwnerSection.staff);
+        expect(ownerBloc.state.error, 'Could not load staff — try again');
+
+        // ExpensesScreen must NOT show the staff error SnackBar
+        expect(find.byType(SnackBar), findsNothing);
+        expect(find.text('Could not load staff — try again'), findsNothing);
       },
     );
   });

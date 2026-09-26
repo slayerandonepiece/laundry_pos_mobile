@@ -114,6 +114,12 @@ class OutletScopeCubit extends Cubit<OutletScope> {
     );
   }
 
+  bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) =>
+      _localCache.hasCachedOrdersFor(
+        outletId: outletId,
+        allOutlets: allOutlets,
+      );
+
   /// Applies the O3 initial-scope defaults right after a fresh login, then
   /// hydrates from what was just written.
   void adoptFromLogin({required bool isOwner}) {
@@ -128,9 +134,18 @@ class OutletScopeCubit extends Cubit<OutletScope> {
       _localCache.setActiveOutletId(allowed.first.id);
       _localCache.setAllOutletsScope(false);
     } else {
-      // 0 or >=2 outlets: nothing to auto-select — O4's blocked screen or
-      // the outlet picker takes over from here.
-      _localCache.clearActiveOutletId();
+      // 0 or >=2 outlets: reuse the outlet this employee picked last time
+      // in this organization, if still allowed; otherwise O4's blocked
+      // screen or the outlet picker takes over from here.
+      final key = _rememberedOutletKey();
+      final remembered = key == null
+          ? null
+          : _localCache.getRememberedOutlet(key.$1, key.$2);
+      if (remembered != null && allowed.any((o) => o.id == remembered)) {
+        _localCache.setActiveOutletId(remembered);
+      } else {
+        _localCache.clearActiveOutletId();
+      }
       _localCache.setAllOutletsScope(false);
     }
 
@@ -141,7 +156,21 @@ class OutletScopeCubit extends Cubit<OutletScope> {
   void select(String outletId) {
     _localCache.setActiveOutletId(outletId);
     _localCache.setAllOutletsScope(false);
+    final key = _rememberedOutletKey();
+    if (key != null) {
+      _localCache.setRememberedOutlet(key.$1, key.$2, outletId);
+    }
     hydrate();
+  }
+
+  /// (user id, organization id) the remembered outlet is stored under, or
+  /// null when either isn't cached.
+  (String, String)? _rememberedOutletKey() {
+    final userId = _localCache.getCachedUser()?['id']?.toString() ?? '';
+    if (userId.isEmpty) return null;
+    final storeId = _localCache.getActiveStoreId() ?? '';
+    if (storeId.isEmpty) return null;
+    return (userId, storeId);
   }
 
   /// Owner only: view every outlet at once.

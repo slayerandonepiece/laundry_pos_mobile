@@ -38,6 +38,26 @@ class FakeSecureStorage extends SecureStorageService {
 }
 
 class InMemoryLocalCache extends LocalCacheService {
+  // A phone that has already been through setup: the app opens straight
+  // into the shell instead of the setup screen.
+  List<Map<String, dynamic>>? _cachedOrders = [];
+  @override
+  List<Map<String, dynamic>>? getCachedOrders() => _cachedOrders;
+  @override
+  Future<void> setCachedOrders(List<Map<String, dynamic>> orders) async =>
+      _cachedOrders = orders;
+
+  final Map<String, String> _rememberedOutlets = {};
+  @override
+  String? getRememberedOutlet(String userId, String storeId) =>
+      _rememberedOutlets['$userId::$storeId'];
+  @override
+  Future<void> setRememberedOutlet(
+    String userId,
+    String storeId,
+    String outletId,
+  ) async => _rememberedOutlets['$userId::$storeId'] = outletId;
+
   String? _activeStoreId = 's1';
   Map<String, dynamic>? _cachedUser = {
     'id': 'u1',
@@ -207,6 +227,9 @@ class StubPosRepository implements PosRepository {
   ];
 
   @override
+  List<StorePaymentMethod>? getCachedPaymentMethodsList() => [];
+
+  @override
   Future<List<StorePaymentMethod>> listPaymentMethods() async => [];
 
   @override
@@ -292,6 +315,42 @@ void main() {
         await tempDir.delete(recursive: true);
       }
     });
+
+    testWidgets(
+      'cold start with nothing synced for the active outlet opens the setup screen',
+      (tester) async {
+        final cache = InMemoryLocalCache().._cachedOrders = null;
+        await cache.setAllowedOutletsForStore('s1', [o1, o2]);
+        await cache.setActiveOutletId('o1');
+
+        final storage = FakeSecureStorage();
+        final apiClient = ApiClient(
+          dio: createMockDio((options) async => mockJsonResponse({})),
+          secureStorage: storage,
+          localCache: cache,
+        );
+
+        await tester.pumpWidget(
+          MyShopApp(
+            apiClient: apiClient,
+            authRepository: SpyAuthRepository(
+              apiClient: apiClient,
+              secureStorage: storage,
+              cache: cache,
+            ),
+            posRepository: StubPosRepository(),
+            ordersRepository: StubOrdersRepository(),
+            ownerRepository: StubOwnerRepository(),
+            localCache: cache,
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('Setting things up'), findsOneWidget);
+        expect(find.text('Opening your outlet'), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'reason-less 403, previous outlet absent from fresh list -> clearSelection, NO AccessForbiddenEvent, snackbar shows outlet name',

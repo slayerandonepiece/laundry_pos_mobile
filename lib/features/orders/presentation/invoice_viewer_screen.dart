@@ -22,7 +22,7 @@ class InvoiceViewerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final invoiceNumber =
-        order.invoice?.invoiceNumber ?? 'INV-${order.orderCode}';
+        order.invoice?.invoiceNumber ?? 'INV-${order.displayCode}';
     final invoiceDate = order.invoice != null
         ? DateFormatter.formatDate(order.invoice!.issuedAt)
         : DateFormatter.formatDate(DateTime.now());
@@ -49,7 +49,7 @@ class InvoiceViewerScreen extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              'Order ${order.orderCode} · ${order.name.isNotEmpty ? order.name : order.phone}',
+              'Order ${order.displayCode} · ${order.name.isNotEmpty ? order.name : order.phone}',
               style: AppTextStyles.hint,
             ),
           ],
@@ -157,7 +157,7 @@ class InvoiceViewerScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          order.orderCode,
+                          order.displayCode,
                           style: const TextStyle(
                             fontFamily: AppTextStyles.fontDisplay,
                             fontSize: 11,

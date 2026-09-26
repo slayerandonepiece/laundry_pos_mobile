@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -55,6 +57,10 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     }
 
     return BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          (curr.storeProfile != null && !_isInitialized) ||
+          (curr.messageSection == OwnerSection.profile &&
+              (curr.error != null || curr.actionMessage != null)),
       listener: (context, state) {
         if (state.storeProfile != null && !_isInitialized) {
           _nameController.text = state.storeProfile!.name.isNotEmpty
@@ -64,11 +70,21 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
           _emailController.text = state.storeProfile!.email;
           _isInitialized = true;
         }
+        if (state.messageSection != OwnerSection.profile) return;
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.actionMessage!),
               backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -108,7 +124,9 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                 tooltip: 'Refresh',
                 onPressed: () {
                   _isInitialized = false;
-                  context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadStoreProfileEvent(refresh: true),
+                  );
                 },
               ),
               const SizedBox(width: 8),
@@ -123,14 +141,20 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
               SyncStatusBar(
                 onSyncNow: () {
                   _isInitialized = false;
-                  context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadStoreProfileEvent(refresh: true),
+                  );
                 },
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
                     _isInitialized = false;
-                    context.read<OwnerBloc>().add(LoadStoreProfileEvent());
+                    final done = Completer<void>();
+                    context.read<OwnerBloc>().add(
+                      LoadStoreProfileEvent(refresh: true, done: done),
+                    );
+                    await done.future;
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -200,7 +224,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
 
                       PrimaryButton(
                         label: 'Save changes',
-                        isLoading: state.isLoading,
+                        isLoading: state.loading.contains(OwnerSection.profile),
                         onPressed: () {
                           final name = _nameController.text.trim();
                           final phone = _phoneController.text.trim();

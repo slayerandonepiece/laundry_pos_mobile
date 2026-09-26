@@ -2,6 +2,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/sync/sync_engine.dart';
+import '../../../core/sync/sync_manager.dart';
+import '../data/models/order_model.dart';
 import '../data/orders_repository.dart';
 import 'orders_event.dart';
 import 'orders_state.dart';
@@ -33,16 +35,28 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   ) async {
     final cachedOrders = ordersRepository.getCachedOrdersList();
     if (cachedOrders.isNotEmpty) {
-      emit(state.copyWith(allOrders: cachedOrders, error: null));
+      emit(
+        state.copyWith(
+          allOrders: cachedOrders,
+          loadFailed: false,
+          error: null,
+        ),
+      );
       return;
     }
 
     emit(state.copyWith(isLoading: true, error: null));
     await SyncEngine.instance.trigger();
+    final orders = ordersRepository.getCachedOrdersList();
+    final syncState = SyncManager.instance.value;
+    final loadFailed =
+        orders.isEmpty &&
+        (syncState.isOffline || syncState.hasError || syncState.isSyncPaused);
     emit(
       state.copyWith(
         isLoading: false,
-        allOrders: ordersRepository.getCachedOrdersList(),
+        allOrders: orders,
+        loadFailed: loadFailed,
       ),
     );
   }
@@ -58,10 +72,16 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   ) async {
     emit(state.copyWith(isLoading: true, error: null));
     await SyncEngine.instance.retryNow();
+    final orders = ordersRepository.getCachedOrdersList();
+    final syncState = SyncManager.instance.value;
+    final loadFailed =
+        orders.isEmpty &&
+        (syncState.isOffline || syncState.hasError || syncState.isSyncPaused);
     emit(
       state.copyWith(
         isLoading: false,
-        allOrders: ordersRepository.getCachedOrdersList(),
+        allOrders: orders,
+        loadFailed: loadFailed,
       ),
     );
   }
@@ -80,7 +100,10 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
   ) async {
     emit(state.copyWith(isLoading: true, error: null));
     try {
-      final order = await ordersRepository.getOrderDetail(event.orderCode);
+      final order = await ordersRepository.getOrderDetail(
+        event.orderCode,
+        fallbackToCache: false,
+      );
       emit(state.copyWith(isLoading: false, selectedOrder: order));
     } catch (e) {
       AppLogger.log(
@@ -88,6 +111,25 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         'getOrderDetail(${event.orderCode}) failed',
         error: e,
       );
+      Order? cached;
+      try {
+        for (final o in ordersRepository.getCachedOrdersList()) {
+          if (o.id == event.orderCode || o.offlineId == event.orderCode) {
+            cached = o;
+            break;
+          }
+        }
+      } catch (_) {}
+      if (cached != null) {
+        emit(
+          state.copyWith(
+            isLoading: false,
+            selectedOrder: cached,
+            error: 'Could not refresh — showing the saved copy',
+          ),
+        );
+        return;
+      }
       emit(
         state.copyWith(
           isLoading: false,
@@ -109,7 +151,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         event.nextStatus,
       );
       final updatedList = state.allOrders
-          .map((o) => o.id == updated.id ? updated : o)
+          .map((o) => o.isSameOrder(updated) ? updated : o)
           .toList();
 
       emit(
@@ -156,7 +198,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       );
 
       final updatedList = state.allOrders
-          .map((o) => o.id == updated.id ? updated : o)
+          .map((o) => o.isSameOrder(updated) ? updated : o)
           .toList();
 
       // Local-first writes (1 & 2) are done — emit success and let the
@@ -176,7 +218,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       // (never awaited) so a slow or offline server can't hold up the
       // dialog-close path above. If it fails, that's fine: the payment and
       // status are already saved locally, and invoice generation is retried
-      // the next time this order's detail screen is opened.
+      // by SyncEngine after the next clean sync (retryMissingInvoices).
       () async {
         try {
           await ordersRepository.getOrCreateInvoice(event.orderCode);
@@ -186,8 +228,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           // number shows up on screen now instead of only next reopen.
           if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
         } catch (_) {
-          // Ignored — invoice generation retried the next time this
-          // order's detail screen is opened.
+          // Ignored — invoice generation retried by SyncEngine after the
+          // next clean sync (retryMissingInvoices).
         }
       }();
 
@@ -219,7 +261,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       );
 
       final updatedList = state.allOrders
-          .map((o) => o.id == updated.id ? updated : o)
+          .map((o) => o.isSameOrder(updated) ? updated : o)
           .toList();
 
       // Local-first write is done — emit success and let the dialog close
@@ -238,8 +280,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       // server-assigned) — it can't be made local-first. Fire-and-forget
       // (never awaited) so a slow or offline server can't hold up the
       // dialog-close path above. If it fails, the status/payment are
-      // already saved locally, and invoice generation is retried the next
-      // time this order's detail screen is opened.
+      // already saved locally, and invoice generation is retried by
+      // SyncEngine after the next clean sync (retryMissingInvoices).
       () async {
         try {
           await ordersRepository.getOrCreateInvoice(event.orderCode);
@@ -249,8 +291,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           // number shows up on screen now instead of only next reopen.
           if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
         } catch (_) {
-          // Ignored — invoice generation retried the next time this
-          // order's detail screen is opened.
+          // Ignored — invoice generation retried by SyncEngine after the
+          // next clean sync (retryMissingInvoices).
         }
       }();
 
@@ -274,7 +316,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       await ordersRepository.getOrCreateInvoice(event.orderCode);
       final refreshed = await ordersRepository.getOrderDetail(event.orderCode);
       final updatedList = state.allOrders
-          .map((o) => o.id == refreshed.id ? refreshed : o)
+          .map((o) => o.isSameOrder(refreshed) ? refreshed : o)
           .toList();
       emit(state.copyWith(selectedOrder: refreshed, allOrders: updatedList));
     } catch (e) {

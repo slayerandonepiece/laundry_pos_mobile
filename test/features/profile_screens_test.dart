@@ -74,6 +74,7 @@ class FakeProfileOwnerRepository extends OwnerRepository {
     if (index >= 0) {
       paymentMethods[index] = StorePaymentMethod(
         id: id,
+        code: paymentMethods[index].code,
         name: paymentMethods[index].name,
         type: paymentMethods[index].type,
         active: active,
@@ -267,6 +268,37 @@ void main() {
         expect(fakeRepo.lastToggledPaymentMethod, isNotNull);
         expect(fakeRepo.lastToggledPaymentMethod!['id'], 'pm-1');
         expect(fakeRepo.lastToggledPaymentMethod!['active'], isFalse);
+
+        fakeRepo.paymentMethods = [
+          StorePaymentMethod(
+            id: 'pm-3',
+            code: 'COD',
+            name: 'Pay on delivery',
+          ),
+        ];
+        await tester.tap(find.byIcon(Icons.refresh_rounded));
+        await pumpAsync(tester);
+
+        expect(find.text('COD'), findsOneWidget);
+        expect(find.text('Cash'), findsNothing);
+      },
+    );
+
+    test(
+      '4. StorePaymentMethod.fromJson parses code and toJson round-trips',
+      () {
+        final method = StorePaymentMethod.fromJson({
+          'id': 'pm1',
+          'code': 'CARD',
+          'name': 'Card',
+          'enabled': true,
+        });
+        expect(method.code, 'CARD');
+        final roundTripped = StorePaymentMethod.fromJson(method.toJson());
+        expect(roundTripped.id, 'pm1');
+        expect(roundTripped.code, 'CARD');
+        expect(roundTripped.name, 'Card');
+        expect(roundTripped.active, isTrue);
       },
     );
 

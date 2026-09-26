@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -25,12 +27,25 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          curr.messageSection == OwnerSection.paymentMethods &&
+          (curr.error != null || curr.actionMessage != null),
       listener: (context, state) {
+        if (state.messageSection != OwnerSection.paymentMethods) return;
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.actionMessage!),
               backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -67,7 +82,9 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                 ),
                 tooltip: 'Refresh',
                 onPressed: () {
-                  context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadPaymentMethodsEvent(refresh: true),
+                  );
                 },
               ),
               const SizedBox(width: 8),
@@ -81,20 +98,37 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             children: [
               SyncStatusBar(
                 onSyncNow: () {
-                  context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadPaymentMethodsEvent(refresh: true),
+                  );
                 },
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+                    final done = Completer<void>();
+                    context.read<OwnerBloc>().add(
+                      LoadPaymentMethodsEvent(refresh: true, done: done),
+                    );
+                    await done.future;
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(20),
                     children: [
                       // Existing payment methods list
-                      if (methods.isNotEmpty) ...[
+                      if (state.loading.contains(OwnerSection.paymentMethods) &&
+                          methods.isEmpty) ...[
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ] else if (methods.isNotEmpty) ...[
                         ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -131,11 +165,13 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                                             color: AppColors.text,
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          method.type,
-                                          style: AppTextStyles.hint,
-                                        ),
+                                        if (method.code.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            method.code,
+                                            style: AppTextStyles.hint,
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),

@@ -96,6 +96,23 @@ void main() {
       ],
     };
 
+    test('A custom date range is fetched but not cached', () async {
+      fakeConnectivity.mockOffline = false;
+      final customUrl = Uri.parse(ApiEndpoints.dashboard)
+          .replace(queryParameters: {'from': '2026-09-01', 'to': '2026-09-10'})
+          .toString();
+      fakeApiClient.responses[customUrl] = mockMetricsJson;
+
+      final metrics = await ownerRepo.getDashboardMetrics(
+        from: '2026-09-01',
+        to: '2026-09-10',
+      );
+
+      expect(fakeApiClient.getCallCount, 1);
+      expect(metrics.todaySales, 35000);
+      expect(localCache.getCachedDashboardMetrics(), isNull);
+    });
+
     test('Online success writes cache and returns data', () async {
       fakeConnectivity.mockOffline = false;
       fakeApiClient.responses[ApiEndpoints.dashboard] = mockMetricsJson;

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
+import 'package:myshop/core/utils/idempotency.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/pos/data/models/product_model.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
@@ -37,11 +38,14 @@ class _ServicesScreenState extends State<ServicesScreen> {
     super.dispose();
   }
 
-  Future<void> _loadServices() async {
+  /// Opens from the local cache; the network only on [refresh] (pull to
+  /// refresh, after a save) or when nothing is cached yet.
+  Future<void> _loadServices({bool refresh = false}) async {
     final posRepository = context.read<PosRepository>();
     final cached = posRepository.getCachedProductsList();
     if (cached.isNotEmpty) {
       setState(() => _products = cached);
+      if (!refresh) return;
     } else {
       setState(() => _isLoading = true);
     }
@@ -55,6 +59,13 @@ class _ServicesScreenState extends State<ServicesScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not load services — try again'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -74,7 +85,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
       MaterialPageRoute(
         builder: (_) => RepositoryProvider.value(
           value: repo,
-          child: ServiceFormScreen(onSaved: _loadServices),
+          child: ServiceFormScreen(
+            onSaved: () => _loadServices(refresh: true),
+          ),
         ),
       ),
     );
@@ -87,7 +100,10 @@ class _ServicesScreenState extends State<ServicesScreen> {
       MaterialPageRoute(
         builder: (_) => RepositoryProvider.value(
           value: repo,
-          child: ServiceFormScreen(product: product, onSaved: _loadServices),
+          child: ServiceFormScreen(
+            product: product,
+            onSaved: () => _loadServices(refresh: true),
+          ),
         ),
       ),
     );
@@ -310,7 +326,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                 ),
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: _loadServices,
+                    onRefresh: () => _loadServices(refresh: true),
                     child: filtered.isEmpty
                         ? ListView(
                             padding: const EdgeInsets.all(40),
@@ -667,6 +683,8 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
   late List<_TierEntry> _tiers;
   bool _isSaving = false;
   String? _errorMessage;
+  late final String _productId =
+      widget.product?.id ?? IdempotencyKeyGenerator.generate();
 
   bool get _isEditing => widget.product != null;
 
@@ -782,6 +800,7 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
         );
       } else {
         await context.read<OwnerRepository>().createProduct(
+          id: _productId,
           name: name,
           category: _category,
           unit: _unit,

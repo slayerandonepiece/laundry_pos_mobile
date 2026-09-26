@@ -27,6 +27,8 @@ class FakeLocalCache extends LocalCacheService {
   String? getActiveOutletId() => null;
   @override
   bool isAllOutletsScope() => false;
+  @override
+  bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) => true;
 }
 
 class FakeDashboardOwnerRepo implements OwnerRepository {

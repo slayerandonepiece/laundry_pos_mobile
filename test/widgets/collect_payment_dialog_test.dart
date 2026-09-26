@@ -66,7 +66,10 @@ class MockCollectOrdersRepository implements OrdersRepository {
   }
 
   @override
-  Future<Order> getOrderDetail(String orderCode) async {
+  Future<Order> getOrderDetail(
+    String orderCode, {
+    bool fallbackToCache = true,
+  }) async {
     return Order(
       id: orderCode,
       name: 'Ramesh Patel',
@@ -94,7 +97,13 @@ class FakeDialogPosRepository implements PosRepository {
   List<StorePaymentMethod> methods;
   int listCalls = 0;
 
+  // Null = never synced, so the dialog fetches.
+  List<StorePaymentMethod>? cachedMethods;
+
   FakeDialogPosRepository(this.methods);
+
+  @override
+  List<StorePaymentMethod>? getCachedPaymentMethodsList() => cachedMethods;
 
   @override
   Future<List<StorePaymentMethod>> listPaymentMethods() async {
@@ -214,6 +223,22 @@ void main() {
         expect(find.text('Collect payment & deliver'), findsNothing);
       },
     );
+
+    testWidgets('Uses cached payment methods without the network', (
+      tester,
+    ) async {
+      fakePosRepo.cachedMethods = [
+        StorePaymentMethod.fromJson({'id': 'pm_c', 'name': 'Card', 'enabled': true}),
+      ];
+      await tester.pumpWidget(createTestDialog());
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Card'), findsOneWidget);
+      expect(find.text('Cash'), findsNothing);
+      expect(fakePosRepo.listCalls, 0);
+    });
 
     testWidgets(
       'Empty payment methods list shows warning copy and disables Collect & deliver button',

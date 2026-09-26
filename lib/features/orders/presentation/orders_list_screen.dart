@@ -18,11 +18,10 @@ import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
 import 'package:myshop/features/profile/presentation/profile_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
-import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
-import 'package:myshop/shared/widgets/outlet_switcher.dart';
+import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sticky_header_delegate.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
@@ -61,7 +60,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   /// explicit pull-to-refresh — it never sees a sync that completes on its
   /// own, e.g. the fire-and-forget SyncEngine.trigger() fired right after
   /// creating an order in PosRepository.createOrderOptimistic. Without this,
-  /// a just-placed order can sit showing its LOCAL-xxx placeholder here even
+  /// a just-placed order can sit showing its OFF-xxx code here even
   /// after the sync that resolves it to a real order code has already
   /// finished, until the user happens to trigger another load. Re-reading
   /// the cache (no network call — LoadOrdersEvent is cache-only) whenever
@@ -85,15 +84,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     final outletScope = context.watch<OutletScopeCubit>().state;
-    final hasOutletChoice =
-        outletScope.allowed.length > 1 || outletScope.isOwner;
-    String storeSubtitle = '';
-    final hasMultipleStores =
-        authState is AuthenticatedState && authState.availableStores.length > 1;
-    if (authState is AuthenticatedState) {
-      storeSubtitle =
-          '${authState.currentStore.storeName} · ${authState.user.displayName}';
-    }
+    final ordersState = context.watch<OrdersBloc>().state;
+    final allOrders = ordersState.allOrders;
+    final activeCount = allOrders.where((o) => !o.isDelivered).length;
+    final subtitle = allOrders.isNotEmpty
+        ? '${allOrders.length} total · $activeCount active'
+        : 'No orders yet';
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -101,46 +97,10 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         backgroundColor: AppColors.surface,
         elevation: 0,
         titleSpacing: 20,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Dashboard',
-              style: TextStyle(
-                fontFamily: AppTextStyles.fontDisplay,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.6,
-                color: AppColors.text,
-              ),
-            ),
-            const SizedBox(height: 3),
-            InkWell(
-              onTap: hasMultipleStores
-                  ? () => StoreSwitcherDialog.show(context)
-                  : null,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      storeSubtitle,
-                      style: AppTextStyles.hint,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (hasMultipleStores) ...[
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.arrow_drop_down,
-                      size: 16,
-                      color: AppColors.mutedText,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+        title: OutletTitleSwitcher(
+          screenLabel: 'Orders',
+          showAllOutletsOption: false,
+          subtitle: subtitle,
         ),
         actions: [
           Padding(
@@ -218,18 +178,6 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   onRefresh: () => _refreshAndAwait(context),
                   child: CustomScrollView(
                     slivers: [
-                      // Outlet switcher — omitted entirely when there's no
-                      // choice to make (O5.1), so it never adds spacing.
-                      if (hasOutletChoice)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: OutletSwitcher(showAllOutletsOption: true),
-                            ),
-                          ),
-                        ),
                       // Stat cards — this is the part that scrolls away.
                       SliverToBoxAdapter(
                         child: Padding(
@@ -303,6 +251,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                         allOrders: allOrders,
                         filteredOrders: filteredOrders,
                         outletScope: outletScope,
+                        loadFailed: state.loadFailed,
                       ),
                     ],
                   ),
@@ -478,6 +427,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     required List<Order> allOrders,
     required List<Order> filteredOrders,
     required OutletScope outletScope,
+    bool loadFailed = false,
   }) {
     if (allOrders.isEmpty) {
       // Screen 9a: Empty state
@@ -487,13 +437,21 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           child: Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: EmptyState(
-                icon: Icons.receipt_long_outlined,
-                title: 'No orders yet',
-                subtitle: 'Orders will appear here as soon as you take a sale.',
-                actionLabel: 'Take a sale',
-                onAction: () => _startNewOrder(context),
-              ),
+              child: loadFailed
+                  ? const EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: "Can't load orders",
+                      subtitle:
+                          "You're offline or the server can't be reached. Pull down to try again.",
+                    )
+                  : EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'No orders yet',
+                      subtitle:
+                          'Orders will appear here as soon as you take a sale.',
+                      actionLabel: 'Take a sale',
+                      onAction: () => _startNewOrder(context),
+                    ),
             ),
           ),
         ),
@@ -589,7 +547,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       runSpacing: 4,
                       children: [
                         Text(
-                          order.orderCode,
+                          order.displayCode,
                           style: const TextStyle(
                             fontFamily: AppTextStyles.fontDisplay,
                             fontSize: 14.5,

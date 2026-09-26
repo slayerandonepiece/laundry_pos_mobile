@@ -1,13 +1,25 @@
+import 'dart:async';
+
 abstract class OwnerEvent {}
+
+// Load* events read the local cache only (network only when nothing is
+// cached yet); refresh: true is for pull-to-refresh, Refresh and Sync now.
 
 class LoadDashboardEvent extends OwnerEvent {
   final String? from;
   final String? to;
+  final bool refresh;
+  final Completer<void>? done;
 
-  LoadDashboardEvent({this.from, this.to});
+  LoadDashboardEvent({this.from, this.to, this.refresh = false, this.done});
 }
 
-class LoadExpensesEvent extends OwnerEvent {}
+class LoadExpensesEvent extends OwnerEvent {
+  final bool refresh;
+  final Completer<void>? done;
+
+  LoadExpensesEvent({this.refresh = false, this.done});
+}
 
 class AddExpenseEvent extends OwnerEvent {
   final String title;
@@ -15,6 +27,7 @@ class AddExpenseEvent extends OwnerEvent {
   final int amount;
   final String due;
   final bool monthly;
+  final String? idempotencyKey;
 
   AddExpenseEvent({
     required this.title,
@@ -22,6 +35,7 @@ class AddExpenseEvent extends OwnerEvent {
     required this.amount,
     required this.due,
     this.monthly = false,
+    this.idempotencyKey,
   });
 }
 
@@ -31,17 +45,24 @@ class MarkExpensePaidEvent extends OwnerEvent {
   MarkExpensePaidEvent(this.expenseId);
 }
 
-class LoadStaffEvent extends OwnerEvent {}
+class LoadStaffEvent extends OwnerEvent {
+  final bool refresh;
+  final Completer<void>? done;
+
+  LoadStaffEvent({this.refresh = false, this.done});
+}
 
 class AddStaffEvent extends OwnerEvent {
   final String name;
   final String username;
   final String password;
+  final String? idempotencyKey;
 
   AddStaffEvent({
     required this.name,
     required this.username,
     required this.password,
+    this.idempotencyKey,
   });
 }
 
@@ -63,7 +84,12 @@ class UpdateStaffEvent extends OwnerEvent {
   });
 }
 
-class LoadPaymentMethodsEvent extends OwnerEvent {}
+class LoadPaymentMethodsEvent extends OwnerEvent {
+  final bool refresh;
+  final Completer<void>? done;
+
+  LoadPaymentMethodsEvent({this.refresh = false, this.done});
+}
 
 class TogglePaymentMethodEvent extends OwnerEvent {
   final String id;
@@ -72,7 +98,12 @@ class TogglePaymentMethodEvent extends OwnerEvent {
   TogglePaymentMethodEvent({required this.id, required this.active});
 }
 
-class LoadStoreProfileEvent extends OwnerEvent {}
+class LoadStoreProfileEvent extends OwnerEvent {
+  final bool refresh;
+  final Completer<void>? done;
+
+  LoadStoreProfileEvent({this.refresh = false, this.done});
+}
 
 class UpdateStoreProfileEvent extends OwnerEvent {
   final String storeName;

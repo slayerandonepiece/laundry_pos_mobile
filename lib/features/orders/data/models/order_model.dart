@@ -136,7 +136,12 @@ class InvoiceInfo {
 }
 
 class Order {
-  final String id; // Order code (e.g. EL-123)
+  final String id; // Server order code (e.g. EL-123); empty until synced
+
+  /// App-generated id (UUID) for orders created or edited on this phone;
+  /// null for web orders the app never touched. See
+  /// docs/OFFLINE-ID-SYNC-PLAN.md §3.
+  final String? offlineId;
   final String name; // Customer name
   final String phone;
   final String date; // Order date YYYY-MM-DD
@@ -158,6 +163,7 @@ class Order {
 
   Order({
     required this.id,
+    this.offlineId,
     required this.name,
     required this.phone,
     required this.date,
@@ -186,7 +192,57 @@ class Order {
   bool get isInProgress => status == 'In Progress';
   bool get isPending => status == 'Pending';
 
-  String get orderCode => id;
+  /// Local key for bloc events and repository calls: the server code once
+  /// synced, else the offline id.
+  String get orderCode => id.isNotEmpty ? id : (offlineId ?? '');
+
+  /// What the user sees: the server code, or `OFF-` + the last 6 characters
+  /// of the offline id while the order is unsynced.
+  String get displayCode {
+    if (id.isNotEmpty) return id;
+    final off = offlineId ?? '';
+    final tail = off.length > 6 ? off.substring(off.length - 6) : off;
+    return 'OFF-${tail.toUpperCase()}';
+  }
+
+  bool isSameOrder(Order other) => jsonSameOrder(
+    {'id': id, 'offlineId': offlineId},
+    {'id': other.id, 'offlineId': other.offlineId},
+  );
+
+  /// True when a cached order map is the order a [ref] (an [orderCode])
+  /// points at.
+  static bool jsonMatchesRef(Map<String, dynamic> json, String ref) =>
+      ref.isNotEmpty && (json['id'] == ref || json['offlineId'] == ref);
+
+  /// True when two order maps are the same order: equal non-empty ids, else
+  /// equal non-empty offline ids.
+  static bool jsonSameOrder(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final aId = a['id']?.toString() ?? '';
+    final bId = b['id']?.toString() ?? '';
+    if (aId.isNotEmpty && bId.isNotEmpty) return aId == bId;
+    final aOff = a['offlineId']?.toString() ?? '';
+    return aOff.isNotEmpty && aOff == b['offlineId']?.toString();
+  }
+
+  /// A server order map merged over the cached one: keeps the cached
+  /// offline id and invoice when the server has none.
+  static Map<String, dynamic> mergeServerJson(
+    Map<String, dynamic>? cached,
+    Map<String, dynamic> server,
+  ) {
+    final serverOff = server['offlineId']?.toString() ?? '';
+    final cachedOff = cached?['offlineId']?.toString() ?? '';
+    final keepOff = serverOff.isEmpty && cachedOff.isNotEmpty;
+    final cachedInv = cached?['invoice'];
+    final keepInv = server['invoice'] == null && cachedInv != null;
+    if (!keepOff && !keepInv) return server;
+    return {
+      ...server,
+      if (keepOff) 'offlineId': cachedOff,
+      if (keepInv) 'invoice': cachedInv,
+    };
+  }
   DateTime get createdAt => DateTime.tryParse(date)?.toLocal() ?? DateTime.now();
   DateTime get dueDateTime => DateTime.tryParse(due)?.toLocal() ?? DateTime.now();
 
@@ -198,6 +254,9 @@ class Order {
 
     return Order(
       id: json['id']?.toString() ?? '',
+      offlineId: (json['offlineId']?.toString() ?? '').isEmpty
+          ? null
+          : json['offlineId'].toString(),
       name: json['name']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
@@ -228,6 +287,7 @@ class Order {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'offlineId': offlineId,
       'name': name,
       'phone': phone,
       'date': date,
@@ -246,6 +306,7 @@ class Order {
 
   Order copyWith({
     String? id,
+    String? offlineId,
     String? name,
     String? phone,
     String? date,
@@ -262,6 +323,7 @@ class Order {
   }) {
     return Order(
       id: id ?? this.id,
+      offlineId: offlineId ?? this.offlineId,
       name: name ?? this.name,
       phone: phone ?? this.phone,
       date: date ?? this.date,

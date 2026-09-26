@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
+import 'package:myshop/core/utils/idempotency.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
@@ -15,7 +18,7 @@ import 'package:myshop/shared/widgets/app_text_field.dart';
 import 'package:myshop/shared/widgets/centred_dialog.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
-import 'package:myshop/shared/widgets/outlet_switcher.dart';
+import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
@@ -292,18 +295,27 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final now = DateTime.now();
     final todayStart = _startOfDay(now);
     final outletScopeCubit = context.watch<OutletScopeCubit?>();
-    final outletScope = outletScopeCubit?.state;
-    final hasOutletChoice =
-        outletScope != null &&
-        (outletScope.allowed.length > 1 || outletScope.isOwner);
 
     final content = BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          curr.messageSection == OwnerSection.expenses &&
+          (curr.error != null || curr.actionMessage != null),
       listener: (context, state) {
+        if (state.messageSection != OwnerSection.expenses) return;
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.actionMessage!),
               backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -358,11 +370,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             .where((e) => e.monthly)
             .length;
 
-        final totalPeriodAmount = periodExpenses.fold(
-          0,
-          (sum, e) => sum + e.amount,
-        );
-
         return Scaffold(
           backgroundColor: AppColors.surface,
           appBar: AppBar(
@@ -373,24 +380,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               onPressed: () => Navigator.pop(context),
             ),
             titleSpacing: 0,
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Expenses',
-                  style: TextStyle(
-                    fontFamily: AppTextStyles.fontDisplay,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Period total ${CurrencyFormatter.format(totalPeriodAmount)}',
-                  style: AppTextStyles.hint,
-                ),
-              ],
+            title: const OutletTitleSwitcher(
+              screenLabel: 'Expenses',
+              showAllOutletsOption: true,
             ),
             actions: [
               IconButton(
@@ -401,7 +393,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
                 tooltip: 'Refresh',
                 onPressed: () {
-                  context.read<OwnerBloc>().add(LoadExpensesEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadExpensesEvent(refresh: true),
+                  );
                 },
               ),
               Padding(
@@ -429,27 +423,24 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             children: [
               SyncStatusBar(
                 onSyncNow: () {
-                  context.read<OwnerBloc>().add(LoadExpensesEvent());
+                  context.read<OwnerBloc>().add(
+                    LoadExpensesEvent(refresh: true),
+                  );
                 },
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    context.read<OwnerBloc>().add(LoadExpensesEvent());
+                    final done = Completer<void>();
+                    context.read<OwnerBloc>().add(
+                      LoadExpensesEvent(refresh: true, done: done),
+                    );
+                    await done.future;
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(20),
                     children: [
-                      // Outlet switcher — hidden when there's no
-                      // choice to make (O5.1).
-                      if (hasOutletChoice) ...[
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutletSwitcher(showAllOutletsOption: true),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
                       // 1. Period selector row
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -671,7 +662,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       const SizedBox(height: 16),
 
                       // 5. Ledger list or Empty state
-                      if (displayedExpenses.isEmpty)
+                      if (state.loading.contains(OwnerSection.expenses) &&
+                          allExpenses.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        )
+                      else if (displayedExpenses.isEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 30),
                           child: EmptyState(
@@ -826,6 +827,7 @@ class AddExpenseScreen extends StatefulWidget {
 class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  late final String _idempotencyKey = IdempotencyKeyGenerator.generate();
   String _category = 'Operations';
   bool _monthly = false;
   String? _errorMessage;
@@ -859,6 +861,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         amount: amountInPaise,
         due: due,
         monthly: _monthly,
+        idempotencyKey: _idempotencyKey,
       ),
     );
     Navigator.pop(context);

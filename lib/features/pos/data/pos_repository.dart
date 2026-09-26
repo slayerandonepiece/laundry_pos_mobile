@@ -32,6 +32,17 @@ class PosRepository {
     }
   }
 
+  /// Enabled payment methods from the local cache, or null if they were
+  /// never synced to this phone.
+  List<StorePaymentMethod>? getCachedPaymentMethodsList() {
+    final cached = _localCache.getCachedPaymentMethods();
+    if (cached == null) return null;
+    return cached
+        .map((m) => StorePaymentMethod.fromJson(m))
+        .where((m) => m.active)
+        .toList();
+  }
+
   /// Fetches product catalogue for current active store with local cache
   Future<List<Product>> listProducts() async {
     final isOffline = await ConnectivityService.instance.checkIsOffline();
@@ -150,8 +161,13 @@ class PosRepository {
     Map<String, dynamic>? initialPayment,
     String? outletId,
   }) async {
+    // The order's local key until the server assigns its EL- code; also
+    // sent so a retry of a create whose reply was lost returns the same
+    // order (docs/OFFLINE-ID-SYNC-PLAN.md §3).
+    final offlineId = IdempotencyKeyGenerator.generate();
     final body = {
       'idempotencyKey': idempotencyKey,
+      'offlineId': offlineId,
       'phone': phone.trim(),
       'customerName': customerName.trim(),
       'dueDate': dueDate,
@@ -161,8 +177,6 @@ class PosRepository {
       'outletId': ?outletId,
     };
 
-    final offlineCode =
-        'LOCAL-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
     final cachedProds = _localCache.getCachedProducts() ?? [];
     final prodMap = {for (var p in cachedProds) p['id']?.toString(): p};
 
@@ -207,7 +221,8 @@ class PosRepository {
     }
 
     final localOrder = Order(
-      id: offlineCode,
+      id: '',
+      offlineId: offlineId,
       name: customerName.trim(),
       phone: phone.trim(),
       date: DateTime.now().toIso8601String(),
@@ -230,7 +245,7 @@ class PosRepository {
       'type': 'create_order',
       'clientActionId': IdempotencyKeyGenerator.generate(),
       'body': body,
-      'offlineCode': offlineCode,
+      'offlineCode': offlineId,
       'storeId': _localCache.getActiveStoreId(),
       'outletId': outletId,
       'queuedAt': DateTime.now().toIso8601String(),

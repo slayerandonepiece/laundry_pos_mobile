@@ -4,10 +4,14 @@ import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/features/owner/data/models/staff_model.dart';
 import 'package:myshop/features/owner/data/models/store_profile_model.dart';
 
+enum OwnerSection { dashboard, expenses, staff, paymentMethods, profile }
+
 class OwnerState {
   final bool isLoading;
+  final Set<OwnerSection> loading;
   final String? error;
   final String? actionMessage;
+  final OwnerSection? messageSection;
   final DashboardMetrics metrics;
   final List<Expense> expenses;
   final List<StaffMember> staff;
@@ -16,21 +20,26 @@ class OwnerState {
   final String dashboardPeriod; // 'today' | '7d' | '30d'
 
   OwnerState({
-    this.isLoading = false,
+    bool? isLoading,
+    this.loading = const {},
     this.error,
     this.actionMessage,
+    this.messageSection,
     DashboardMetrics? metrics,
     this.expenses = const [],
     this.staff = const [],
     this.paymentMethods = const [],
     this.storeProfile,
     this.dashboardPeriod = 'today',
-  }) : metrics = metrics ?? DashboardMetrics();
+  }) : isLoading = isLoading ?? loading.isNotEmpty,
+       metrics = metrics ?? DashboardMetrics();
 
   OwnerState copyWith({
     bool? isLoading,
+    Set<OwnerSection>? loading,
     String? error,
     String? actionMessage,
+    OwnerSection? messageSection,
     DashboardMetrics? metrics,
     List<Expense>? expenses,
     List<StaffMember>? staff,
@@ -38,10 +47,15 @@ class OwnerState {
     StoreProfile? storeProfile,
     String? dashboardPeriod,
   }) {
+    final nextLoading = loading ?? this.loading;
     return OwnerState(
-      isLoading: isLoading ?? this.isLoading,
+      isLoading:
+          isLoading ??
+          (loading != null ? nextLoading.isNotEmpty : this.isLoading),
+      loading: nextLoading,
       error: error,
       actionMessage: actionMessage,
+      messageSection: messageSection,
       metrics: metrics ?? this.metrics,
       expenses: expenses ?? this.expenses,
       staff: staff ?? this.staff,

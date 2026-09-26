@@ -75,15 +75,17 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             context.read<OrdersBloc>().add(LoadOrdersEvent());
           },
         ),
-        // Switching outlet scope (O5.1's OutletSwitcher) must refetch orders
+        // Switching outlet scope (O5.1's OutletSwitcher) must reload orders
         // for the newly-active scope rather than leave stale rows from the
-        // previous one on screen — see O5.3's verify condition.
+        // previous one on screen — see O5.3's verify condition. From the
+        // local cache only: a scope never synced to this phone goes through
+        // the setup screen first (main.dart).
         BlocListener<OutletScopeCubit, OutletScope>(
           listenWhen: (prev, curr) =>
               prev.activeOutletId != curr.activeOutletId ||
               prev.allOutlets != curr.allOutlets,
           listener: (context, state) {
-            context.read<OrdersBloc>().add(RefreshOrdersEvent());
+            context.read<OrdersBloc>().add(LoadOrdersEvent());
           },
         ),
       ],

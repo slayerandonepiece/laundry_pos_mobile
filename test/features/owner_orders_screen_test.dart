@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
+import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
 import 'package:myshop/features/orders/presentation/order_detail_screen.dart';
@@ -14,6 +17,17 @@ import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
+
+class FailingApiClient extends ApiClient {
+  @override
+  Future<dynamic> get(
+    String url, {
+    Map<String, String>? headers,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    throw Exception('Network unreachable');
+  }
+}
 
 class FakeLocalCache extends LocalCacheService {
   List<Map<String, dynamic>>? allowedOutlets = [
@@ -26,6 +40,7 @@ class FakeLocalCache extends LocalCacheService {
     },
   ];
   String? activeOutletId;
+  List<Map<String, dynamic>>? cachedOrdersJson;
 
   @override
   Map<String, dynamic>? getCachedStoreDetails() => {'role': 'OWNER'};
@@ -35,6 +50,13 @@ class FakeLocalCache extends LocalCacheService {
   String? getActiveOutletId() => activeOutletId;
   @override
   bool isAllOutletsScope() => activeOutletId == null;
+  @override
+  bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) => true;
+  @override
+  List<Map<String, dynamic>>? getCachedOrders({
+    String? outletId,
+    bool? allOutlets,
+  }) => cachedOrdersJson;
 }
 
 class MockOrdersRepository implements OrdersRepository {
@@ -445,6 +467,56 @@ void main() {
         // Inline FROM / TO selectors appear
         expect(find.text('FROM'), findsOneWidget);
         expect(find.text('TO'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      "Shows Can't load orders instead of No orders yet when cache is empty and sync is offline or failed",
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => SyncManager.instance.completeSync());
+
+        mockOrdersRepo.cachedOrders = [];
+        SyncManager.instance.setOffline(0);
+
+        await tester.pumpWidget(createScreen());
+        await tester.pumpAndSettle();
+
+        expect(find.text("Can't load orders"), findsOneWidget);
+        expect(
+          find.text(
+            "You're offline or the server can't be reached. Pull down to try again.",
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('No orders yet'), findsNothing);
+      },
+    );
+
+    test(
+      'LoadOrderDetailEvent emits cached order AND stale-cache warning when network refresh fails',
+      () async {
+        final cache = FakeLocalCache()
+          ..cachedOrdersJson = [fakeOrders.first.toJson()];
+        final repo = OrdersRepository(
+          apiClient: FailingApiClient(),
+          localCache: cache,
+        );
+        final bloc = OrdersBloc(ordersRepository: repo);
+        addTearDown(bloc.close);
+
+        bloc.add(LoadOrderDetailEvent('ORD-101'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        expect(bloc.state.isLoading, isFalse);
+        expect(bloc.state.selectedOrder?.id, 'ORD-101');
+        expect(
+          bloc.state.error,
+          'Could not refresh — showing the saved copy',
+        );
       },
     );
   });

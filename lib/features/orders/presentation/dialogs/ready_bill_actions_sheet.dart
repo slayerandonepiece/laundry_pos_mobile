@@ -52,7 +52,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
 
   String get _message =>
       'Hello ${order.name.isNotEmpty ? order.name : "Customer"}, '
-      'your order ${order.orderCode} is ready! Your total bill is '
+      'your order ${order.displayCode} is ready! Your total bill is '
       '${CurrencyFormatter.format(order.totalAmount)}. '
       'Please come and collect your order at your convenience. '
       'Thank you for choosing $storeName!';
@@ -96,7 +96,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${order.orderCode} · ${order.name.isNotEmpty ? order.name : order.phone} · Bill ${CurrencyFormatter.format(order.totalAmount)}',
+            '${order.displayCode} · ${order.name.isNotEmpty ? order.name : order.phone} · Bill ${CurrencyFormatter.format(order.totalAmount)}',
             style: AppTextStyles.hint,
           ),
           const SizedBox(height: 20),
@@ -144,7 +144,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
     final messenger = ScaffoldMessenger.maybeOf(context);
     Navigator.pop(context);
     try {
-      AppLogger.log(_tag, 'starting share for order ${order.orderCode}');
+      AppLogger.log(_tag, 'starting share for order ${order.displayCode}');
       final bytes = await buildOrderPdfBytes(
         order: order,
         storeName: storeName,
@@ -152,7 +152,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
         storePhone: storePhone,
         isFinalInvoice: false,
       );
-      final fileName = 'Bill-${order.orderCode}.pdf';
+      final fileName = 'Bill-${order.displayCode}.pdf';
       final result = await SharePlus.instance.share(
         ShareParams(
           files: [
@@ -160,7 +160,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
           ],
           fileNameOverrides: [fileName],
           text: _message,
-          subject: 'Order ${order.orderCode} ready - $storeName',
+          subject: 'Order ${order.displayCode} ready - $storeName',
         ),
       );
       AppLogger.log(_tag, 'share sheet result: ${result.status}');
@@ -186,7 +186,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
     );
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => bytes,
-      name: 'Bill-${order.orderCode}',
+      name: 'Bill-${order.displayCode}',
     );
   }
 

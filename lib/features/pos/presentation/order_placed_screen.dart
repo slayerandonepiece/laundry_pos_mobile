@@ -164,7 +164,7 @@ class _OrderPlacedScreenState extends State<OrderPlacedScreen> {
                                   ),
                                 ),
                                 Text(
-                                  order.id,
+                                  order.displayCode,
                                   style: AppTextStyles.moneyLarge.copyWith(
                                     fontSize: 18,
                                   ),

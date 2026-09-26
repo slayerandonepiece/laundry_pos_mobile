@@ -71,11 +71,11 @@ class _StatusDialogState extends State<StatusDialog> {
 
     return BlocConsumer<OrdersBloc, OrdersState>(
       listener: (context, state) {
-        // Guard by orderCode: actionSuccessMessage/selectedOrder are shared
+        // Guard by order: actionSuccessMessage/selectedOrder are shared
         // bloc-wide state, so only pop this dialog for its own order's
         // success, not any other order's action reaching the same bloc.
         if (state.actionSuccessMessage != null &&
-            state.selectedOrder?.orderCode == widget.order.orderCode) {
+            state.selectedOrder?.isSameOrder(widget.order) == true) {
           Navigator.pop(context);
         } else if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -117,7 +117,7 @@ class _StatusDialogState extends State<StatusDialog> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${widget.order.orderCode} · $customerName',
+                  '${widget.order.displayCode} · $customerName',
                   style: AppTextStyles.hint,
                 ),
                 const SizedBox(height: 18),

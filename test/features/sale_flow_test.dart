@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/pos/data/models/product_model.dart';
@@ -17,6 +18,9 @@ class MockPosRepository implements PosRepository {
     getCachedCallCount++;
     return cachedProducts;
   }
+
+  @override
+  List<StorePaymentMethod>? getCachedPaymentMethodsList() => const [];
 
   @override
   Future<List<Product>> listProducts() async {

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
+import 'package:myshop/core/utils/idempotency.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
@@ -62,12 +65,25 @@ class _StaffScreenState extends State<StaffScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<OwnerBloc, OwnerState>(
+      listenWhen: (prev, curr) =>
+          curr.messageSection == OwnerSection.staff &&
+          (curr.error != null || curr.actionMessage != null),
       listener: (context, state) {
+        if (state.messageSection != OwnerSection.staff) return;
         if (state.actionMessage != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.actionMessage!),
               backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        if (state.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.error!),
+              backgroundColor: AppColors.danger,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -120,7 +136,7 @@ class _StaffScreenState extends State<StaffScreen> {
                 ),
                 tooltip: 'Refresh',
                 onPressed: () {
-                  context.read<OwnerBloc>().add(LoadStaffEvent());
+                  context.read<OwnerBloc>().add(LoadStaffEvent(refresh: true));
                 },
               ),
               Padding(
@@ -148,13 +164,17 @@ class _StaffScreenState extends State<StaffScreen> {
             children: [
               SyncStatusBar(
                 onSyncNow: () {
-                  context.read<OwnerBloc>().add(LoadStaffEvent());
+                  context.read<OwnerBloc>().add(LoadStaffEvent(refresh: true));
                 },
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    context.read<OwnerBloc>().add(LoadStaffEvent());
+                    final done = Completer<void>();
+                    context.read<OwnerBloc>().add(
+                      LoadStaffEvent(refresh: true, done: done),
+                    );
+                    await done.future;
                   },
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -233,7 +253,17 @@ class _StaffScreenState extends State<StaffScreen> {
                       const SizedBox(height: 16),
 
                       // 3. Employee cards or empty state
-                      if (staff.isEmpty)
+                      if (state.loading.contains(OwnerSection.staff) &&
+                          staff.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        )
+                      else if (staff.isEmpty)
                         const Padding(
                           padding: EdgeInsets.only(top: 40),
                           child: EmptyState(
@@ -393,6 +423,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final String _idempotencyKey = IdempotencyKeyGenerator.generate();
   String? _errorMessage;
 
   @override
@@ -422,7 +453,12 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
     }
 
     context.read<OwnerBloc>().add(
-      AddStaffEvent(name: name, username: username, password: password),
+      AddStaffEvent(
+        name: name,
+        username: username,
+        password: password,
+        idempotencyKey: _idempotencyKey,
+      ),
     );
     Navigator.pop(context);
   }

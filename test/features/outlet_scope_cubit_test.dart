@@ -148,4 +148,47 @@ void main() {
       expect(cubit.state.missingCache, isFalse);
     });
   });
+
+  group('Remembered outlet across logout', () {
+    Future<void> signInEmployee(String userId) async {
+      await localCache.setCachedUser({'id': userId, 'name': 'Staff'});
+      await localCache.setActiveStoreId('store_a');
+      await localCache.setCachedStoreDetails({'role': 'EMPLOYEE'});
+      await localCache.setAllowedOutletsForStore('store_a', twoOutlets);
+      cubit.adoptFromLogin(isOwner: false);
+    }
+
+    test('an employee who picked an outlet skips the picker next sign-in', () async {
+      await signInEmployee('u1');
+      expect(cubit.state.requiresSelection, isTrue);
+      cubit.select('outlet_2');
+
+      await localCache.clear(); // logout
+      expect(localCache.getActiveOutletId(), isNull);
+
+      await signInEmployee('u1');
+      expect(cubit.state.requiresSelection, isFalse);
+      expect(cubit.state.activeOutletId, 'outlet_2');
+    });
+
+    test('the choice is per user and ignored once no longer allowed', () async {
+      await signInEmployee('u1');
+      cubit.select('outlet_2');
+      await localCache.clear();
+
+      await signInEmployee('u2');
+      expect(cubit.state.requiresSelection, isTrue);
+
+      await localCache.clear();
+      await localCache.setCachedUser({'id': 'u1'});
+      await localCache.setActiveStoreId('store_a');
+      await localCache.setCachedStoreDetails({'role': 'EMPLOYEE'});
+      await localCache.setAllowedOutletsForStore('store_a', [
+        ...oneOutlet,
+        {'id': 'outlet_3', 'displayName': 'Whitefield'},
+      ]);
+      cubit.adoptFromLogin(isOwner: false);
+      expect(cubit.state.requiresSelection, isTrue);
+    });
+  });
 }

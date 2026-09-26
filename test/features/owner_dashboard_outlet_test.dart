@@ -15,9 +15,24 @@ import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
-import 'package:myshop/shared/widgets/outlet_switcher.dart';
+import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 
 class FakeLocalCache extends LocalCacheService {
+
+  @override
+  Map<String, dynamic>? getCachedUser() => null;
+
+  final Map<String, String> _rememberedOutlets = {};
+  @override
+  String? getRememberedOutlet(String userId, String storeId) =>
+      _rememberedOutlets['$userId::$storeId'];
+  @override
+  Future<void> setRememberedOutlet(
+    String userId,
+    String storeId,
+    String outletId,
+  ) async => _rememberedOutlets['$userId::$storeId'] = outletId;
+
   Map<String, dynamic>? storeDetails;
   List<Map<String, dynamic>>? allowedOutlets;
   String? activeOutletId;
@@ -76,6 +91,9 @@ class FakeLocalCache extends LocalCacheService {
   Future<void> clearAllOutletsScope() async {
     allOutletsScope = false;
   }
+
+  @override
+  bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) => true;
 }
 
 class FakeDashboardOwnerRepository implements OwnerRepository {
@@ -126,6 +144,9 @@ class FakeOrdersBloc extends Bloc<OrdersEvent, OrdersState>
   FakeOrdersBloc([List<Order> orders = const []])
     : super(OrdersState(allOrders: orders)) {
     on<LoadOrdersEvent>((event, emit) {});
+    on<RefreshOrdersEvent>(
+      (event, emit) => emit(state.copyWith(isLoading: false)),
+    );
   }
 
   @override
@@ -234,7 +255,7 @@ void main() {
       await tester.pumpWidget(buildScreen(cubit));
       await pumpDashboard(tester);
 
-      expect(find.byType(OutletSwitcher), findsOneWidget);
+      expect(find.byType(OutletTitleSwitcher), findsOneWidget);
       expect(find.text('All outlets'), findsOneWidget);
     });
 
@@ -266,7 +287,8 @@ void main() {
       expect(cubit.state.activeOutletId, 'outlet_1');
       expect(cubit.state.allOutlets, isFalse);
       expect(ownerBloc.loadDashboardEvents.length, 1);
-      expect(fakeOwnerRepo.calls.length, 1);
+      // Local-first: switching outlet reads the cache, no network call.
+      expect(fakeOwnerRepo.calls, isEmpty);
 
       // Switch back to All outlets
       cubit.selectAllOutlets();
@@ -274,8 +296,52 @@ void main() {
 
       expect(cubit.state.allOutlets, isTrue);
       expect(ownerBloc.loadDashboardEvents.length, 2);
-      expect(fakeOwnerRepo.calls.length, 2);
+      expect(fakeOwnerRepo.calls, isEmpty);
     });
+
+    testWidgets(
+      'Picking an outlet on the Dashboard switcher also updates the Orders switcher via shared OutletScopeCubit',
+      (tester) async {
+        final cache = FakeLocalCache();
+        final cubit = OutletScopeCubit(localCache: cache)..hydrate();
+        addTearDown(cubit.close);
+
+        final outlet2Name = cubit.state.allowed[1].displayName;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BlocProvider<OutletScopeCubit>.value(
+              value: cubit,
+              child: const Scaffold(
+                body: Column(
+                  children: [
+                    OutletTitleSwitcher(
+                      screenLabel: 'Dashboard',
+                      showAllOutletsOption: true,
+                    ),
+                    OutletTitleSwitcher(
+                      screenLabel: 'Orders',
+                      showAllOutletsOption: true,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('All outlets'), findsNWidgets(2));
+
+        await tester.tap(find.text('All outlets').first);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text(outlet2Name));
+        await tester.pumpAndSettle();
+
+        expect(find.text(outlet2Name), findsNWidgets(2));
+        expect(find.text('All outlets'), findsNothing);
+      },
+    );
 
     testWidgets(
       'New M0 vocabulary labels render and old labels do not appear',

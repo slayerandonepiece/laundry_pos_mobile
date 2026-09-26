@@ -12,14 +12,19 @@ import 'package:myshop/shared/widgets/app_text_field.dart';
 class FakePosRepository extends PosRepository {
   List<Product> products = [];
   int listProductsCallCount = 0;
+  bool shouldThrowOnList = false;
 
   FakePosRepository({required List<Product> initialProducts})
     : products = initialProducts,
       super(apiClient: ApiClient(), localCache: LocalCacheService());
 
   @override
+  List<Product> getCachedProductsList() => [];
+
+  @override
   Future<List<Product>> listProducts() async {
     listProductsCallCount++;
+    if (shouldThrowOnList) throw Exception('Failed to load services');
     return products;
   }
 }
@@ -28,11 +33,14 @@ class FakeOwnerRepository extends OwnerRepository {
   Product? lastCreatedProduct;
   Map<String, dynamic>? lastCreateProductParams;
   Map<String, dynamic>? lastUpdateProductParams;
+  final List<String?> createdIds = [];
+  bool failFirstCreate = false;
 
   FakeOwnerRepository() : super(apiClient: ApiClient());
 
   @override
   Future<Product> createProduct({
+    String? id,
     required String name,
     required String category,
     required String unit,
@@ -41,7 +49,13 @@ class FakeOwnerRepository extends OwnerRepository {
     bool? active,
     int? extra,
   }) async {
+    createdIds.add(id);
+    if (failFirstCreate) {
+      failFirstCreate = false;
+      throw Exception('Network timeout');
+    }
     lastCreateProductParams = {
+      'id': id,
       'name': name,
       'category': category,
       'unit': unit,
@@ -51,7 +65,7 @@ class FakeOwnerRepository extends OwnerRepository {
       'extra': extra,
     };
     final newProd = Product(
-      id: 'prod-${DateTime.now().millisecondsSinceEpoch}',
+      id: id ?? 'prod-${DateTime.now().millisecondsSinceEpoch}',
       name: name,
       category: category,
       active: active ?? true,
@@ -498,5 +512,54 @@ void main() {
       expect(find.byType(ListView), findsOneWidget);
       expect(find.byType(GridView), findsNothing);
     });
+
+    testWidgets(
+      'Shows error SnackBar when listProducts throws',
+      (tester) async {
+        fakePosRepo.shouldThrowOnList = true;
+
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          find.text('Could not load services — try again'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'Tapping Create service a second time after a failed create sends the SAME client id',
+      (tester) async {
+        fakeOwnerRepo.failFirstCreate = true;
+
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.add));
+        await tester.pumpAndSettle();
+
+        final nameField = find.widgetWithText(AppTextField, 'SERVICE NAME');
+        await tester.enterText(nameField, 'Curtain Wash');
+        final textFields = find.byType(TextField);
+        await tester.enterText(textFields.at(1), '250');
+        await tester.pumpAndSettle();
+
+        // First attempt fails
+        await tester.ensureVisible(find.text('Create service'));
+        await tester.tap(find.text('Create service'));
+        await tester.pumpAndSettle();
+
+        // Second attempt succeeds
+        await tester.tap(find.text('Create service'));
+        await tester.pumpAndSettle();
+
+        expect(fakeOwnerRepo.createdIds.length, 2);
+        expect(fakeOwnerRepo.createdIds[0], isNotNull);
+        expect(fakeOwnerRepo.createdIds[0], isNotEmpty);
+        expect(fakeOwnerRepo.createdIds[1], equals(fakeOwnerRepo.createdIds[0]));
+      },
+    );
   });
 }
