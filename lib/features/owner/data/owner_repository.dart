@@ -3,6 +3,7 @@ import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/core/storage/secure_storage.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
@@ -19,10 +20,15 @@ const _tag = 'OWNER_REPO';
 class OwnerRepository {
   final ApiClient apiClient;
   final LocalCacheService localCache;
+  final SecureStorageService secureStorage;
 
-  OwnerRepository({ApiClient? apiClient, LocalCacheService? localCache})
-    : apiClient = apiClient ?? ApiClient(),
-      localCache = localCache ?? LocalCacheService();
+  OwnerRepository({
+    ApiClient? apiClient,
+    LocalCacheService? localCache,
+    SecureStorageService? secureStorage,
+  }) : apiClient = apiClient ?? ApiClient(),
+       localCache = localCache ?? LocalCacheService(),
+       secureStorage = secureStorage ?? SecureStorageService();
 
   /// Reads dashboard metrics from the local cache only — no network call.
   DashboardMetrics? getCachedDashboardMetricsSync() {
@@ -417,7 +423,7 @@ class OwnerRepository {
 
   Future<StaffMember> _createStaffDirect({
     required String name,
-    required String username,
+    required String phone,
     required String password,
     String? idempotencyKey,
   }) async {
@@ -428,8 +434,9 @@ class OwnerRepository {
       ApiEndpoints.employees,
       body: {
         'name': name.trim(),
-        'username': username.trim(),
+        'phone': phone.trim(),
         'password': password,
+        'active': true,
         'idempotencyKey': key,
       },
     );
@@ -439,7 +446,7 @@ class OwnerRepository {
   /// Adds a new staff member with a generated or chosen temporary password
   Future<StaffMember> createStaff({
     required String name,
-    required String username,
+    required String phone,
     required String password,
     String? idempotencyKey,
   }) async {
@@ -454,7 +461,7 @@ class OwnerRepository {
     try {
       final staff = await _createStaffDirect(
         name: name,
-        username: username,
+        phone: phone,
         password: password,
         idempotencyKey: key,
       );
@@ -481,14 +488,14 @@ class OwnerRepository {
   Future<void> _setStaffActiveDirect({
     required String employeeId,
     required String name,
-    required String username,
+    required String phone,
     required bool active,
   }) async {
     await apiClient.put(
       ApiEndpoints.employeeDetail(employeeId),
       body: {
         'name': name.trim(),
-        'username': username.trim(),
+        'phone': phone.trim(),
         'active': active,
       },
     );
@@ -497,7 +504,7 @@ class OwnerRepository {
   Future<void> _setStaffActiveOffline({
     required String employeeId,
     required String name,
-    required String username,
+    required String phone,
     required bool active,
   }) async {
     final cached = localCache.getCachedStaff() ?? [];
@@ -513,7 +520,7 @@ class OwnerRepository {
       'payload': {
         'employeeId': employeeId,
         'name': name.trim(),
-        'username': username.trim(),
+        'phone': phone.trim(),
         'active': active,
       },
       'queuedAt': DateTime.now().toIso8601String(),
@@ -527,8 +534,8 @@ class OwnerRepository {
     final cached = localCache.getCachedStaff() ?? [];
     final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
     final name = idx != -1 ? (cached[idx]['name']?.toString() ?? '') : '';
-    final username = idx != -1
-        ? (cached[idx]['username']?.toString() ?? '')
+    final phone = idx != -1
+        ? (cached[idx]['phone']?.toString() ?? '')
         : '';
     final currentActive = idx != -1 ? (cached[idx]['active'] != false) : true;
     final newActive = !currentActive;
@@ -538,7 +545,7 @@ class OwnerRepository {
       await _setStaffActiveOffline(
         employeeId: employeeId,
         name: name,
-        username: username,
+        phone: phone,
         active: newActive,
       );
       return;
@@ -548,7 +555,7 @@ class OwnerRepository {
       await _setStaffActiveDirect(
         employeeId: employeeId,
         name: name,
-        username: username,
+        phone: phone,
         active: newActive,
       );
       final freshCached = localCache.getCachedStaff() ?? [];
@@ -565,7 +572,7 @@ class OwnerRepository {
         await _setStaffActiveOffline(
           employeeId: employeeId,
           name: name,
-          username: username,
+          phone: phone,
           active: newActive,
         );
         return;
@@ -577,7 +584,7 @@ class OwnerRepository {
   Future<StaffMember> _updateStaffDirect({
     required String employeeId,
     required String name,
-    required String username,
+    required String phone,
     bool? active,
   }) async {
     final cached = localCache.getCachedStaff() ?? [];
@@ -588,7 +595,7 @@ class OwnerRepository {
       ApiEndpoints.employeeDetail(employeeId),
       body: {
         'name': name.trim(),
-        'username': username.trim(),
+        'phone': phone.trim(),
         'active': resolvedActive,
       },
     );
@@ -598,7 +605,7 @@ class OwnerRepository {
   Future<StaffMember> _updateStaffOffline({
     required String employeeId,
     required String name,
-    required String username,
+    required String phone,
   }) async {
     final cached = localCache.getCachedStaff() ?? [];
     final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
@@ -607,7 +614,7 @@ class OwnerRepository {
       cached[idx] = {
         ...cached[idx],
         'name': name.trim(),
-        'username': username.trim(),
+        'phone': phone.trim(),
       };
       await localCache.setCachedStaff(cached);
       member = StaffMember.fromJson(cached[idx]);
@@ -615,7 +622,7 @@ class OwnerRepository {
       member = StaffMember(
         id: employeeId,
         name: name.trim(),
-        username: username.trim(),
+        phone: phone.trim(),
         active: true,
       );
     }
@@ -626,7 +633,7 @@ class OwnerRepository {
       'payload': {
         'employeeId': employeeId,
         'name': name.trim(),
-        'username': username.trim(),
+        'phone': phone.trim(),
         'active': member.active,
       },
       'queuedAt': DateTime.now().toIso8601String(),
@@ -640,14 +647,14 @@ class OwnerRepository {
   Future<StaffMember> updateStaff({
     required String employeeId,
     required String name,
-    required String username,
+    required String phone,
   }) async {
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       return _updateStaffOffline(
         employeeId: employeeId,
         name: name,
-        username: username,
+        phone: phone,
       );
     }
 
@@ -655,7 +662,7 @@ class OwnerRepository {
       final staff = await _updateStaffDirect(
         employeeId: employeeId,
         name: name,
-        username: username,
+        phone: phone,
       );
       final cached = localCache.getCachedStaff() ?? [];
       final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
@@ -670,7 +677,7 @@ class OwnerRepository {
         return _updateStaffOffline(
           employeeId: employeeId,
           name: name,
-          username: username,
+          phone: phone,
         );
       }
       rethrow;
@@ -1077,7 +1084,7 @@ class OwnerRepository {
             final localId = payload['localId']?.toString();
             final serverStaff = await _createStaffDirect(
               name: payload['name']?.toString() ?? '',
-              username: payload['username']?.toString() ?? '',
+              phone: payload['phone']?.toString() ?? '',
               password: payload['password']?.toString() ?? '',
               idempotencyKey: payload['idempotencyKey']?.toString(),
             );
@@ -1104,7 +1111,7 @@ class OwnerRepository {
             await _setStaffActiveDirect(
               employeeId: resolvedId,
               name: payload['name']?.toString() ?? '',
-              username: payload['username']?.toString() ?? '',
+              phone: payload['phone']?.toString() ?? '',
               active: newActive,
             );
             final cached = localCache.getCachedStaff() ?? [];
@@ -1131,7 +1138,7 @@ class OwnerRepository {
             final updatedStaff = await _updateStaffDirect(
               employeeId: resolvedId,
               name: payload['name']?.toString() ?? '',
-              username: payload['username']?.toString() ?? '',
+              phone: payload['phone']?.toString() ?? '',
               active: payload['active'] as bool?,
             );
             final cached = localCache.getCachedStaff() ?? [];
@@ -1264,10 +1271,17 @@ class OwnerRepository {
     required String currentPassword,
     required String newPassword,
   }) async {
-    await apiClient.post(
+    final response = await apiClient.post(
       ApiEndpoints.changePassword,
-      body: {'currentPassword': currentPassword, 'newPassword': newPassword},
+      body: {'oldPassword': currentPassword, 'newPassword': newPassword},
     );
+    // The server revokes the old session and returns a fresh token.
+    if (response is Map) {
+      final token = response['token']?.toString();
+      if (token != null && token.isNotEmpty) {
+        await secureStorage.saveToken(token);
+      }
+    }
   }
 
   Future<Product> _upsertProduct({

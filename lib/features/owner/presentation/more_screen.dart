@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -5,6 +6,7 @@ import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
+import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/presentation/change_password_screen.dart';
 import 'package:myshop/features/owner/presentation/expenses_screen.dart';
@@ -115,11 +117,31 @@ class MoreScreen extends StatelessWidget {
       ),
       body: BlocBuilder<OwnerBloc, OwnerState>(
         builder: (context, state) {
-          final unpaidExpenses = state.expenses.where((e) => !e.isPaid).length;
+          final now = DateTime.now();
+          final todayStart = DateTime(now.year, now.month, now.day);
+          final unpaidExpenses = state.expenses.where((e) {
+            if (e.isPaid) return false;
+            if (e.due.trim().isNotEmpty) {
+              final dueDt = DateTime.tryParse(e.due.trim());
+              if (dueDt != null && dueDt.isAfter(todayStart)) {
+                return false;
+              }
+            }
+            return true;
+          }).length;
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+          return RefreshIndicator(
+            onRefresh: () async {
+              final completer = Completer<void>();
+              context.read<OwnerBloc>().add(
+                LoadExpensesEvent(refresh: true, done: completer),
+              );
+              await completer.future;
+            },
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              children: [
               // STORE SECTION
               const SectionHeader(title: 'STORE'),
               const SizedBox(height: 8),
@@ -303,8 +325,9 @@ class MoreScreen extends StatelessWidget {
                 ),
               ),
             ],
-          );
-        },
+          ),
+        );
+      },
       ),
     );
   }

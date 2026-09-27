@@ -1,8 +1,45 @@
-# Session handoff — offline ids, syncing screen, local-first, app audit (2026-09-26)
+# Session handoff — mobile workspace improvements (2026-09-27)
 
 Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
+
+## Current status — 27 September 2026
+
+This section supersedes the historical branch/test-status notes below.
+
+### Repository baseline and this batch
+
+- Mobile `main` is `cdfc121d2f34bdc301c05f95a6feb0ad3b876c13`, Merge pull request #1 from `slayerandonepiece/frontend/offline-id` (26 September). Offline-ID phases, bootstrap/local-first flow, outlet handling and consistency fixes from that branch are merged. The older “pushed, not merged” statements below are historical.
+- User authorized including all current mobile changes from Claude/Gemini/GPT on `feat/workspace-improvements`. This batch remains separate from `laundry_pos`; no backend changes are committed here.
+- Claude chat reviewed: **Pending mobile app test cases** (local mobile project). Its latest commit/push attempt stopped at a session limit. Git inspection confirms today's files were still uncommitted on main before this batch. Visible conversations are context, not independent proof of their test claims.
+- GPT authored `docs/WEB-MOBILE-FEATURE-GAPS.md`: feature-by-feature source audit with 68 pending acceptance checks, including eight offline regression checks. This is a plan/checklist, not implemented web parity. GPT made no application-code changes during that audit.
+
+### Changes included from the working tree
+
+- Username → phone login/model/staff payload alignment; account/contact display updates and matching test fixtures.
+- Password setup retains the API's rotated token; owner password change sends `oldPassword` and retains its returned token.
+- Staff creation sends `active: true`.
+- Checkout options come from enabled store methods. Real COD submits no initial payment; no synthetic pay-later option or invented Cash fallback. No enabled COD means no pay-later choice. Cached methods are emitted first, then refreshed with cache retained on failure.
+- Keyboard/safe-area/layout improvements in weighted/item dialogs, shared buttons/scaffold/bottom navigation, invoice sheets and forms; weighted sheet uses `useSafeArea: true`.
+- Owner shell refreshes dashboard/expenses on store switch and expenses on opening More, addressing stale overview badges.
+- New tests cover password-token/API behavior, configured checkout methods/COD and weighted-sheet safe area. Manual run and outstanding cases are recorded in `docs/E2E-MANUAL-TEST.md` and `docs/MANUAL-TEST-CASES.md`.
+
+### Verification and limits
+
+- Current batch: `flutter analyze` passed, no issues (27 September).
+- Current batch: `flutter test --reporter expanded` passed all **333 tests** (27 September); `git diff --check` passed. Historical counts below describe older snapshots. Logs for this run: `/private/tmp/laundry-mobile-analyze.log` and `/private/tmp/laundry-mobile-tests.log`.
+- Earlier GPT launch check: iPhone 17 Pro dev build launched, auth/status and order delta returned 200 and sync completed. GPT did not visually verify the app screen; its computer-use tool could not bind Simulator. Android Pixel 9 disconnected before app launch.
+- Claude's manual test document contains pass/view-only/pending/blocked results. Do not convert view-only or older blocker entries to completed workflows. X10/X12/X14 were later withdrawn as origin/input-tooling artifacts; preserve that correction.
+- Test-environment cleanup in the manual documents remains a follow-up: historical notes report a trial organization temporarily unlocked and an employee intentionally inactive. Their current state has not been rechecked in this batch. Do not change shared state without user authorization.
+
+### Next work
+
+1. Complete the manual checks that remain applicable, especially configured-method refresh, COD, weighted dialog with keyboard, employee flows and offline replay.
+2. Implement web enhancement parity only after a scoped plan: dashboard metric semantics/cards/drill-down, expenses edit/delete/paid-date/attribution, staff assignments/reset, outlet views, richer profile facts, trial/lock/announcement notices.
+3. Preserve mobile offline identities, caches, scoped queues, idempotent replay, reconnect/resume and local PDF sharing. Avoid replacing repositories with web fetching patterns.
+4. Check backend endpoint readiness before native controls: announcements, locked reads, expense mutations/paid date and full profile/outlet facts have API gaps.
+5. No new parity feature is implemented merely because its checkbox exists; device acceptance stays pending until actually observed.
 
 ## Read first, in this order
 

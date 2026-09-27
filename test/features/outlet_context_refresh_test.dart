@@ -158,7 +158,7 @@ void main() {
         var includeOrganizations = true;
         final mockDio = createMockDio((options) async {
           return mockJsonResponse({
-            'user': {'id': 'u1', 'name': 'User', 'username': 'user'},
+            'user': {'id': 'u1', 'name': 'User', 'phone': 'user'},
             'stores': [
               {'storeId': 's1', 'storeName': 'Store 1', 'role': 'EMPLOYEE'},
               {'storeId': 's2', 'storeName': 'Store 2', 'role': 'OWNER'},
@@ -224,7 +224,7 @@ void main() {
             return mockJsonResponse({'error': 'Unauthorized'}, statusCode: 401);
           }
           return mockJsonResponse({
-            'user': {'id': 'u1', 'name': 'User', 'username': 'user'},
+            'user': {'id': 'u1', 'name': 'User', 'phone': 'user'},
             'stores': [
               {'storeId': 's1', 'storeName': 'Store 1', 'role': 'EMPLOYEE'},
             ],
@@ -348,5 +348,56 @@ void main() {
         expect(cubit.state.allOutlets, isTrue);
       },
     );
+
+    test('login posts phone (not username) with the password', () async {
+      Object? sentBody;
+      final mockDio = createMockDio((options) async {
+        sentBody = options.data;
+        return mockJsonResponse({
+          'token': 'tok_new',
+          'user': {'id': 'u1', 'name': 'User', 'phone': '9876500001'},
+          'stores': [
+            {'storeId': 's1', 'storeName': 'Store 1', 'role': 'OWNER'},
+          ],
+        });
+      });
+      final storage = FakeSecureStorage(token: null);
+      final cache = InMemoryLocalCache();
+      final repo = AuthRepository(
+        apiClient: ApiClient(
+          dio: mockDio,
+          secureStorage: storage,
+          localCache: cache,
+        ),
+        secureStorage: storage,
+        localCache: cache,
+      );
+
+      final res = await repo.login(' 9876500001 ', 'secret123');
+
+      expect(sentBody, {'phone': '9876500001', 'password': 'secret123'});
+      expect(res.user.phone, '9876500001');
+    });
+
+    test('setPassword stores the rotated session token', () async {
+      final mockDio = createMockDio((options) async {
+        return mockJsonResponse({'ok': true, 'token': 'tok_rotated'});
+      });
+      final storage = FakeSecureStorage(token: 'tok_old');
+      final cache = InMemoryLocalCache();
+      final repo = AuthRepository(
+        apiClient: ApiClient(
+          dio: mockDio,
+          secureStorage: storage,
+          localCache: cache,
+        ),
+        secureStorage: storage,
+        localCache: cache,
+      );
+
+      await repo.setPassword('NewPass123');
+
+      expect(storage.token, 'tok_rotated');
+    });
   });
 }

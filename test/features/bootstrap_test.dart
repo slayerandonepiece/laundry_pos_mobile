@@ -286,7 +286,7 @@ void main() {
       final employeeUser = User(
         id: 'u-emp',
         name: 'Staff John',
-        username: 'john',
+        phone: 'john',
       );
       final employeeStore = StoreSummary(
         storeId: 'store-1',
@@ -303,7 +303,7 @@ void main() {
       final ownerUser = User(
         id: 'u-owner',
         name: 'Owner Alice',
-        username: 'alice',
+        phone: 'alice',
       );
       final ownerStore = StoreSummary(
         storeId: 'store-1',

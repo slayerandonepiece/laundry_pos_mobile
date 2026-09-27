@@ -63,7 +63,7 @@ class OrderPayment {
       id: json['id']?.toString() ?? '',
       amount: (json['amount'] as num?)?.toInt() ?? 0,
       date: json['date']?.toString() ?? '',
-      method: json['method']?.toString() ?? 'Cash',
+      method: json['method']?.toString() ?? '',
     );
   }
 

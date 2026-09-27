@@ -54,6 +54,15 @@ class InvoiceActionsSheet extends StatelessWidget {
     final invoiceNo =
         order.invoice?.invoiceNumber ?? 'INV-${order.displayCode}';
 
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardHeight = mediaQuery.viewInsets.bottom;
+    final safeBottom = mediaQuery.viewPadding.bottom > 0
+        ? mediaQuery.viewPadding.bottom
+        : mediaQuery.padding.bottom;
+    final bottomInset = keyboardHeight > 0
+        ? keyboardHeight + 16
+        : (safeBottom > 0 ? safeBottom + 16 : 26.0);
+
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surface,
@@ -63,7 +72,7 @@ class InvoiceActionsSheet extends StatelessWidget {
         left: 20,
         right: 20,
         top: 10,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 26,
+        bottom: bottomInset,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -30,20 +30,20 @@ class FakeOwnerRepository extends OwnerRepository {
   @override
   Future<StaffMember> createStaff({
     required String name,
-    required String username,
+    required String phone,
     required String password,
     String? idempotencyKey,
   }) async {
     lastCreatedStaff = {
       'name': name,
-      'username': username,
+      'phone': phone,
       'password': password,
       'idempotencyKey': idempotencyKey,
     };
     final newMember = StaffMember(
       id: 'emp-${DateTime.now().millisecondsSinceEpoch}',
       name: name,
-      username: username,
+      phone: phone,
       active: true,
     );
     staff.add(newMember);
@@ -54,16 +54,16 @@ class FakeOwnerRepository extends OwnerRepository {
   Future<StaffMember> updateStaff({
     required String employeeId,
     required String name,
-    required String username,
+    required String phone,
   }) async {
     lastUpdatedStaff = {
       'employeeId': employeeId,
       'name': name,
-      'username': username,
+      'phone': phone,
     };
     final index = staff.indexWhere((m) => m.id == employeeId);
     if (index >= 0) {
-      final updated = staff[index].copyWith(name: name, username: username);
+      final updated = staff[index].copyWith(name: name, phone: phone);
       staff[index] = updated;
       return updated;
     }
@@ -91,19 +91,19 @@ void main() {
         StaffMember(
           id: 'emp-1',
           name: 'Ramesh Kumar',
-          username: 'ramesh',
+          phone: '9876500002',
           active: true,
         ),
         StaffMember(
           id: 'emp-2',
           name: 'Priya Sharma',
-          username: 'priya',
+          phone: '9876500005',
           active: true,
         ),
         StaffMember(
           id: 'emp-3',
           name: 'Suresh Raina',
-          username: 'suresh',
+          phone: '9876500006',
           active: false,
         ),
       ];
@@ -141,11 +141,11 @@ void main() {
       );
 
       expect(find.text('Ramesh Kumar'), findsOneWidget);
-      expect(find.text('@ramesh · Employee'), findsOneWidget);
+      expect(find.text('9876500002 · Employee'), findsOneWidget);
       expect(find.text('Priya Sharma'), findsOneWidget);
-      expect(find.text('@priya · Employee'), findsOneWidget);
+      expect(find.text('9876500005 · Employee'), findsOneWidget);
       expect(find.text('Suresh Raina'), findsOneWidget);
-      expect(find.text('@suresh · Employee'), findsOneWidget);
+      expect(find.text('9876500006 · Employee'), findsOneWidget);
 
       expect(
         find.text('Deactivated employees cannot sign in until reactivated.'),
@@ -153,7 +153,7 @@ void main() {
       );
     });
 
-    testWidgets('Search box filters by name and username', (tester) async {
+    testWidgets('Search box filters by name and phone', (tester) async {
       await tester.pumpWidget(buildTestWidget());
       await pumpStaff(tester);
 
@@ -168,8 +168,8 @@ void main() {
       expect(find.text('Ramesh Kumar'), findsNothing);
       expect(find.text('Suresh Raina'), findsNothing);
 
-      // Search by username 'suresh'
-      await tester.enterText(searchField, 'suresh');
+      // Search by phone
+      await tester.enterText(searchField, '500006');
       await tester.pumpAndSettle();
 
       expect(find.text('Suresh Raina'), findsOneWidget);
@@ -212,12 +212,12 @@ void main() {
 
         // Verify pre-filled values
         expect(find.text('Ramesh Kumar'), findsOneWidget);
-        expect(find.text('ramesh'), findsOneWidget);
+        expect(find.text('9876500002'), findsOneWidget);
 
         // Edit fields
         final fields = find.byType(TextField);
         await tester.enterText(fields.at(0), 'Ramesh K');
-        await tester.enterText(fields.at(1), 'rameshk');
+        await tester.enterText(fields.at(1), '9876500003');
         await tester.pumpAndSettle();
 
         // Tap Save changes
@@ -232,11 +232,11 @@ void main() {
         expect(fakeRepo.lastUpdatedStaff, isNotNull);
         expect(fakeRepo.lastUpdatedStaff!['employeeId'], 'emp-1');
         expect(fakeRepo.lastUpdatedStaff!['name'], 'Ramesh K');
-        expect(fakeRepo.lastUpdatedStaff!['username'], 'rameshk');
+        expect(fakeRepo.lastUpdatedStaff!['phone'], '9876500003');
 
         // Verify screen displays updated data
         expect(find.text('Ramesh K'), findsOneWidget);
-        expect(find.text('@rameshk · Employee'), findsOneWidget);
+        expect(find.text('9876500003 · Employee'), findsOneWidget);
       },
     );
 
@@ -269,7 +269,7 @@ void main() {
       // Enter details
       final fields = find.byType(TextField);
       await tester.enterText(fields.at(0), 'Anil Verma');
-      await tester.enterText(fields.at(1), 'anil');
+      await tester.enterText(fields.at(1), '9876500004');
       await tester.enterText(fields.at(2), 'password123');
       await tester.pumpAndSettle();
 
@@ -284,12 +284,12 @@ void main() {
       // Verify repo create was called
       expect(fakeRepo.lastCreatedStaff, isNotNull);
       expect(fakeRepo.lastCreatedStaff!['name'], 'Anil Verma');
-      expect(fakeRepo.lastCreatedStaff!['username'], 'anil');
+      expect(fakeRepo.lastCreatedStaff!['phone'], '9876500004');
       expect(fakeRepo.lastCreatedStaff!['password'], 'password123');
 
       // Verify new member is displayed
       expect(find.text('Anil Verma'), findsOneWidget);
-      expect(find.text('@anil · Employee'), findsOneWidget);
+      expect(find.text('9876500004 · Employee'), findsOneWidget);
       expect(find.text('4 members'), findsOneWidget);
     });
 

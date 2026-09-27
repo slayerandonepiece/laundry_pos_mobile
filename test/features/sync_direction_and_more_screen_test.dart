@@ -108,7 +108,7 @@ void main() {
 
     final testUser = User(
       id: 'usr-1',
-      username: 'owner_user',
+      phone: 'owner_user',
       name: 'Jane Doe',
     );
 

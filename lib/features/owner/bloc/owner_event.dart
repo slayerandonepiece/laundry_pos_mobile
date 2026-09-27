@@ -54,13 +54,13 @@ class LoadStaffEvent extends OwnerEvent {
 
 class AddStaffEvent extends OwnerEvent {
   final String name;
-  final String username;
+  final String phone;
   final String password;
   final String? idempotencyKey;
 
   AddStaffEvent({
     required this.name,
-    required this.username,
+    required this.phone,
     required this.password,
     this.idempotencyKey,
   });
@@ -75,12 +75,12 @@ class ToggleStaffActiveEvent extends OwnerEvent {
 class UpdateStaffEvent extends OwnerEvent {
   final String employeeId;
   final String name;
-  final String username;
+  final String phone;
 
   UpdateStaffEvent({
     required this.employeeId,
     required this.name,
-    required this.username,
+    required this.phone,
   });
 }
 

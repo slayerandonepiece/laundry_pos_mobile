@@ -7,9 +7,7 @@ machine-local and do **not** reach cloud sessions — this file does.
 ## How the user wants to work
 
 - Never commit without explicit permission, per batch of work.
-- Keep **one working branch per repo, named per side**: `frontend/offline-id`
-  here, `backend/offline-id` in `laundry_pos`. Pull `main` into it before
-  each batch.
+- Keep **one working branch per repo** using the user-requested name. Keep mobile and backend commits separate; inspect the actual main baseline before each batch.
 - Frontend and backend work happen in **separate chats**, each with its own
   prompt and its own diff — never club the two repos in one session or diff.
 - Merge finished work to `main`; merging does not deploy (auto-deploy
@@ -90,3 +88,13 @@ machine-local and do **not** reach cloud sessions — this file does.
 
 - Owner-screen wireframes (every owner screen, minimal UI):
   https://claude.ai/artifact/KXDqbi19o2crwHR9rw8to3
+
+## Workspace enhancement rules (27 September 2026)
+
+- Bring new web features/enhancements to Flutter feature by feature; retain mobile-only offline behavior. A source parity report is not implementation or device verification.
+- Checkout methods are API/store-configured, in supplied order, with no synthetic pay-later method, Cash fallback or default preselection. COD detection uses normalized code first, then name (`COD` or `CASHONDELIVERY`); COD creates no initial payment.
+- Catalog loads show cached products/methods immediately, then refresh enabled methods without losing the cache on failure. This is a deliberate freshness exception to cached screen navigation.
+- Mobile password endpoints can rotate and return a token. Save it before later authenticated requests; owner change-password payload uses `oldPassword`, not `currentPassword`.
+- Weighted full-height sheets need top safe-area protection with a keyboard; preserve their bottom keyboard/safe-area handling and scrollable content.
+- Browser web-console checks use `localhost:3000`; the iOS API still uses `127.0.0.1:3000`. Do not classify non-localhost dev-asset failure or screenshot-pixel/device-point mismatch as an app bug.
+- Never store account credentials in committed context, reports or memory. Keep historical test claims separate from fresh checks.

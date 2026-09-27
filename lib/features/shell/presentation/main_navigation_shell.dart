@@ -6,6 +6,8 @@ import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/presentation/orders_list_screen.dart';
+import 'package:myshop/features/owner/bloc/owner_bloc.dart';
+import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/presentation/more_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_orders_screen.dart';
@@ -73,6 +75,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           listener: (context, state) {
             context.read<CartBloc>().add(LoadCatalogEvent());
             context.read<OrdersBloc>().add(LoadOrdersEvent());
+            try {
+              context.read<OwnerBloc>().add(LoadExpensesEvent(refresh: true));
+              context.read<OwnerBloc>().add(LoadDashboardEvent(refresh: true));
+            } catch (_) {}
           },
         ),
         // Switching outlet scope (O5.1's OutletSwitcher) must reload orders
@@ -111,6 +117,12 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                   const ordersTabIndex = 1;
                   if (index == ordersTabIndex) {
                     context.read<OrdersBloc>().add(LoadOrdersEvent());
+                  }
+                  const moreTabIndex = 2;
+                  if (index == moreTabIndex) {
+                    try {
+                      context.read<OwnerBloc>().add(LoadExpensesEvent(refresh: true));
+                    } catch (_) {}
                   }
                 },
               )

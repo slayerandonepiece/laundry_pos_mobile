@@ -41,7 +41,7 @@ class _OrderPlacedScreenState extends State<OrderPlacedScreen> {
         order.paidAmount >= order.totalAmount && order.totalAmount > 0;
     final paymentMethod = order.payments.isNotEmpty
         ? order.payments.first.method
-        : 'Cash';
+        : '';
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -177,7 +177,7 @@ class _OrderPlacedScreenState extends State<OrderPlacedScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                if (isPrepaid) ...[
+                                if (isPrepaid && order.payments.isNotEmpty) ...[
                                   Row(
                                     children: [
                                       const Icon(

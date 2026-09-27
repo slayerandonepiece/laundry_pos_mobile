@@ -3,10 +3,10 @@ abstract class AuthEvent {}
 class CheckAuthStatusEvent extends AuthEvent {}
 
 class LoginSubmittedEvent extends AuthEvent {
-  final String username;
+  final String phone;
   final String password;
 
-  LoginSubmittedEvent({required this.username, required this.password});
+  LoginSubmittedEvent({required this.phone, required this.password});
 }
 
 class StoreSelectedEvent extends AuthEvent {

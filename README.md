@@ -21,18 +21,11 @@ https://claude.ai/code/artifact/39d574e0-47c8-4b64-aa91-ae4a68d65b40
 57 artboards. **v1 (48 screens, left) is approved. v2 (9 screens, far
 right) is an exploration and needs sign-off before anyone builds it.**
 
-## Phase 1 is not done
+## Current implementation and next work
 
-The backend currently has **no HTTP API** — no `src/app/api`, no bearer
-auth, no middleware. The web app runs entirely on Server Actions, which
-a Flutter client cannot call. Nothing in `TASKS.md` past F2 can start
-until that is built.
+The HTTP API and offline-ID sync work are implemented; mobile main includes PR #1 (`cdfc121`). Current context and batch status: `docs/HANDOFF.md`; durable rules: `docs/MEMORY.md`.
 
-## Open decisions
-
-Four, listed in `TASKS.md` §F0. The blocking one: the database defines
-three order statuses (`PENDING`, `IN_PROGRESS`, `COMPLETED`) but the
-designs use four — `Ready` and `Delivered` do not exist yet.
+Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Android/iOS are the targets. New web enhancements are tracked feature by feature in `docs/WEB-MOBILE-FEATURE-GAPS.md`, with offline regression checks. The audit does not mean those enhancements are implemented.
 
 ## Note
 

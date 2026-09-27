@@ -31,7 +31,7 @@ class FakeOwnerRepository implements OwnerRepository {
 
 AuthState createAuthState({String? paidThroughDate}) {
   return AuthenticatedState(
-    user: User(id: 'u1', name: 'Alice Owner', username: 'alice'),
+    user: User(id: 'u1', name: 'Alice Owner', phone: 'alice'),
     currentStore: StoreSummary(
       storeId: 's1',
       storeName: 'MyShop',

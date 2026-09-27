@@ -39,6 +39,7 @@ class WeightedItemDialog extends StatefulWidget {
   }) {
     return showModalBottomSheet(
       context: context,
+      useSafeArea: true,
       isScrollControlled: true, // sheet resizes when keyboard appears
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim.withValues(alpha: 0.42),
@@ -93,256 +94,306 @@ class _WeightedItemDialogState extends State<WeightedItemDialog> {
   Widget build(BuildContext context) {
     final product = widget.product;
     final computedPrice = _weight != null ? product.computePrice(_weight!) : 0;
-    // viewInsets.bottom = keyboard height; padding.bottom = safe area
-    final bottomPadding =
-        MediaQuery.of(context).viewInsets.bottom +
-        MediaQuery.of(context).padding.bottom;
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Color.fromRGBO(6, 27, 58, 0.22),
-            blurRadius: 40,
-            offset: Offset(0, -8),
-          ),
-        ],
-      ),
-      child: SingleChildScrollView(
-        // Pushes content above the keyboard
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardHeight = mediaQuery.viewInsets.bottom;
+    final safeBottom = mediaQuery.viewPadding.bottom > 0
+        ? mediaQuery.viewPadding.bottom
+        : mediaQuery.padding.bottom;
+    final isKeyboardOpen = keyboardHeight > 0;
+
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Color.fromRGBO(6, 27, 58, 0.22),
+              blurRadius: 40,
+              offset: Offset(0, -8),
+            ),
+          ],
+        ),
         padding: EdgeInsets.only(
-          left: 22,
-          right: 22,
-          top: 20,
-          bottom: bottomPadding + 16,
+          bottom: isKeyboardOpen
+              ? keyboardHeight
+              : (safeBottom > 0 ? safeBottom : 20.0),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Drag handle
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 18),
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-
-            // Header
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        product.name,
-                        style: AppTextStyles.h2,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Drag handle
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 18),
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                      const SizedBox(height: 4),
+                    ),
+
+                    // Header
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                product.name,
+                                style: AppTextStyles.h2,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Enter weight to calculate price',
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.fontBody,
+                                  fontSize: 13,
+                                  color: AppColors.mutedText,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F0FE),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Per kg',
+                            style: TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1A56DB),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 22),
+
+                    // Weight input
+                    Text('ENTER WEIGHT', style: AppTextStyles.label),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _showError ? AppColors.danger : AppColors.primary,
+                          width: 1.8,
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _controller,
+                              autofocus: true,
+                              keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d*\.?\d{0,3}'),
+                                ),
+                              ],
+                              style: const TextStyle(
+                                fontFamily: AppTextStyles.fontDisplay,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.text,
+                              ),
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                isDense: true,
+                                hintText: '0',
+                                hintStyle: TextStyle(
+                                  fontFamily: AppTextStyles.fontDisplay,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.mutedText.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              onChanged: _onTextChanged,
+                              onSubmitted: (_) => _onAdd(),
+                            ),
+                          ),
+                          const Text(
+                            'kg',
+                            style: TextStyle(
+                              fontFamily: AppTextStyles.fontDisplay,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                          if (isKeyboardOpen) ...[
+                            const SizedBox(width: 10),
+                            InkWell(
+                              onTap: () => FocusScope.of(context).unfocus(),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'Done',
+                                  style: TextStyle(
+                                    fontFamily: AppTextStyles.fontBody,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (_showError) ...[
+                      const SizedBox(height: 6),
                       const Text(
-                        'Enter weight to calculate price',
+                        'Please enter a valid weight greater than 0',
                         style: TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 13,
-                          color: AppColors.mutedText,
+                          fontSize: 12,
+                          color: AppColors.danger,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F0FE),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Per kg',
-                    style: TextStyle(
-                      fontFamily: AppTextStyles.fontBody,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A56DB),
+
+                    const SizedBox(height: 16),
+
+                    // Live price display
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        color: _weight != null
+                            ? const Color(0xFFF0F7FF)
+                            : AppColors.inset,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _weight != null
+                              ? const Color(0xFFBFD9F8)
+                              : AppColors.border,
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Amount',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.mutedText,
+                                ),
+                              ),
+                              if (_weight != null)
+                                Text(
+                                  QuantityFormatter.formatWeight(_weight!),
+                                  style: const TextStyle(
+                                    fontFamily: AppTextStyles.fontBody,
+                                    fontSize: 12,
+                                    color: AppColors.mutedText,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          Text(
+                            CurrencyFormatter.format(computedPrice),
+                            style: TextStyle(
+                              fontFamily: AppTextStyles.fontDisplay,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: _weight != null
+                                  ? AppColors.primary
+                                  : AppColors.mutedText,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
 
-            const SizedBox(height: 22),
-
-            // Weight input
-            Text('ENTER WEIGHT', style: AppTextStyles.label),
-            const SizedBox(height: 8),
-            Container(
-              height: 60,
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _showError ? AppColors.danger : AppColors.primary,
-                  width: 1.8,
+                    // Slab price breakup
+                    if (product.slabs.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _buildSlabBreakup(product),
+                    ],
+                  ],
                 ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+            ),
+
+            // Fixed Action buttons bar — ALWAYS visible on top of keyboard or safe area
+            Container(
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(
+                  top: BorderSide(color: AppColors.border, width: 1),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      autofocus: true,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d*\.?\d{0,3}'),
-                        ),
-                      ],
-                      style: const TextStyle(
-                        fontFamily: AppTextStyles.fontDisplay,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.text,
-                      ),
-                      decoration: InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        hintText: '0',
-                        hintStyle: TextStyle(
-                          fontFamily: AppTextStyles.fontDisplay,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.mutedText.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      onChanged: _onTextChanged,
-                      onSubmitted: (_) => _onAdd(),
+                    child: SecondaryButton(
+                      label: 'Cancel',
+                      height: 50,
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
                   ),
-                  const Text(
-                    'kg',
-                    style: TextStyle(
-                      fontFamily: AppTextStyles.fontDisplay,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.mutedText,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: 'Add to sale',
+                      height: 50,
+                      onPressed: _onAdd,
                     ),
                   ),
                 ],
               ),
-            ),
-            if (_showError) ...[
-              const SizedBox(height: 6),
-              const Text(
-                'Please enter a valid weight greater than 0',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.danger,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 16),
-
-            // Live price display
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              decoration: BoxDecoration(
-                color: _weight != null
-                    ? const Color(0xFFF0F7FF)
-                    : AppColors.inset,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _weight != null
-                      ? const Color(0xFFBFD9F8)
-                      : AppColors.border,
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Amount',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.mutedText,
-                        ),
-                      ),
-                      if (_weight != null)
-                        Text(
-                          QuantityFormatter.formatWeight(_weight!),
-                          style: const TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 12,
-                            color: AppColors.mutedText,
-                          ),
-                        ),
-                    ],
-                  ),
-                  Text(
-                    CurrencyFormatter.format(computedPrice),
-                    style: TextStyle(
-                      fontFamily: AppTextStyles.fontDisplay,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: _weight != null
-                          ? AppColors.primary
-                          : AppColors.mutedText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Slab price breakup
-            if (product.slabs.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _buildSlabBreakup(product),
-            ],
-
-            const SizedBox(height: 22),
-
-            // Action buttons — always visible above keyboard
-            Row(
-              children: [
-                Expanded(
-                  child: SecondaryButton(
-                    label: 'Cancel',
-                    height: 50,
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: PrimaryButton(
-                    label: 'Add to sale',
-                    height: 50,
-                    onPressed: _onAdd,
-                  ),
-                ),
-              ],
             ),
           ],
         ),

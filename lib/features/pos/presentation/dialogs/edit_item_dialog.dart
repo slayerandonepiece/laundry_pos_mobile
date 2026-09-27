@@ -59,74 +59,102 @@ class _EditItemDialogState extends State<EditItemDialog> {
     final product = widget.item.product;
     final lineTotal = product.computePrice(_quantity);
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(
-              color: Color.fromRGBO(6, 27, 58, 0.28),
-              blurRadius: 44,
-              offset: Offset(0, 18),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(product.name, style: AppTextStyles.h2),
-            const SizedBox(height: 6),
-            Text(
-              product.isWeight
-                  ? 'Per kg slab pricing'
-                  : 'Per piece · ${CurrencyFormatter.format(product.price)} each',
-              style: AppTextStyles.hint,
-            ),
-            const SizedBox(height: 20),
-
-            // Quantity or Weight Editor
-            if (product.isWeight) ...[
-              Text('WEIGHT', style: AppTextStyles.label),
-              const SizedBox(height: 8),
-              Container(
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: AppColors.primary, width: 1.5),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _weightController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d*\.?\d{0,3}'),
-                          ),
-                        ],
-                        style: AppTextStyles.moneyMedium,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          isDense: true,
-                        ),
-                        onChanged: _onWeightChanged,
-                      ),
-                    ),
-                    const Text('kg', style: AppTextStyles.chip),
-                  ],
-                ),
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [
+              BoxShadow(
+                color: Color.fromRGBO(6, 27, 58, 0.28),
+                blurRadius: 44,
+                offset: Offset(0, 18),
               ),
-            ] else ...[
+            ],
+          ),
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(product.name, style: AppTextStyles.h2),
+              const SizedBox(height: 6),
+              Text(
+                product.isWeight
+                    ? 'Per kg slab pricing'
+                    : 'Per piece · ${CurrencyFormatter.format(product.price)} each',
+                style: AppTextStyles.hint,
+              ),
+              const SizedBox(height: 20),
+
+              // Quantity or Weight Editor
+              if (product.isWeight) ...[
+                Text('WEIGHT', style: AppTextStyles.label),
+                const SizedBox(height: 8),
+                Container(
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: AppColors.primary, width: 1.5),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _weightController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d*\.?\d{0,3}'),
+                            ),
+                          ],
+                          style: AppTextStyles.moneyMedium,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                          onChanged: _onWeightChanged,
+                        ),
+                      ),
+                      const Text('kg', style: AppTextStyles.chip),
+                      if (MediaQuery.of(context).viewInsets.bottom > 0) ...[
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => FocusScope.of(context).unfocus(),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Done',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ] else ...[
               Text('QUANTITY', style: AppTextStyles.label),
               const SizedBox(height: 8),
               Row(
@@ -268,6 +296,7 @@ class _EditItemDialogState extends State<EditItemDialog> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

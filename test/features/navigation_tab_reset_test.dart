@@ -110,7 +110,7 @@ void main() {
       ordersBloc = OrdersBloc(ordersRepository: fakeOrdersRepo);
       cartBloc = CartBloc(posRepository: fakePosRepo);
 
-      final user = User(id: 'u1', name: 'Owner User', username: 'owner');
+      final user = User(id: 'u1', name: 'Owner User', phone: 'owner');
       final store = StoreSummary(
         storeId: 's1',
         storeName: 'Test Store',

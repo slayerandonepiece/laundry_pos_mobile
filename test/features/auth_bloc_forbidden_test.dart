@@ -21,7 +21,7 @@ class FakeAuthRepository extends AuthRepository {
   @override
   Future<AuthResult?> checkSession() async {
     return AuthResult(
-      user: User(id: 'u1', name: 'Priya', username: 'priya'),
+      user: User(id: 'u1', name: 'Priya', phone: 'priya'),
       stores: [
         StoreSummary(storeId: 's1', storeName: 'Test Store', role: 'EMPLOYEE'),
       ],

@@ -95,7 +95,7 @@ class _StaffScreenState extends State<StaffScreen> {
           if (_searchQuery.isEmpty) return true;
           final query = _searchQuery.toLowerCase();
           return member.name.toLowerCase().contains(query) ||
-              member.username.toLowerCase().contains(query);
+              member.phone.toLowerCase().contains(query);
         }).toList();
 
         return Scaffold(
@@ -217,7 +217,7 @@ class _StaffScreenState extends State<StaffScreen> {
                                   color: AppColors.text,
                                 ),
                                 decoration: const InputDecoration(
-                                  hintText: 'Search name or username...',
+                                  hintText: 'Search name or phone...',
                                   hintStyle: TextStyle(
                                     fontFamily: AppTextStyles.fontBody,
                                     fontSize: 14,
@@ -336,7 +336,7 @@ class _StaffScreenState extends State<StaffScreen> {
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
-                                          '@${member.username} · Employee',
+                                          '${member.phone} · Employee',
                                           style: AppTextStyles.hint,
                                         ),
                                       ],
@@ -421,7 +421,7 @@ class AddStaffScreen extends StatefulWidget {
 
 class _AddStaffScreenState extends State<AddStaffScreen> {
   final _nameController = TextEditingController();
-  final _usernameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   late final String _idempotencyKey = IdempotencyKeyGenerator.generate();
   String? _errorMessage;
@@ -429,22 +429,22 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _usernameController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   void _save() {
     final name = _nameController.text.trim();
-    final username = _usernameController.text.trim();
+    final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (name.isEmpty || username.isEmpty || password.length < 8) {
+    if (name.isEmpty || phone.isEmpty || password.length < 8) {
       setState(() {
         if (name.isEmpty) {
           _errorMessage = 'Full name is required';
-        } else if (username.isEmpty) {
-          _errorMessage = 'Username is required';
+        } else if (phone.isEmpty) {
+          _errorMessage = 'Phone number is required';
         } else {
           _errorMessage = 'Password must be at least 8 characters';
         }
@@ -455,7 +455,7 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
     context.read<OwnerBloc>().add(
       AddStaffEvent(
         name: name,
-        username: username,
+        phone: phone,
         password: password,
         idempotencyKey: _idempotencyKey,
       ),
@@ -523,9 +523,10 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
             ),
             const SizedBox(height: 14),
             AppTextField(
-              label: 'USERNAME',
-              hint: 'e.g. ramesh',
-              controller: _usernameController,
+              label: 'PHONE NUMBER',
+              hint: 'e.g. 9876543210',
+              keyboardType: TextInputType.phone,
+              controller: _phoneController,
             ),
             const SizedBox(height: 14),
             AppTextField(
@@ -554,33 +555,33 @@ class EditStaffScreen extends StatefulWidget {
 
 class _EditStaffScreenState extends State<EditStaffScreen> {
   late final TextEditingController _nameController;
-  late final TextEditingController _usernameController;
+  late final TextEditingController _phoneController;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.member.name);
-    _usernameController = TextEditingController(text: widget.member.username);
+    _phoneController = TextEditingController(text: widget.member.phone);
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _usernameController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
   void _save() {
     final name = _nameController.text.trim();
-    final username = _usernameController.text.trim();
+    final phone = _phoneController.text.trim();
 
-    if (name.isEmpty || username.isEmpty) {
+    if (name.isEmpty || phone.isEmpty) {
       setState(() {
         if (name.isEmpty) {
           _errorMessage = 'Full name is required';
         } else {
-          _errorMessage = 'Username is required';
+          _errorMessage = 'Phone number is required';
         }
       });
       return;
@@ -590,7 +591,7 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
       UpdateStaffEvent(
         employeeId: widget.member.id,
         name: name,
-        username: username,
+        phone: phone,
       ),
     );
     Navigator.pop(context);
@@ -656,9 +657,10 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
             ),
             const SizedBox(height: 14),
             AppTextField(
-              label: 'USERNAME',
-              hint: 'e.g. ramesh',
-              controller: _usernameController,
+              label: 'PHONE NUMBER',
+              hint: 'e.g. 9876543210',
+              keyboardType: TextInputType.phone,
+              controller: _phoneController,
             ),
             const SizedBox(height: 24),
             PrimaryButton(label: 'Save changes', onPressed: _save),

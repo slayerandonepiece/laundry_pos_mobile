@@ -40,7 +40,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<OwnerBloc>().add(LoadExpensesEvent());
+    context.read<OwnerBloc>().add(LoadExpensesEvent(refresh: true));
   }
 
   @override
@@ -701,6 +701,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         )
                       else
                         ...displayedExpenses.map((expense) {
+                          final dueDt = _parseDate(expense.due);
+                          final isUpcoming = !expense.isPaid &&
+                              dueDt != null &&
+                              dueDt.isAfter(todayStart);
+
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 11),
                             child: AppCard(
@@ -778,10 +783,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                       StatusPill(
                                         label: expense.isPaid
                                             ? 'Paid'
-                                            : 'Unpaid',
+                                            : (isUpcoming
+                                                ? 'Upcoming'
+                                                : 'Unpaid'),
                                         variant: expense.isPaid
                                             ? PillVariant.paid
-                                            : PillVariant.warning,
+                                            : (isUpcoming
+                                                ? PillVariant.neutral
+                                                : PillVariant.warning),
                                       ),
                                     ],
                                   ),

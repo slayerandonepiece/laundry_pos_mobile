@@ -48,7 +48,7 @@ void main() {
         ),
       );
 
-      // Enter username only
+      // Enter phone only
       await tester.enterText(find.byType(TextField).first, 'reddy');
       await tester.pump();
 
@@ -61,7 +61,7 @@ void main() {
 
     testWidgets('State 2c: Invalid credentials error banner', (tester) async {
       final bloc = MockAuthBloc(
-        UnauthenticatedState(errorMessage: 'Invalid username or password.'),
+        UnauthenticatedState(errorMessage: 'Invalid phone or password.'),
       );
 
       await tester.pumpWidget(
@@ -73,7 +73,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Invalid username or password.'), findsOneWidget);
+      expect(find.text('Invalid phone or password.'), findsOneWidget);
     });
 
     testWidgets('State 2d: Loading state shows loading indicator', (

@@ -5,11 +5,13 @@ Flutter app for the Laundry POS backend. "MyShop" is a **working title**
 customer sees. The Flutter package is `myshop` / `com.myshop`; renaming
 is cheap now and expensive after the first store install.
 
-> **Phase 1 must be finished first.** See
-> `../laundry_pos/.agents/MOBILE-API-TASKS.md`. As of 2026-09-11 the
-> backend has **no HTTP API at all** — no `src/app/api`, no
-> `Authorization` header handling anywhere, no middleware. There is
-> nothing for this app to call. Do not start F3 until the API is real.
+## Current status — 27 September 2026
+
+The mobile HTTP API exists. Main `cdfc121` includes the merged offline-ID/outlet/local-first work. Historical F1–F8 details below are not a current test-count or exact navigation specification: owner navigation currently has Dashboard / Orders / More, employees use Orders without an owner bottom bar.
+
+Current workspace fixes and verification: `docs/HANDOFF.md`. Manual device status: `docs/E2E-MANUAL-TEST.md`; remaining scripts: `docs/MANUAL-TEST-CASES.md`. New web enhancement backlog: `docs/WEB-MOBILE-FEATURE-GAPS.md` (68 pending checks; offline behavior must be preserved).
+
+Checkout now uses enabled store payment methods, including configured COD; do not use the older hardcoded Cash/UPI/pay-later description as a requirement. Full web parity remains pending.
 
 Design system and screen inventory: `docs/DESIGN-SPEC.md`.
 Working artboards: `design/*.dc.html`.

@@ -62,7 +62,7 @@ class InMemoryLocalCache extends LocalCacheService {
   Map<String, dynamic>? _cachedUser = {
     'id': 'u1',
     'name': 'Priya',
-    'username': 'priya',
+    'phone': 'priya',
   };
   Map<String, dynamic>? _cachedStoreDetails = {
     'storeId': 's1',
@@ -192,7 +192,7 @@ class SpyAuthRepository extends AuthRepository {
   @override
   Future<AuthResult?> checkSession() async {
     return AuthResult(
-      user: User(id: 'u1', name: 'Priya', username: 'priya'),
+      user: User(id: 'u1', name: 'Priya', phone: 'priya'),
       stores: [
         StoreSummary(storeId: 's1', storeName: 'Store 1', role: role),
       ],
@@ -361,7 +361,7 @@ void main() {
 
         final mockDio = createMockDio((options) async {
           return mockJsonResponse({
-            'user': {'id': 'u1', 'name': 'Priya', 'username': 'priya'},
+            'user': {'id': 'u1', 'name': 'Priya', 'phone': 'priya'},
             'stores': [
               {'storeId': 's1', 'storeName': 'Store 1', 'role': 'EMPLOYEE'},
             ],
@@ -427,7 +427,7 @@ void main() {
 
         final mockDio = createMockDio((options) async {
           return mockJsonResponse({
-            'user': {'id': 'u1', 'name': 'Priya', 'username': 'priya'},
+            'user': {'id': 'u1', 'name': 'Priya', 'phone': 'priya'},
             'stores': [
               {'storeId': 's1', 'storeName': 'Store 1', 'role': 'EMPLOYEE'},
             ],

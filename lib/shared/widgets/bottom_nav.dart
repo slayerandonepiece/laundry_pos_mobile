@@ -29,8 +29,10 @@ class AppBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-    final effectiveBottomInset = bottomInset > 0 ? bottomInset : 26.0;
+    final safeBottom = MediaQuery.of(context).viewPadding.bottom > 0
+        ? MediaQuery.of(context).viewPadding.bottom
+        : MediaQuery.of(context).padding.bottom;
+    final effectiveBottomInset = (safeBottom > 0 ? safeBottom : 20.0) + 8.0;
 
     final items = _ownerNavItems;
 

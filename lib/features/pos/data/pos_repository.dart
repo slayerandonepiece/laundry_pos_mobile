@@ -210,14 +210,17 @@ class PosRepository {
 
     final List<OrderPayment> localPayments = [];
     if (initialPayment != null) {
-      localPayments.add(
-        OrderPayment(
-          id: 'pay_optimistic',
-          amount: (initialPayment['amount'] as num?)?.toInt() ?? 0,
-          date: DateTime.now().toIso8601String(),
-          method: initialPayment['method']?.toString() ?? 'Cash',
-        ),
-      );
+      final method = initialPayment['method']?.toString();
+      if (method != null && method.trim().isNotEmpty) {
+        localPayments.add(
+          OrderPayment(
+            id: 'pay_optimistic',
+            amount: (initialPayment['amount'] as num?)?.toInt() ?? 0,
+            date: DateTime.now().toIso8601String(),
+            method: method.trim(),
+          ),
+        );
+      }
     }
 
     final localOrder = Order(

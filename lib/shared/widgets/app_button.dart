@@ -10,6 +10,7 @@ class PrimaryButton extends StatelessWidget {
   final Widget? icon;
   final double height;
   final Color? backgroundColor;
+  final EdgeInsetsGeometry? padding;
 
   const PrimaryButton({
     super.key,
@@ -19,6 +20,7 @@ class PrimaryButton extends StatelessWidget {
     this.icon,
     this.height = 52,
     this.backgroundColor,
+    this.padding,
   });
 
   @override
@@ -35,7 +37,7 @@ class PrimaryButton extends StatelessWidget {
           disabledBackgroundColor: AppColors.disabledBg,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: padding ?? const EdgeInsets.symmetric(horizontal: 12),
         ),
         child: isLoading
             ? const SizedBox(
@@ -51,13 +53,19 @@ class PrimaryButton extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (icon != null) ...[icon!, const SizedBox(width: 8)],
-                  Text(
-                    label,
-                    style: isEnabled
-                        ? AppTextStyles.button
-                        : AppTextStyles.button.copyWith(
-                            color: AppColors.disabledText,
-                          ),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        style: isEnabled
+                            ? AppTextStyles.button
+                            : AppTextStyles.button.copyWith(
+                                color: AppColors.disabledText,
+                              ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -73,6 +81,7 @@ class SecondaryButton extends StatelessWidget {
   final double height;
   final Color? textColor;
   final Color? borderColor;
+  final EdgeInsetsGeometry? padding;
 
   const SecondaryButton({
     super.key,
@@ -82,6 +91,7 @@ class SecondaryButton extends StatelessWidget {
     this.height = 52,
     this.textColor,
     this.borderColor,
+    this.padding,
   });
 
   @override
@@ -99,17 +109,23 @@ class SecondaryButton extends StatelessWidget {
             width: 1,
           ),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: padding ?? const EdgeInsets.symmetric(horizontal: 12),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[icon!, const SizedBox(width: 8)],
-            Text(
-              label,
-              style: AppTextStyles.buttonSecondary.copyWith(
-                color: textColor ?? AppColors.text,
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: AppTextStyles.buttonSecondary.copyWith(
+                    color: textColor ?? AppColors.text,
+                  ),
+                ),
               ),
             ),
           ],

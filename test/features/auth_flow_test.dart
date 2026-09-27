@@ -50,7 +50,7 @@ void main() {
         final mockDio = createMockDio((options) async {
           if (options.uri.path.contains('/api/v1/auth/login')) {
             return mockJsonResponse({
-              'error': 'Invalid username or password',
+              'error': 'Invalid phone or password',
             }, statusCode: 401);
           }
           return mockJsonResponse({'ok': true});
@@ -80,7 +80,7 @@ void main() {
         );
 
         // Submit login with bad credentials
-        authBloc.add(LoginSubmittedEvent(username: 'invalid', password: 'bad'));
+        authBloc.add(LoginSubmittedEvent(phone: 'invalid', password: 'bad'));
 
         await expectLater(
           authBloc.stream,
@@ -93,7 +93,7 @@ void main() {
             isA<UnauthenticatedState>().having(
               (s) => s.errorMessage,
               'errorMessage',
-              'Invalid username or password',
+              'Invalid phone or password',
             ),
           ]),
         );

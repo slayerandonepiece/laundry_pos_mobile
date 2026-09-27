@@ -199,7 +199,7 @@ void main() {
         await expectLater(
           () => ownerRepo.createStaff(
             name: 'Jane Operator',
-            username: 'jane_op',
+            phone: 'jane_op',
             password: 'secret_password_123',
           ),
           throwsA(
@@ -273,7 +273,7 @@ void main() {
           {
             'id': 'staff_202',
             'name': 'Bob Clerk',
-            'username': 'bob_c',
+            'phone': 'bob_c',
             'active': true,
           },
         ]);
@@ -289,7 +289,7 @@ void main() {
         final updated = await ownerRepo.updateStaff(
           employeeId: 'staff_202',
           name: 'Bob Senior Clerk',
-          username: 'bob_sr',
+          phone: 'bob_sr',
         );
         expect(updated.name, 'Bob Senior Clerk');
         cached = localCache.getCachedStaff();
@@ -376,7 +376,7 @@ void main() {
         {
           'id': localStaffId,
           'name': 'Sam Tech',
-          'username': 'sam_tech',
+          'phone': 'sam_tech',
           'active': true,
         },
       ]);
@@ -386,7 +386,7 @@ void main() {
         'payload': {
           'localId': localStaffId,
           'name': 'Sam Tech',
-          'username': 'sam_tech',
+          'phone': 'sam_tech',
           'password': 'password123',
         },
         'queuedAt': DateTime.now().toIso8601String(),
@@ -397,7 +397,7 @@ void main() {
       mockApiClient.responses[ApiEndpoints.employees] = {
         'id': 'staff_srv_888',
         'name': 'Sam Tech',
-        'username': 'sam_tech',
+        'phone': 'sam_tech',
         'active': true,
       };
 
@@ -685,20 +685,20 @@ void main() {
     );
 
     test(
-      'updateStaff online + offline replay calls PUT /api/v1/employees/{id} with name, username, and active',
+      'updateStaff online + offline replay calls PUT /api/v1/employees/{id} with name, phone, and active',
       () async {
         await localCache.setCachedStaff([
           {
             'id': 'emp_42',
             'name': 'Bob Clerk',
-            'username': 'bob_c',
+            'phone': 'bob_c',
             'active': false,
           },
         ]);
         mockApiClient.responses[ApiEndpoints.employeeDetail('emp_42')] = {
           'id': 'emp_42',
           'name': 'Bob Updated',
-          'username': 'bob_u',
+          'phone': 'bob_u',
           'active': false,
         };
 
@@ -707,7 +707,7 @@ void main() {
         await ownerRepo.updateStaff(
           employeeId: 'emp_42',
           name: 'Bob Updated',
-          username: 'bob_u',
+          phone: 'bob_u',
         );
 
         expect(
@@ -716,7 +716,7 @@ void main() {
         );
         expect(
           mockApiClient.putBodies.last,
-          equals({'name': 'Bob Updated', 'username': 'bob_u', 'active': false}),
+          equals({'name': 'Bob Updated', 'phone': 'bob_u', 'active': false}),
         );
 
         // 2. Offline + replay
@@ -726,7 +726,7 @@ void main() {
         await ownerRepo.updateStaff(
           employeeId: 'emp_42',
           name: 'Bob Replay',
-          username: 'bob_r',
+          phone: 'bob_r',
         );
         expect(mockApiClient.putUrls, isEmpty);
 
@@ -734,7 +734,7 @@ void main() {
         mockApiClient.responses[ApiEndpoints.employeeDetail('emp_42')] = {
           'id': 'emp_42',
           'name': 'Bob Replay',
-          'username': 'bob_r',
+          'phone': 'bob_r',
           'active': false,
         };
         await ownerRepo.processPendingOwnerActions();
@@ -745,7 +745,7 @@ void main() {
         );
         expect(
           mockApiClient.putBodies.last,
-          equals({'name': 'Bob Replay', 'username': 'bob_r', 'active': false}),
+          equals({'name': 'Bob Replay', 'phone': 'bob_r', 'active': false}),
         );
       },
     );
@@ -757,7 +757,7 @@ void main() {
           {
             'id': 'emp_50',
             'name': 'Clara Staff',
-            'username': 'clara_s',
+            'phone': 'clara_s',
             'active': true,
           },
         ]);
@@ -771,7 +771,7 @@ void main() {
         );
         expect(
           mockApiClient.putBodies.last,
-          equals({'name': 'Clara Staff', 'username': 'clara_s', 'active': false}),
+          equals({'name': 'Clara Staff', 'phone': 'clara_s', 'active': false}),
         );
         expect(mockApiClient.postUrls, isEmpty);
 
@@ -793,7 +793,7 @@ void main() {
         );
         expect(
           mockApiClient.putBodies.last,
-          equals({'name': 'Clara Staff', 'username': 'clara_s', 'active': true}),
+          equals({'name': 'Clara Staff', 'phone': 'clara_s', 'active': true}),
         );
 
         // 3. Legacy toggle_staff_active still replays as POST
@@ -818,7 +818,7 @@ void main() {
           'payload': {
             'localId': tempStaffId,
             'name': 'New Hire',
-            'username': 'newhire',
+            'phone': 'newhire',
             'password': 'pw1',
           },
           'queuedAt': DateTime.now().toIso8601String(),
@@ -829,7 +829,7 @@ void main() {
           'payload': {
             'employeeId': tempStaffId,
             'name': 'New Hire',
-            'username': 'newhire',
+            'phone': 'newhire',
             'active': false,
           },
           'queuedAt': DateTime.now().toIso8601String(),
@@ -837,7 +837,7 @@ void main() {
         mockApiClient.responses[ApiEndpoints.employees] = {
           'id': 'emp_srv_99',
           'name': 'New Hire',
-          'username': 'newhire',
+          'phone': 'newhire',
           'active': true,
         };
         mockApiClient.onPut = (url) {
@@ -978,12 +978,12 @@ void main() {
         mockApiClient.responses[ApiEndpoints.employees] = {
           'id': 'emp_srv_2002',
           'name': 'Dan Staff',
-          'username': 'dan_s',
+          'phone': 'dan_s',
           'active': true,
         };
         await ownerRepo.createStaff(
           name: 'Dan Staff',
-          username: 'dan_s',
+          phone: 'dan_s',
           password: 'password123',
           idempotencyKey: 'idem-staff-fixed-002',
         );
@@ -993,6 +993,7 @@ void main() {
           (mockApiClient.postBodies.last as Map)['idempotencyKey'],
           'idem-staff-fixed-002',
         );
+        expect((mockApiClient.postBodies.last as Map)['active'], isTrue);
       },
     );
 

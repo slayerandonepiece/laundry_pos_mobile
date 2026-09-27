@@ -116,7 +116,7 @@ void main() {
 
       ownerBloc = OwnerBloc(ownerRepository: fakeRepo);
 
-      final user = User(id: 'usr-1', name: 'John Doe', username: 'johndoe');
+      final user = User(id: 'usr-1', name: 'John Doe', phone: '9876500001');
       final store = StoreSummary(
         storeId: 'store-1',
         storeName: 'Express Laundry Demo',
@@ -157,7 +157,7 @@ void main() {
         await pumpAsync(tester);
 
         expect(find.text('Your details'), findsOneWidget);
-        expect(find.text('@johndoe'), findsOneWidget);
+        expect(find.text('9876500001'), findsOneWidget);
         expect(find.text('Store Owner'), findsOneWidget);
 
         final textFields = find.byType(TextField);

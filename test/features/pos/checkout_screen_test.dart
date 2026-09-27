@@ -144,7 +144,7 @@ void main() {
       expect(find.byIcon(Icons.storefront_outlined), findsNothing);
     });
 
-    testWidgets('Renders real payment methods and always-present Pay on delivery row', (
+    testWidgets('Renders only store payment methods without hardcoded Pay on delivery row', (
       tester,
     ) async {
       cartBloc.emit(
@@ -164,7 +164,7 @@ void main() {
       expect(find.text('Cash'), findsOneWidget);
       expect(find.text('UPI'), findsOneWidget);
       expect(find.text('Debit Card'), findsOneWidget);
-      expect(find.text('Pay on delivery'), findsOneWidget);
+      expect(find.text('Pay on delivery'), findsNothing);
     });
 
     testWidgets('Empty payment methods shows warning message and omits prepaid choices', (
@@ -188,11 +188,13 @@ void main() {
       );
       expect(find.text('Cash'), findsNothing);
       expect(find.text('UPI'), findsNothing);
-      // Pay on delivery is still present
-      expect(find.text('Pay on delivery'), findsOneWidget);
+      expect(find.text('Pay on delivery'), findsNothing);
+
+      final submitButton = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
+      expect(submitButton.onPressed, isNull);
     });
 
-    testWidgets('Submit button disabled until payment method or Pay on delivery selected', (
+    testWidgets('Submit button disabled until payment method is selected', (
       tester,
     ) async {
       cartBloc.emit(
@@ -231,14 +233,14 @@ void main() {
       expect(fakeRepo.lastPassedOutletId, equals('outlet_a'));
     });
 
-    testWidgets('Selecting Pay on delivery updates button label and submits delivery choice', (
+    testWidgets('Selecting Cash On Delivery method updates button label and submits delivery choice', (
       tester,
     ) async {
       cartBloc.emit(
         cartBloc.state.copyWith(
           items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
           paymentMethods: [
-            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+            StorePaymentMethod(id: 'pm_cod', code: 'COD', name: 'Cash On Delivery', active: true),
           ],
           outletId: 'outlet_a',
         ),
@@ -249,8 +251,8 @@ void main() {
 
       final submitButtonFinder = find.byType(PrimaryButton);
 
-      // Tap Pay on delivery
-      await tester.tap(find.text('Pay on delivery'));
+      // Tap Cash On Delivery
+      await tester.tap(find.text('Cash On Delivery'));
       await tester.pump();
 
       expect(find.text('Place order · Pay on delivery'), findsOneWidget);

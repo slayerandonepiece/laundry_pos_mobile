@@ -63,7 +63,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoadingState(message: 'Signing in...'));
     try {
-      final result = await authRepository.login(event.username, event.password);
+      final result = await authRepository.login(event.phone, event.password);
       _resolveAuthResult(result, emit, isFreshLogin: true);
     } on AuthException catch (e) {
       if (e.code == 'FORBIDDEN') {

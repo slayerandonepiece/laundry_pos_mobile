@@ -11,19 +11,24 @@ class StorePaymentMethod {
     required this.name,
     String? type,
     this.active = true,
-  }) : type = type ?? (name.toUpperCase().contains('UPI') ? 'UPI' : 'Cash');
+  }) : type = type ?? (code.isNotEmpty ? code : '');
 
   factory StorePaymentMethod.fromJson(Map<String, dynamic> json) {
-    final name = json['name']?.toString() ?? '';
+    final code = json['code']?.toString() ?? '';
     return StorePaymentMethod(
       id: json['id']?.toString() ?? '',
-      code: json['code']?.toString() ?? '',
-      name: name,
-      type:
-          json['type']?.toString() ??
-          (name.toUpperCase().contains('UPI') ? 'UPI' : 'Cash'),
+      code: code,
+      name: json['name']?.toString() ?? '',
+      type: json['type']?.toString() ?? (code.isNotEmpty ? code : ''),
       active: (json['active'] ?? json['enabled']) != false,
     );
+  }
+
+  bool get isCashOnDelivery {
+    final value = (code.trim().isNotEmpty ? code : name)
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    return value == 'COD' || value == 'CASHONDELIVERY';
   }
 
   Map<String, dynamic> toJson() {

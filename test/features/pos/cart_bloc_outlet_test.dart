@@ -222,7 +222,7 @@ void main() {
           ),
         ),
       );
-      expect(fakeRepo.listPaymentMethodsCalls, 0);
+      expect(fakeRepo.listPaymentMethodsCalls, 1);
     });
 
     test('LoadCatalogEvent payment methods error defaults to empty list and does not fail catalog', () async {

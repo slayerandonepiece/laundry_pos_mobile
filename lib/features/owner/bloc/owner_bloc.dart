@@ -264,7 +264,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     try {
       await ownerRepository.createStaff(
         name: event.name,
-        username: event.username,
+        phone: event.phone,
         password: event.password,
         idempotencyKey: event.idempotencyKey,
       );
@@ -339,7 +339,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       await ownerRepository.updateStaff(
         employeeId: event.employeeId,
         name: event.name,
-        username: event.username,
+        phone: event.phone,
       );
       final updated = await ownerRepository.listStaff();
       emit(
