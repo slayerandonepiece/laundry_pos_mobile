@@ -12,6 +12,7 @@ import 'package:myshop/features/owner/presentation/change_password_screen.dart';
 import 'package:myshop/features/owner/presentation/expenses_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_profile_screen.dart';
 import 'package:myshop/features/owner/presentation/payment_methods_screen.dart';
+import 'package:myshop/features/owner/presentation/plan_status_helper.dart';
 import 'package:myshop/features/owner/presentation/services_screen.dart';
 import 'package:myshop/features/owner/presentation/staff_screen.dart';
 import 'package:myshop/features/owner/presentation/store_profile_screen.dart';
@@ -374,38 +375,16 @@ class MoreScreen extends StatelessWidget {
 
   Widget? _buildPlanStatusBadge(AuthState authState) {
     if (authState is! AuthenticatedState) return null;
-    final paidThroughDate = authState.currentStore.paidThroughDate;
-    if (paidThroughDate == null) return null;
-
-    final parsedDate = DateTime.tryParse(paidThroughDate);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final isNearOrPast =
-        parsedDate == null || parsedDate.difference(today).inDays <= 7;
-
-    final Color bgColor;
-    final Color textColor;
-    final Color borderColor;
-    final String label;
-
-    if (isNearOrPast) {
-      bgColor = AppColors.warningNoticeBg;
-      textColor = AppColors.warning;
-      borderColor = AppColors.warningBorder;
-      label = 'Renews soon';
-    } else {
-      bgColor = AppColors.successBg;
-      textColor = AppColors.success;
-      borderColor = AppColors.success.withValues(alpha: 0.3);
-      label = 'Active plan';
-    }
+    final planStatus = resolvePlanStatus(authState.currentStore);
+    final label = planStatus.badgeLabel;
+    if (label == null) return null;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: bgColor,
+        color: planStatus.bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: planStatus.borderColor),
       ),
       child: Text(
         label,
@@ -413,7 +392,7 @@ class MoreScreen extends StatelessWidget {
           fontFamily: AppTextStyles.fontBody,
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: textColor,
+          color: planStatus.textColor,
         ),
       ),
     );

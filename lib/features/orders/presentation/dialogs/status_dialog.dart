@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
+import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
+import 'package:myshop/shared/widgets/centred_dialog.dart';
 
 class StatusDialog extends StatefulWidget {
   final Order order;
@@ -52,6 +54,8 @@ class _StatusDialogState extends State<StatusDialog> {
       _selectedStatus = 'In Progress';
     } else if (current == 'ready') {
       _selectedStatus = 'Ready';
+    } else if (current == 'delivered') {
+      _selectedStatus = 'Delivered';
     } else {
       _selectedStatus = 'Pending';
     }
@@ -60,7 +64,7 @@ class _StatusDialogState extends State<StatusDialog> {
   @override
   Widget build(BuildContext context) {
     final hasBalanceDue = widget.order.balanceDue > 0;
-    final statuses = ['Pending', 'In Progress', 'Ready'];
+    final statuses = ['Pending', 'In Progress', 'Ready', 'Delivered'];
     final customerName = widget.order.name.isNotEmpty
         ? widget.order.name
         : widget.order.phone;
@@ -206,42 +210,44 @@ class _StatusDialogState extends State<StatusDialog> {
                 const SizedBox(height: 8),
 
                 // Warning Notice Banner
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.warningNoticeBg,
-                    border: Border.all(color: AppColors.warningBorder),
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.only(top: 1),
-                        child: Icon(
-                          Icons.warning_amber_rounded,
-                          size: 17,
-                          color: AppColors.warning,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          hasBalanceDue
-                              ? 'Delivered is not set here — collecting the payment marks the order delivered.'
-                              : 'Delivered is not set here — handing over the order marks it delivered.',
-                          style: const TextStyle(
-                            fontSize: 12,
+                if (_selectedStatus == 'Delivered' && hasBalanceDue) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.warningNoticeBg,
+                      border: Border.all(color: AppColors.warningBorder),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.only(top: 1),
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            size: 17,
                             color: AppColors.warning,
-                            height: 1.5,
-                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ),
-                    ],
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'An outstanding balance remains. Marking delivered will ask for confirmation.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.warning,
+                              height: 1.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 18),
+                  const SizedBox(height: 18),
+                ] else ...[
+                  const SizedBox(height: 8),
+                ],
 
                 // Actions: Cancel & Update
                 Row(
@@ -261,12 +267,42 @@ class _StatusDialogState extends State<StatusDialog> {
                         isLoading: isUpdating,
                         onPressed: (isChanged && !isUpdating)
                             ? () {
-                                context.read<OrdersBloc>().add(
-                                  UpdateOrderStatusEvent(
-                                    orderCode: widget.order.orderCode,
-                                    nextStatus: _selectedStatus,
-                                  ),
-                                );
+                                if (_selectedStatus == 'Delivered') {
+                                  if (hasBalanceDue) {
+                                    CentredDialog.show(
+                                      context: context,
+                                      child: CentredDialog(
+                                        title: 'Deliver with balance due?',
+                                        subtitle:
+                                            '${widget.order.displayCode} still has ${CurrencyFormatter.format(widget.order.balanceDue)} due. Mark it delivered anyway?',
+                                        confirmLabel: 'Deliver anyway',
+                                        cancelLabel: 'Cancel',
+                                        isDestructive: true,
+                                        onConfirm: () {
+                                          Navigator.of(context).pop();
+                                          context.read<OrdersBloc>().add(
+                                            HandoverOrderEvent(
+                                              widget.order.orderCode,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    );
+                                  } else {
+                                    context.read<OrdersBloc>().add(
+                                      HandoverOrderEvent(
+                                        widget.order.orderCode,
+                                      ),
+                                    );
+                                  }
+                                } else {
+                                  context.read<OrdersBloc>().add(
+                                    UpdateOrderStatusEvent(
+                                      orderCode: widget.order.orderCode,
+                                      nextStatus: _selectedStatus,
+                                    ),
+                                  );
+                                }
                               }
                             : null,
                       ),

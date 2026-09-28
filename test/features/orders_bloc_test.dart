@@ -1,11 +1,43 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
+import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
 
 class MockOrdersRepository implements OrdersRepository {
   Order? updatedOrder;
+  String? recordedOrderCode;
+  int? recordedAmount;
+  String? recordedMethod;
+
+  @override
+  Future<Order> recordPayment(
+    String orderCode,
+    int amount,
+    String method,
+  ) async {
+    recordedOrderCode = orderCode;
+    recordedAmount = amount;
+    recordedMethod = method;
+    return Order(
+      id: orderCode,
+      name: 'Ramesh Kumar',
+      phone: '9876543210',
+      date: '2026-09-10',
+      due: '2026-09-12',
+      status: 'Pending', // Does not change status
+      lines: [],
+      payments: [
+        OrderPayment(
+          id: 'pay-new',
+          amount: amount,
+          date: '2026-09-10',
+          method: method,
+        ),
+      ],
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -147,6 +179,28 @@ void main() {
       expect(order2.isReady, isTrue);
       expect(order2.isPaidInFull, isTrue);
       expect(order2.balanceDue, equals(0));
+    });
+
+    test('RecordPaymentEvent calls repository, updates order, and preserves status', () async {
+      ordersBloc.add(
+        RecordPaymentEvent(
+          orderCode: 'EL-101',
+          amount: 5000,
+          method: 'UPI',
+        ),
+      );
+
+      final state = await ordersBloc.stream.firstWhere(
+        (s) => s.actionSuccessMessage != null,
+      );
+
+      expect(mockRepo.recordedOrderCode, equals('EL-101'));
+      expect(mockRepo.recordedAmount, equals(5000));
+      expect(mockRepo.recordedMethod, equals('UPI'));
+      expect(state.actionSuccessMessage, equals('Payment recorded'));
+      expect(state.selectedOrder?.id, equals('EL-101'));
+      expect(state.selectedOrder?.status, equals('Pending'));
+      expect(state.isCollectingPayment, isFalse);
     });
   });
 }

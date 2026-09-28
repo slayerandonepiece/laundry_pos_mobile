@@ -4,6 +4,8 @@ import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
+import 'package:myshop/features/auth/data/models/user_model.dart';
+import 'package:myshop/features/owner/presentation/plan_status_helper.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/section_header.dart';
 
@@ -13,10 +15,10 @@ class SubscriptionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    String? paidThroughDate;
+    StoreSummary? store;
 
     if (authState is AuthenticatedState) {
-      paidThroughDate = authState.currentStore.paidThroughDate;
+      store = authState.currentStore;
     }
 
     return Scaffold(
@@ -50,7 +52,7 @@ class SubscriptionScreen extends StatelessWidget {
           children: [
             const SectionHeader(title: 'PLAN STATUS'),
             const SizedBox(height: 8),
-            _buildPlanStatusCard(paidThroughDate),
+            _buildPlanStatusCard(store),
             const SizedBox(height: 24),
             const SectionHeader(title: 'BILLING'),
             const SizedBox(height: 8),
@@ -61,8 +63,10 @@ class SubscriptionScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPlanStatusCard(String? paidThroughDate) {
-    if (paidThroughDate == null) {
+  Widget _buildPlanStatusCard(StoreSummary? store) {
+    final planStatus = resolvePlanStatus(store);
+
+    if (planStatus.isUnavailable) {
       return AppCard(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -100,94 +104,55 @@ class SubscriptionScreen extends StatelessWidget {
       );
     }
 
-    final parsedDate = DateTime.tryParse(paidThroughDate);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final isNearOrPast =
-        parsedDate == null || parsedDate.difference(today).inDays <= 7;
+    final Color titleColor;
+    final Color subtitleColor;
 
-    if (isNearOrPast) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.warningNoticeBg,
-          border: Border.all(color: AppColors.warningBorder),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(
-              Icons.warning_amber_rounded,
-              size: 24,
-              color: AppColors.warning,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Your plan renews soon',
-                    style: TextStyle(
-                      fontFamily: AppTextStyles.fontBody,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.warning,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Please keep payment updated. Renews on $paidThroughDate.',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.warning,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+    if (planStatus.isWarning) {
+      titleColor = AppColors.warning;
+      subtitleColor = AppColors.warning;
+    } else if (planStatus.isSuccess) {
+      titleColor = AppColors.success;
+      subtitleColor = AppColors.success;
+    } else {
+      titleColor = AppColors.text;
+      subtitleColor = AppColors.mutedText;
     }
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.successBg,
-        border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+        color: planStatus.bgColor,
+        border: Border.all(color: planStatus.borderColor),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.check_circle_outline,
+          Icon(
+            planStatus.icon,
             size: 24,
-            color: AppColors.success,
+            color: planStatus.textColor,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Your plan is active',
+                Text(
+                  planStatus.title,
                   style: TextStyle(
                     fontFamily: AppTextStyles.fontBody,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.success,
+                    color: titleColor,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Renews on $paidThroughDate',
-                  style: const TextStyle(
+                  planStatus.subtitle,
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.success,
+                    color: subtitleColor,
                     height: 1.35,
                   ),
                 ),

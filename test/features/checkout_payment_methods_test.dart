@@ -209,9 +209,9 @@ void main() {
         // No extra hardcoded "Pay on delivery"
         expect(find.text('Pay on delivery'), findsNothing);
 
-        // Exactly 3 options rendered: each option has title and subtitle
-        expect(find.text('Collect full amount at handover'), findsOneWidget);
-        expect(find.text('Pay full amount now'), findsNWidgets(2));
+        // Subtitles are removed from payment options
+        expect(find.text('Collect full amount at handover'), findsNothing);
+        expect(find.text('Pay full amount now'), findsNothing);
 
         // Submit button is disabled
         final submitButton = tester.widget<PrimaryButton>(find.byType(PrimaryButton));

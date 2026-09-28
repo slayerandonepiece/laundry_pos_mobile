@@ -23,6 +23,7 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     on<RemoveItemFromCartEvent>(_onRemoveItemFromCart);
     on<ClearCartEvent>(_onClearCart);
     on<SetCustomerDetailsEvent>(_onSetCustomerDetails);
+    on<UpdateOrderDetailsEvent>(_onUpdateOrderDetails);
     on<SubmitOrderEvent>(_onSubmitOrder);
     on<ResetSaleEvent>(_onResetSale);
   }
@@ -193,13 +194,35 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     );
   }
 
+  void _onUpdateOrderDetails(
+    UpdateOrderDetailsEvent event,
+    Emitter<CartState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        dueDate: event.dueDate ?? state.dueDate,
+        notes: event.notes ?? state.notes,
+      ),
+    );
+  }
+
   Future<void> _onSubmitOrder(
     SubmitOrderEvent event,
     Emitter<CartState> emit,
   ) async {
     if (state.items.isEmpty) return;
 
-    emit(state.copyWith(isSubmitting: true, submissionError: null));
+    final dueDate = event.dueDate ?? state.dueDate;
+    final notes = event.notes ?? state.notes;
+
+    emit(
+      state.copyWith(
+        isSubmitting: true,
+        submissionError: null,
+        dueDate: dueDate,
+        notes: notes,
+      ),
+    );
 
     try {
       final entries = state.items.values.map((item) {
@@ -231,8 +254,8 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         idempotencyKey: state.idempotencyKey,
         phone: state.customerPhone,
         customerName: state.customerName,
-        dueDate: DateFormatter.toIsoDateString(state.dueDate),
-        notes: state.notes,
+        dueDate: DateFormatter.toIsoDateString(dueDate),
+        notes: notes,
         entries: entries,
         initialPayment: initialPayment,
         outletId: state.outletId,
@@ -252,13 +275,14 @@ class CartBloc extends Bloc<CartEvent, CartState> {
   }
 
   void _onResetSale(ResetSaleEvent event, Emitter<CartState> emit) {
+    final now = DateTime.now();
     emit(
       state.copyWith(
         items: const {},
         customerPhone: '',
         customerName: '',
         notes: '',
-        dueDate: DateTime.now().add(const Duration(days: 2)),
+        dueDate: DateTime(now.year, now.month, now.day),
         idempotencyKey: IdempotencyKeyGenerator.generate(),
         clearPlacedOrder: true,
         submissionError: null,

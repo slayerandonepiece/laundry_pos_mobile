@@ -265,6 +265,10 @@ void main() {
         await tester.tap(switches.first);
         await pumpAsync(tester);
 
+        expect(find.text('Disable Cash?'), findsOneWidget);
+        await tester.tap(find.text('Disable method'));
+        await pumpAsync(tester);
+
         expect(fakeRepo.lastToggledPaymentMethod, isNotNull);
         expect(fakeRepo.lastToggledPaymentMethod!['id'], 'pm-1');
         expect(fakeRepo.lastToggledPaymentMethod!['active'], isFalse);

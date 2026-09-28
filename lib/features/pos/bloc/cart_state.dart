@@ -66,8 +66,13 @@ class CartState {
     this.isSubmitting = false,
     this.placedOrder,
     this.submissionError,
-  }) : dueDate = dueDate ?? DateTime.now().add(const Duration(days: 2)),
+  }) : dueDate = dueDate ?? _today(),
        idempotencyKey = idempotencyKey ?? IdempotencyKeyGenerator.generate();
+
+  static DateTime _today() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
 
   int get totalAmount =>
       items.values.fold(0, (sum, item) => sum + item.computedAmount);

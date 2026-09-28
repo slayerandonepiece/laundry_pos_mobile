@@ -4,8 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/theme/text_styles.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../core/utils/date_formatter.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../shell/bloc/outlet_scope_cubit.dart';
 import '../bloc/cart_bloc.dart';
 import '../bloc/cart_event.dart';
@@ -22,6 +24,57 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _selectedMethodId;
+  late DateTime _selectedDueDate;
+  late final TextEditingController _notesController;
+  String? _dueDateError;
+
+  @override
+  void initState() {
+    super.initState();
+    final cartState = context.read<CartBloc>().state;
+    _selectedDueDate = cartState.dueDate;
+    _notesController = TextEditingController(text: cartState.notes);
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDueDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDueDate.isBefore(today) ? today : _selectedDueDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 5),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primary,
+            onPrimary: Colors.white,
+            onSurface: AppColors.text,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+
+    final pickedDate = DateTime(picked.year, picked.month, picked.day);
+    if (pickedDate.isBefore(today)) {
+      setState(() {
+        _dueDateError = 'Due date cannot be in the past';
+      });
+    } else {
+      setState(() {
+        _selectedDueDate = pickedDate;
+        _dueDateError = null;
+      });
+    }
+  }
 
   void _handleBack(BuildContext context) {
     DiscardOrderDialog.show(
@@ -113,7 +166,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
-                        vertical: 20,
+                        vertical: 10,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -159,7 +212,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
                           // Order Summary Card
                           AppCard(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -188,6 +241,53 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                             '+91 ${state.customerPhone} · ${state.totalItemCount} services',
                                             style: AppTextStyles.hint,
                                           ),
+                                          const SizedBox(height: 5),
+                                          InkWell(
+                                            key: const Key(
+                                              'checkout_due_date_picker',
+                                            ),
+                                            onTap: _pickDueDate,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.calendar_today_outlined,
+                                                  size: 13,
+                                                  color: AppColors.primary,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Due date: ${DateFormatter.formatDate(_selectedDueDate)}',
+                                                  style: const TextStyle(
+                                                    fontFamily:
+                                                        AppTextStyles.fontBody,
+                                                    fontSize: 12.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppColors.primary,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                const Icon(
+                                                  Icons.edit_outlined,
+                                                  size: 12,
+                                                  color: AppColors.primary,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (_dueDateError != null) ...[
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              _dueDateError!,
+                                              style: const TextStyle(
+                                                fontFamily:
+                                                    AppTextStyles.fontBody,
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.danger,
+                                              ),
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
@@ -199,12 +299,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 10),
                                 const Divider(),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 10),
                                 ...state.items.values.map((item) {
                                   return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.only(bottom: 6),
                                     child: Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.spaceBetween,
@@ -231,7 +331,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                           ),
 
-                          const SizedBox(height: 22),
+                          const SizedBox(height: 14),
 
                           if (outletName != null) ...[
                             Row(
@@ -255,11 +355,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 10),
                           ],
 
                           Text('PAYMENT METHOD', style: AppTextStyles.label),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
 
                           if (state.paymentMethods.isEmpty)
                             const Padding(
@@ -290,15 +390,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               } else {
                                 icon = Icons.payments_outlined;
                               }
-                              final subtitle = method.isCashOnDelivery
-                                  ? 'Collect full amount at handover'
-                                  : 'Pay full amount now';
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _buildPaymentOption(
                                   id: method.id,
                                   title: method.name,
-                                  subtitle: subtitle,
                                   icon: icon,
                                   isSelected: isSelected,
                                   onTap: () => setState(() {
@@ -307,6 +403,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 ),
                               );
                             }),
+
+                          const SizedBox(height: 10),
+
+                          AppTextField(
+                            key: const Key('checkout_notes_field'),
+                            controller: _notesController,
+                            label: 'Notes',
+                            hintText:
+                                'Add special instructions or notes (optional)',
+                            maxLines: 3,
+                            keyboardType: TextInputType.multiline,
+                          ),
                         ],
                       ),
                     ),
@@ -336,6 +444,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 context.read<CartBloc>().add(
                                   SubmitOrderEvent(
                                     paymentChoice: 'delivery',
+                                    dueDate: _selectedDueDate,
+                                    notes: _notesController.text.trim(),
                                   ),
                                 );
                               } else {
@@ -343,6 +453,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   SubmitOrderEvent(
                                     paymentChoice: 'prepaid',
                                     paymentMethodName: selectedMethod.name,
+                                    dueDate: _selectedDueDate,
+                                    notes: _notesController.text.trim(),
                                   ),
                                 );
                               }
@@ -361,7 +473,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget _buildPaymentOption({
     required String id,
     required String title,
-    required String subtitle,
     required IconData icon,
     required bool isSelected,
     required VoidCallback onTap,
@@ -403,8 +514,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       color: isSelected ? AppColors.primary : AppColors.text,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: AppTextStyles.hint),
                 ],
               ),
             ),

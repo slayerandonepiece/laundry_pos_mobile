@@ -58,6 +58,8 @@ class StoreSummary {
   final String role; // 'OWNER' | 'EMPLOYEE'
   final String? blockedReason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed'
   final String? paidThroughDate;
+  final String? trialEndsAt;
+  final String? subscriptionState;
 
   StoreSummary({
     required this.storeId,
@@ -65,6 +67,8 @@ class StoreSummary {
     required this.role,
     this.blockedReason,
     this.paidThroughDate,
+    this.trialEndsAt,
+    this.subscriptionState,
   });
 
   bool get isOwner => role.toUpperCase() == 'OWNER';
@@ -78,6 +82,8 @@ class StoreSummary {
       role: json['role']?.toString() ?? 'EMPLOYEE',
       blockedReason: json['blockedReason']?.toString(),
       paidThroughDate: json['paidThroughDate']?.toString(),
+      trialEndsAt: json['trialEndsAt']?.toString(),
+      subscriptionState: json['subscriptionState']?.toString(),
     );
   }
 
@@ -88,6 +94,8 @@ class StoreSummary {
       'role': role,
       'blockedReason': blockedReason,
       'paidThroughDate': paidThroughDate,
+      'trialEndsAt': trialEndsAt,
+      'subscriptionState': subscriptionState,
     };
   }
 }

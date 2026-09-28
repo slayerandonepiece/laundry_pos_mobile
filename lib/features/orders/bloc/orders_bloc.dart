@@ -21,6 +21,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     on<LoadOrderDetailEvent>(_onLoadOrderDetail);
     on<UpdateOrderStatusEvent>(_onUpdateOrderStatus);
     on<CollectPaymentEvent>(_onCollectPayment);
+    on<RecordPaymentEvent>(_onRecordPayment);
     on<HandoverOrderEvent>(_onHandoverOrder);
     on<RefreshInvoiceEvent>(_onRefreshInvoice);
   }
@@ -244,6 +245,44 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         state.copyWith(
           isCollectingPayment: false,
           error: 'Could not collect payment — try again',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onRecordPayment(
+    RecordPaymentEvent event,
+    Emitter<OrdersState> emit,
+  ) async {
+    emit(state.copyWith(isCollectingPayment: true, error: null));
+    try {
+      final updated = await ordersRepository.recordPayment(
+        event.orderCode,
+        event.amount,
+        event.method,
+      );
+      final updatedList = state.allOrders
+          .map((o) => o.isSameOrder(updated) ? updated : o)
+          .toList();
+      emit(
+        state.copyWith(
+          isCollectingPayment: false,
+          selectedOrder: updated,
+          allOrders: updatedList,
+          actionSuccessMessage: 'Payment recorded',
+        ),
+      );
+      SyncEngine.instance.trigger();
+    } catch (e) {
+      AppLogger.log(
+        _tag,
+        'recordPayment(${event.orderCode}) failed',
+        error: e,
+      );
+      emit(
+        state.copyWith(
+          isCollectingPayment: false,
+          error: 'Could not record payment — try again',
         ),
       );
     }

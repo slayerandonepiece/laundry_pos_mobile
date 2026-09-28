@@ -1,12 +1,131 @@
-# Session handoff — mobile workspace improvements (2026-09-27)
+# Session handoff — mobile workspace improvements (2026-09-28)
 
 Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
-## Current status — 27 September 2026
+## Current status — 28 September 2026
 
-This section supersedes the historical branch/test-status notes below.
+This section supersedes the 27 September section below, which is itself now
+historical (its own "Next work" item 2 predicted exactly this batch — web
+enhancement parity — so treat this as that work starting, not a new
+direction).
+
+### Web/mobile feature-parity audit
+
+Codex independently audited `../laundry_pos` (web, source of truth): all ten
+admin modules, 199 source-cited capability bullets, live browser/API
+verification, 89/89 integration tests passing. Artifacts in
+`../laundry_pos/audit/`. Five parallel Claude agents then cross-checked every
+bullet against this repo's actual Dart source (bloc → event → repository →
+API-client chains, not just filenames), classifying each as
+Implemented/Partial/Missing/Intentionally-different/N-A-for-mobile, and
+separately listing web-only defects not to copy into mobile. Full detail:
+local `.wiki/raw/notes/2026-09-28-web-mobile-parity-audit-and-fixes.md`
+(gitignored — this section is the cloud-visible summary).
+
+### Fixed and verified this batch (`flutter analyze` clean, `flutter test`
+**374/374** pass at the time of each verification)
+
+- **Payment/delivery decoupling** (the original complaint): payment collection
+  was hard-coupled to marking an order Delivered (`CollectPaymentDialog`
+  always paid the full balance and delivered in one step; no way to record a
+  partial payment or deliver with a balance due). Added `RecordPaymentEvent`
+  (standalone payment, any amount up to balance, any status, no status
+  change) + `record_payment_dialog.dart`; added `Delivered` to
+  `status_dialog.dart`'s status list with a "deliver anyway" confirmation when
+  a balance remains (dispatches the existing `HandoverOrderEvent`, which never
+  actually checked balance — it just wasn't reachable with money owed before).
+  The original combined "Collect payment & deliver" flow is untouched, kept as
+  a shortcut.
+- **Checkout**: removed hardcoded payment-option subtitles ("Collect full
+  amount at handover"/"Pay full amount now"); added a real due-date picker
+  (default changed from hardcoded +2 days to today, rejects past dates) and an
+  optional notes field — both fields already existed on `Order`/already
+  accepted by the create-order API, just never exposed in the UI.
+- **Payment methods**: disabling a method now shows a confirm dialog
+  ("Disable {name}? Customers will no longer be able to pay with {name}...",
+  reusing the existing `CentredDialog`); enabling stays instant.
+- **Invoice PDF**: rebuilt `order_pdf_builder.dart` to match web's
+  `OrderInvoicePdf.tsx` structure — added order/delivery dates, a Rate column
+  ("Slab pricing" for weight lines), a Payment summary, a per-payment
+  "Payments received" table (previously only an aggregate total), and the
+  "not a tax invoice" footer. Stayed client-side/offline-capable by design —
+  `getInvoicePdfBytes` (server-rendered PDF) remains intentionally unused.
+  Paired backend change: `../laundry_pos` now returns `invoice.generatedAt` on
+  the Order DTO (additive; covered by an extended B6.5 assertion, 89/89 still
+  pass) so the PDF footer date is accurate instead of always "now".
+- **BlockedScreen**: added `onRetry` (wired to the existing
+  `CheckAuthStatusEvent` — accepted a brief splash-screen flash rather than
+  adding a new bloc state) and `pendingCount` (from
+  `LocalCacheService.getTotalPendingCount()`) so a user isn't stuck with only
+  "Sign out" and no visibility into whether queued offline writes are safe
+  (they are — `SyncEngine` keeps retrying them in the background regardless of
+  block state, it just wasn't visible).
+- **Trial/subscription banner data plumbing**: backend's `getStoreAccessStatus`
+  already computed `trialEndsAt`/`subscriptionState` live per-request (a
+  renewal payment is reflected on the very next request, no caching) but only
+  attached them to the `organizations[]` array, not the `stores[]` array
+  mobile actually parses. Backend now mirrors both onto `stores[]`; mobile's
+  `StoreSummary` parses them and `more_screen.dart`/`subscription_screen.dart`
+  branch the renewal badge on actual state (TRIAL/TRIAL_ENDING/
+  SUBSCRIPTION_ENDING/ACTIVE) instead of one flat "paidThroughDate <= 7 days"
+  heuristic that couldn't tell a trial ending from a paid plan ending.
+  **Implemented but not yet independently re-verified this session** — do that
+  before treating it as done. Plan name/deposit/annual-fee display is still
+  missing from the billing card; this fix only addressed trial/renewal state.
+
+### Confirmed open — not yet fixed, not yet prompted
+
+- Subscription lockdown is still all-or-nothing: any blocked-reason 403
+  replaces the whole app via `BlockedScreen`. Web keeps historical reads
+  (orders/invoices/rollups) working during a `RESTRICTED` subscription state;
+  mobile has no partial-access mode. The BlockedScreen fix above is a smaller
+  companion, not this.
+- Staff editor has no outlet (re)assignment (joint gap — the mobile API
+  contract itself doesn't carry outlet fields on `/employees` yet either) or
+  password-reset (pure mobile gap — `PUT /api/v1/employees/{id}` already
+  accepts a password field server-side).
+- Dashboard missing: all-outlet per-branch cards, "Needs attention" combined
+  overdue/due-today list, recent-orders list, general empty state, "Last 14
+  days" trend default.
+- No read-only outlet/branch directory on mobile at all (distinct from the
+  outlet-scope switcher) — largely blocked by no `/api/v1/outlets` route
+  server-side (mobile only ever gets bare `allowedOutlets[]`: id/code/name/
+  status, no address/opened-date/staff/chart data).
+- Product editor's slab-limit validation is looser than web (silently sorts
+  non-increasing limits instead of rejecting).
+- No proactive session/subscription refresh on app resume, only on cold start
+  or reactively on a 403 (`AppResumeSync` only triggers order sync).
+
+### Backend/API gaps — flag to the web team, not mobile tasks
+
+- Expense edit/delete/backdated-pay have no REST endpoint (web-only Next.js
+  server actions).
+- No `/api/v1/outlets` list/detail route.
+- Rollups endpoint lets an employee omit outlet and silently falls back
+  instead of the documented 403.
+- **Security-relevant, worth prioritizing independent of mobile's schedule**:
+  an employee can currently fetch another outlet's invoice PDF via
+  `/invoice/pdf` with no outlet-membership check.
+- No mobile-facing announcements endpoint exists at all.
+
+### Confirmed fine — don't "fix" these chasing parity
+
+- Login body `{phone,password}` matches the contract exactly.
+- Offline-first caching/idempotency/bulk-sync batching — don't simplify to
+  match web's simpler model.
+- Mobile's checkout already avoids a real web bug (COD pre-selected, so a
+  positive amount charges even when COD is picked) — don't copy that in.
+- Mobile's strict 10-digit Indian-mobile phone regex is correct as-is; web's
+  looser 8-15-digit rule is the actual bug, for an India-only business.
+- Mobile already forces the mandatory first-login password change; web has a
+  known enforcement gap here, mobile is stricter/correct.
+
+## Historical: current status — 27 September 2026
+
+This section formerly superseded the branch/test-status notes below it; it is
+now itself historical, superseded by 28 September above.
 
 ### Repository baseline and this batch
 

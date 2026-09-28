@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
@@ -16,6 +17,8 @@ import 'package:myshop/shared/widgets/app_button.dart';
 class _FakePosRepo implements PosRepository {
   String? lastPassedOutletId;
   String? lastPassedMethodName;
+  String? lastPassedDueDate;
+  String? lastPassedNotes;
   bool submitCalled = false;
   String? lastPaymentChoice;
 
@@ -42,6 +45,8 @@ class _FakePosRepo implements PosRepository {
     submitCalled = true;
     lastPassedOutletId = outletId;
     lastPassedMethodName = initialPayment?['method']?.toString();
+    lastPassedDueDate = dueDate;
+    lastPassedNotes = notes;
     return Order(
       id: 'ORDER-123',
       name: customerName,
@@ -266,6 +271,171 @@ void main() {
       expect(fakeRepo.submitCalled, isTrue);
       expect(fakeRepo.lastPassedMethodName, isNull); // delivery sends no payment method name
       expect(fakeRepo.lastPassedOutletId, equals('outlet_a'));
+    });
+
+    testWidgets('Due date defaults to today and is sent in order submission when unchanged', (
+      tester,
+    ) async {
+      final today = DateTime.now();
+      final expectedFormatted = DateFormatter.formatDate(today);
+      final expectedIso = DateFormatter.toIsoDateString(today);
+
+      cartBloc.emit(
+        cartBloc.state.copyWith(
+          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+          paymentMethods: [
+            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      // UI displays today's date near order summary
+      expect(find.text('Due date: $expectedFormatted'), findsOneWidget);
+
+      // Select UPI and place order
+      await tester.tap(find.text('UPI'));
+      await tester.pump();
+
+      await tester.tap(find.byType(PrimaryButton));
+      await tester.pump();
+
+      expect(fakeRepo.submitCalled, isTrue);
+      expect(fakeRepo.lastPassedDueDate, equals(expectedIso));
+      expect(fakeRepo.lastPassedNotes, equals(''));
+    });
+
+    testWidgets('Picking a future date is accepted and reflected in dispatched event', (
+      tester,
+    ) async {
+      cartBloc.emit(
+        cartBloc.state.copyWith(
+          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+          paymentMethods: [
+            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      // Open date picker
+      await tester.tap(find.byKey(const Key('checkout_due_date_picker')));
+      await tester.pumpAndSettle();
+
+      // Advance to next month to ensure future date
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+
+      // Tap day 15
+      await tester.tap(find.text('15'));
+      await tester.pumpAndSettle();
+
+      // Confirm dialog
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      // Calculate expected date
+      final now = DateTime.now();
+      final nextMonth = DateTime(now.year, now.month + 1, 15);
+      final expectedFormatted = DateFormatter.formatDate(nextMonth);
+      final expectedIso = DateFormatter.toIsoDateString(nextMonth);
+
+      expect(find.text('Due date: $expectedFormatted'), findsOneWidget);
+      expect(find.text('Due date cannot be in the past'), findsNothing);
+
+      // Submit
+      await tester.tap(find.text('UPI'));
+      await tester.pump();
+
+      await tester.tap(find.byType(PrimaryButton));
+      await tester.pump();
+
+      expect(fakeRepo.submitCalled, isTrue);
+      expect(fakeRepo.lastPassedDueDate, equals(expectedIso));
+    });
+
+    testWidgets('Picking a past date is rejected with an inline error', (
+      tester,
+    ) async {
+      final today = DateTime.now();
+      final expectedTodayFormatted = DateFormatter.formatDate(today);
+
+      cartBloc.emit(
+        cartBloc.state.copyWith(
+          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+          paymentMethods: [
+            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      // Open date picker
+      await tester.tap(find.byKey(const Key('checkout_due_date_picker')));
+      await tester.pumpAndSettle();
+
+      // Move to previous month to ensure past date
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+
+      // Tap day 15 of previous month
+      await tester.tap(find.text('15'));
+      await tester.pumpAndSettle();
+
+      // Confirm dialog
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      // Inline error should be visible
+      expect(find.text('Due date cannot be in the past'), findsOneWidget);
+
+      // The selected date should NOT have been updated to the past date
+      expect(find.text('Due date: $expectedTodayFormatted'), findsOneWidget);
+    });
+
+    testWidgets('Notes text is optional and passed through to order-creation event when filled', (
+      tester,
+    ) async {
+      cartBloc.emit(
+        cartBloc.state.copyWith(
+          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+          paymentMethods: [
+            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      // Notes field exists and is optional
+      expect(find.byKey(const Key('checkout_notes_field')), findsOneWidget);
+
+      // Enter notes
+      await tester.enterText(
+        find.byKey(const Key('checkout_notes_field')),
+        'Handle delicate fabric with gentle detergent',
+      );
+      await tester.pump();
+
+      // Submit with UPI
+      await tester.tap(find.text('UPI'));
+      await tester.pump();
+
+      await tester.tap(find.byType(PrimaryButton));
+      await tester.pump();
+
+      expect(fakeRepo.submitCalled, isTrue);
+      expect(
+        fakeRepo.lastPassedNotes,
+        equals('Handle delicate fabric with gentle detergent'),
+      );
     });
   });
 }

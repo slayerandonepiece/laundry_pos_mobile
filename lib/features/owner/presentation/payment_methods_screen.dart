@@ -7,7 +7,9 @@ import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
+import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
+import 'package:myshop/shared/widgets/centred_dialog.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class PaymentMethodsScreen extends StatefulWidget {
@@ -22,6 +24,38 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   void initState() {
     super.initState();
     context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
+  }
+
+  void _confirmDisable(BuildContext context, StorePaymentMethod method) {
+    setState(() {});
+    CentredDialog.show(
+      context: context,
+      child: CentredDialog(
+        title: 'Disable ${method.name}?',
+        subtitle:
+            'Customers will no longer be able to pay with ${method.name} at checkout across all outlets.',
+        confirmLabel: 'Disable method',
+        cancelLabel: 'Keep enabled',
+        isDestructive: true,
+        onConfirm: () {
+          final bloc = context.read<OwnerBloc>();
+          Navigator.of(context).pop();
+          bloc.add(
+            TogglePaymentMethodEvent(
+              id: method.id,
+              active: false,
+            ),
+          );
+        },
+        onCancel: () {
+          Navigator.of(context).pop();
+        },
+      ),
+    ).then((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -179,12 +213,16 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                                     value: method.active,
                                     activeThumbColor: AppColors.primary,
                                     onChanged: (val) {
-                                      context.read<OwnerBloc>().add(
-                                        TogglePaymentMethodEvent(
-                                          id: method.id,
-                                          active: val,
-                                        ),
-                                      );
+                                      if (val) {
+                                        context.read<OwnerBloc>().add(
+                                          TogglePaymentMethodEvent(
+                                            id: method.id,
+                                            active: true,
+                                          ),
+                                        );
+                                      } else {
+                                        _confirmDisable(context, method);
+                                      }
                                     },
                                   ),
                                 ],

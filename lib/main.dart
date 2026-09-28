@@ -325,9 +325,14 @@ class _MyShopAppState extends State<MyShopApp> {
                   reason: state.reason,
                   isOwner: state.isOwner,
                   paidThroughDate: state.paidThroughDate,
+                  ownerPhone: state.ownerPhone,
+                  onRetry: () {
+                    _authBloc.add(CheckAuthStatusEvent());
+                  },
                   onSignOut: () {
                     _authBloc.add(LogoutRequestedEvent());
                   },
+                  pendingCount: widget.localCache.getTotalPendingCount(),
                 );
               }
 
@@ -345,9 +350,13 @@ class _MyShopAppState extends State<MyShopApp> {
                       return BlockedScreen(
                         reason: 'no_outlet_assigned',
                         isOwner: false,
+                        onRetry: () {
+                          _authBloc.add(CheckAuthStatusEvent());
+                        },
                         onSignOut: () {
                           _authBloc.add(LogoutRequestedEvent());
                         },
+                        pendingCount: widget.localCache.getTotalPendingCount(),
                       );
                     }
 

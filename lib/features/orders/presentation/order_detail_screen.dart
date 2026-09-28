@@ -12,6 +12,7 @@ import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/presentation/dialogs/collect_payment_dialog.dart';
 import 'package:myshop/features/orders/presentation/dialogs/ready_bill_actions_sheet.dart';
+import 'package:myshop/features/orders/presentation/dialogs/record_payment_dialog.dart';
 import 'package:myshop/features/orders/presentation/dialogs/status_dialog.dart';
 import 'package:myshop/features/orders/presentation/invoice_actions_sheet.dart';
 import 'package:myshop/features/orders/presentation/invoice_viewer_screen.dart';
@@ -507,6 +508,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         CollectPaymentDialog.show(context, order: order);
                       },
                     ),
+                    if (order.balanceDue > 0) ...[
+                      const SizedBox(height: 10),
+                      SecondaryButton(
+                        label: 'Record payment',
+                        onPressed: () {
+                          RecordPaymentDialog.show(context, order: order);
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     SecondaryButton(
                       label: 'Update status',
@@ -527,6 +537,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         StatusDialog.show(context, order: order);
                       },
                     ),
+                    if (order.balanceDue > 0) ...[
+                      const SizedBox(height: 10),
+                      SecondaryButton(
+                        label: 'Record payment',
+                        onPressed: () {
+                          RecordPaymentDialog.show(context, order: order);
+                        },
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 12),
 
