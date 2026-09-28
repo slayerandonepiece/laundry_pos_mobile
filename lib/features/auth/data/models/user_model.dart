@@ -1,25 +1,25 @@
 class User {
   final String id;
   final String name;
-  final String username;
+  final String phone;
   final bool isSuperAdmin;
   final bool mustChangePassword;
 
   User({
     required this.id,
     required this.name,
-    required this.username,
+    required this.phone,
     this.isSuperAdmin = false,
     this.mustChangePassword = false,
   });
 
-  String get displayName => name.isNotEmpty ? name : username;
+  String get displayName => name.isNotEmpty ? name : phone;
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
-      username: json['username']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
       isSuperAdmin: json['isSuperAdmin'] == true,
       mustChangePassword: json['mustChangePassword'] == true,
     );
@@ -29,7 +29,7 @@ class User {
     return {
       'id': id,
       'name': name,
-      'username': username,
+      'phone': phone,
       'isSuperAdmin': isSuperAdmin,
       'mustChangePassword': mustChangePassword,
     };
@@ -38,14 +38,14 @@ class User {
   User copyWith({
     String? id,
     String? name,
-    String? username,
+    String? phone,
     bool? isSuperAdmin,
     bool? mustChangePassword,
   }) {
     return User(
       id: id ?? this.id,
       name: name ?? this.name,
-      username: username ?? this.username,
+      phone: phone ?? this.phone,
       isSuperAdmin: isSuperAdmin ?? this.isSuperAdmin,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
     );
@@ -58,6 +58,8 @@ class StoreSummary {
   final String role; // 'OWNER' | 'EMPLOYEE'
   final String? blockedReason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed'
   final String? paidThroughDate;
+  final String? trialEndsAt;
+  final String? subscriptionState;
 
   StoreSummary({
     required this.storeId,
@@ -65,6 +67,8 @@ class StoreSummary {
     required this.role,
     this.blockedReason,
     this.paidThroughDate,
+    this.trialEndsAt,
+    this.subscriptionState,
   });
 
   bool get isOwner => role.toUpperCase() == 'OWNER';
@@ -78,6 +82,8 @@ class StoreSummary {
       role: json['role']?.toString() ?? 'EMPLOYEE',
       blockedReason: json['blockedReason']?.toString(),
       paidThroughDate: json['paidThroughDate']?.toString(),
+      trialEndsAt: json['trialEndsAt']?.toString(),
+      subscriptionState: json['subscriptionState']?.toString(),
     );
   }
 
@@ -88,6 +94,8 @@ class StoreSummary {
       'role': role,
       'blockedReason': blockedReason,
       'paidThroughDate': paidThroughDate,
+      'trialEndsAt': trialEndsAt,
+      'subscriptionState': subscriptionState,
     };
   }
 }

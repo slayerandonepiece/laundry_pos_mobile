@@ -65,7 +65,9 @@ class _RecordingApiClient implements ApiClient {
     postUrls.add(url);
     postHeaders.add(headers);
     postBodies.add(body);
-    final map = body is Map ? Map<String, dynamic>.from(body) : <String, dynamic>{};
+    final map = body is Map
+        ? Map<String, dynamic>.from(body)
+        : <String, dynamic>{};
     return <String, dynamic>{
       'id': 'exp-server-1',
       'title': map['title'] ?? 'Item',
@@ -150,44 +152,50 @@ void main() {
       }
     });
 
-    test('expenses cache keys differ per outlet and all-outlets scope', () async {
-      // Outlet o1
-      await localCache.setAllOutletsScope(false);
-      await localCache.setActiveOutletId('o1');
-      await localCache.setCachedExpenses([
-        {'id': 'e-o1', 'title': 'Rent O1', 'amount': 1000},
-      ]);
+    test(
+      'expenses cache keys differ per outlet and all-outlets scope',
+      () async {
+        // Outlet o1
+        await localCache.setAllOutletsScope(false);
+        await localCache.setActiveOutletId('o1');
+        await localCache.setCachedExpenses([
+          {'id': 'e-o1', 'title': 'Rent O1', 'amount': 1000},
+        ]);
 
-      // Outlet o2
-      await localCache.setActiveOutletId('o2');
-      expect(localCache.getCachedExpenses(), isNull);
-      await localCache.setCachedExpenses([
-        {'id': 'e-o2', 'title': 'Rent O2', 'amount': 2000},
-      ]);
+        // Outlet o2
+        await localCache.setActiveOutletId('o2');
+        expect(localCache.getCachedExpenses(), isNull);
+        await localCache.setCachedExpenses([
+          {'id': 'e-o2', 'title': 'Rent O2', 'amount': 2000},
+        ]);
 
-      // All-outlets scope
-      await localCache.clearActiveOutletId();
-      await localCache.setAllOutletsScope(true);
-      expect(localCache.getCachedExpenses(), isNull);
-      await localCache.setCachedExpenses([
-        {'id': 'e-all', 'title': 'Org Wide', 'amount': 3000},
-      ]);
+        // All-outlets scope
+        await localCache.clearActiveOutletId();
+        await localCache.setAllOutletsScope(true);
+        expect(localCache.getCachedExpenses(), isNull);
+        await localCache.setCachedExpenses([
+          {'id': 'e-all', 'title': 'Org Wide', 'amount': 3000},
+        ]);
 
-      // Verify each scope reads back its own isolated list
-      expect(localCache.getCachedExpenses()!.single['id'], 'e-all');
+        // Verify each scope reads back its own isolated list
+        expect(localCache.getCachedExpenses()!.single['id'], 'e-all');
 
-      await localCache.setAllOutletsScope(false);
-      await localCache.setActiveOutletId('o1');
-      expect(localCache.getCachedExpenses()!.single['id'], 'e-o1');
+        await localCache.setAllOutletsScope(false);
+        await localCache.setActiveOutletId('o1');
+        expect(localCache.getCachedExpenses()!.single['id'], 'e-o1');
 
-      await localCache.setActiveOutletId('o2');
-      expect(localCache.getCachedExpenses()!.single['id'], 'e-o2');
-    });
+        await localCache.setActiveOutletId('o2');
+        expect(localCache.getCachedExpenses()!.single['id'], 'e-o2');
+      },
+    );
 
     test('queued create_expense stores outletId in outlet scope and null in all-outlets scope', () async {
       mockConnectivity.mockOffline = true;
       final apiClient = _RecordingApiClient();
-      final repo = OwnerRepository(apiClient: apiClient, localCache: localCache);
+      final repo = OwnerRepository(
+        apiClient: apiClient,
+        localCache: localCache,
+      );
 
       // 1. Specific outlet o1
       await localCache.setAllOutletsScope(false);
@@ -223,165 +231,156 @@ void main() {
       expect(queue[1]['outletId'], isNull);
     });
 
-    test(
-      'replay sends outlet header for outlet-scoped action, and kNoOutletHeader (omitted on wire) for org-wide action',
-      () async {
-        // First verify the headers passed to ApiClient.post
-        final recordingClient = _RecordingApiClient();
-        final repoWithRecording = OwnerRepository(
-          apiClient: recordingClient,
-          localCache: localCache,
-        );
+    test('replay sends outlet header for outlet-scoped action, and kNoOutletHeader (omitted on wire) for org-wide action', () async {
+      // First verify the headers passed to ApiClient.post
+      final recordingClient = _RecordingApiClient();
+      final repoWithRecording = OwnerRepository(
+        apiClient: recordingClient,
+        localCache: localCache,
+      );
 
-        await localCache.setPendingOwnerActionsQueue([
-          {
-            'clientActionId': 'act_o1',
-            'type': 'create_expense',
-            'outletId': 'o1',
-            'payload': {
-              'localId': 'LOCAL-1',
-              'title': 'Outlet 1 Bill',
-              'category': 'Utilities',
-              'amount': 12000,
-              'due': '2026-09-26',
-              'monthly': false,
-            },
-          },
-          {
-            'clientActionId': 'act_org',
-            'type': 'create_expense',
-            'outletId': null,
-            'payload': {
-              'localId': 'LOCAL-2',
-              'title': 'Org Bill',
-              'category': 'Operations',
-              'amount': 50000,
-              'due': '2026-09-26',
-              'monthly': true,
-            },
-          },
-          {
-            'clientActionId': 'act_legacy',
-            'type': 'create_expense',
-            'payload': {
-              'localId': 'LOCAL-3',
-              'title': 'Legacy Bill',
-              'category': 'Other',
-              'amount': 8000,
-              'due': '2026-09-26',
-              'monthly': false,
-            },
-          },
-        ]);
-
-        mockConnectivity.mockOffline = false;
-        final ok = await repoWithRecording.processPendingOwnerActions();
-        expect(ok, isTrue);
-        expect(recordingClient.postHeaders.length, 3);
-        expect(recordingClient.postHeaders[0], {'X-Outlet-Id': 'o1'});
-        expect(
-          recordingClient.postHeaders[1],
-          {'X-Outlet-Id': kNoOutletHeader},
-        );
-        expect(recordingClient.postHeaders[2], isNull);
-
-        // Now verify wire headers through Dio + AuthInterceptor even when activeOutletId is 'o2'
-        await localCache.setAllOutletsScope(false);
-        await localCache.setActiveOutletId('o2');
-
-        final wireHeaders = <Map<String, dynamic>>[];
-        final mockDio = createMockDio((options) async {
-          wireHeaders.add(Map<String, dynamic>.from(options.headers));
-          return mockJsonResponse({
-            'id': 'exp-wire-${wireHeaders.length}',
-            'title': 'Bill',
-            'category': 'Operations',
-            'amount': 1000,
+      await localCache.setPendingOwnerActionsQueue([
+        {
+          'clientActionId': 'act_o1',
+          'type': 'create_expense',
+          'outletId': 'o1',
+          'payload': {
+            'localId': 'LOCAL-1',
+            'title': 'Outlet 1 Bill',
+            'category': 'Utilities',
+            'amount': 12000,
             'due': '2026-09-26',
             'monthly': false,
-          });
+          },
+        },
+        {
+          'clientActionId': 'act_org',
+          'type': 'create_expense',
+          'outletId': null,
+          'payload': {
+            'localId': 'LOCAL-2',
+            'title': 'Org Bill',
+            'category': 'Operations',
+            'amount': 50000,
+            'due': '2026-09-26',
+            'monthly': true,
+          },
+        },
+        {
+          'clientActionId': 'act_legacy',
+          'type': 'create_expense',
+          'payload': {
+            'localId': 'LOCAL-3',
+            'title': 'Legacy Bill',
+            'category': 'Other',
+            'amount': 8000,
+            'due': '2026-09-26',
+            'monthly': false,
+          },
+        },
+      ]);
+
+      mockConnectivity.mockOffline = false;
+      final ok = await repoWithRecording.processPendingOwnerActions();
+      expect(ok, isTrue);
+      expect(recordingClient.postHeaders.length, 3);
+      expect(recordingClient.postHeaders[0], {'X-Outlet-Id': 'o1'});
+      expect(recordingClient.postHeaders[1], {'X-Outlet-Id': kNoOutletHeader});
+      expect(recordingClient.postHeaders[2], isNull);
+
+      // Now verify wire headers through Dio + AuthInterceptor even when activeOutletId is 'o2'
+      await localCache.setAllOutletsScope(false);
+      await localCache.setActiveOutletId('o2');
+
+      final wireHeaders = <Map<String, dynamic>>[];
+      final mockDio = createMockDio((options) async {
+        wireHeaders.add(Map<String, dynamic>.from(options.headers));
+        return mockJsonResponse({
+          'id': 'exp-wire-${wireHeaders.length}',
+          'title': 'Bill',
+          'category': 'Operations',
+          'amount': 1000,
+          'due': '2026-09-26',
+          'monthly': false,
         });
+      });
 
-        final dioApiClient = ApiClient(
-          dio: mockDio,
-          secureStorage: _TestSecureStorage(),
-          localCache: localCache,
-        );
-        final repoWithDio = OwnerRepository(
-          apiClient: dioApiClient,
-          localCache: localCache,
-        );
+      final dioApiClient = ApiClient(
+        dio: mockDio,
+        secureStorage: _TestSecureStorage(),
+        localCache: localCache,
+      );
+      final repoWithDio = OwnerRepository(
+        apiClient: dioApiClient,
+        localCache: localCache,
+      );
 
-        await localCache.setPendingOwnerActionsQueue([
-          {
-            'clientActionId': 'wire_o1',
-            'type': 'create_expense',
-            'outletId': 'o1',
-            'payload': {
-              'localId': 'LOCAL-10',
-              'title': 'Outlet 1 Bill',
-              'category': 'Utilities',
-              'amount': 12000,
-              'due': '2026-09-26',
-              'monthly': false,
-            },
+      await localCache.setPendingOwnerActionsQueue([
+        {
+          'clientActionId': 'wire_o1',
+          'type': 'create_expense',
+          'outletId': 'o1',
+          'payload': {
+            'localId': 'LOCAL-10',
+            'title': 'Outlet 1 Bill',
+            'category': 'Utilities',
+            'amount': 12000,
+            'due': '2026-09-26',
+            'monthly': false,
           },
-          {
-            'clientActionId': 'wire_org',
-            'type': 'create_expense',
-            'outletId': null,
-            'payload': {
-              'localId': 'LOCAL-11',
-              'title': 'Org Bill',
-              'category': 'Operations',
-              'amount': 50000,
-              'due': '2026-09-26',
-              'monthly': true,
-            },
+        },
+        {
+          'clientActionId': 'wire_org',
+          'type': 'create_expense',
+          'outletId': null,
+          'payload': {
+            'localId': 'LOCAL-11',
+            'title': 'Org Bill',
+            'category': 'Operations',
+            'amount': 50000,
+            'due': '2026-09-26',
+            'monthly': true,
           },
-        ]);
+        },
+      ]);
 
-        final wireOk = await repoWithDio.processPendingOwnerActions();
-        expect(wireOk, isTrue);
-        expect(wireHeaders.length, 2);
-        // First action had outletId: 'o1' -> wire has X-Outlet-Id: o1 (not active o2)
-        expect(wireHeaders[0]['X-Outlet-Id'], 'o1');
-        // Second action had outletId: null -> kNoOutletHeader stripped by AuthInterceptor -> omitted on wire!
-        expect(wireHeaders[1].containsKey('X-Outlet-Id'), isFalse);
-      },
-    );
+      final wireOk = await repoWithDio.processPendingOwnerActions();
+      expect(wireOk, isTrue);
+      expect(wireHeaders.length, 2);
+      // First action had outletId: 'o1' -> wire has X-Outlet-Id: o1 (not active o2)
+      expect(wireHeaders[0]['X-Outlet-Id'], 'o1');
+      // Second action had outletId: null -> kNoOutletHeader stripped by AuthInterceptor -> omitted on wire!
+      expect(wireHeaders[1].containsKey('X-Outlet-Id'), isFalse);
+    });
 
-    test(
-      'dashboard GET URL contains outletId=o1 in outlet scope and no outletId in all-outlets scope',
-      () async {
-        final recordingClient = _RecordingApiClient();
-        final repo = OwnerRepository(
-          apiClient: recordingClient,
-          localCache: localCache,
-        );
+    test('dashboard GET URL contains outletId=o1 in outlet scope and no outletId in all-outlets scope', () async {
+      final recordingClient = _RecordingApiClient();
+      final repo = OwnerRepository(
+        apiClient: recordingClient,
+        localCache: localCache,
+      );
 
-        // 1. Outlet scope (o1)
-        await localCache.setAllOutletsScope(false);
-        await localCache.setActiveOutletId('o1');
-        await repo.getDashboardMetrics(from: '2026-09-01', to: '2026-09-26');
+      // 1. Outlet scope (o1)
+      await localCache.setAllOutletsScope(false);
+      await localCache.setActiveOutletId('o1');
+      await repo.getDashboardMetrics(from: '2026-09-01', to: '2026-09-26');
 
-        expect(recordingClient.getUrls.length, 1);
-        final outletUri = Uri.parse(recordingClient.getUrls.first);
-        expect(outletUri.queryParameters['outletId'], 'o1');
-        expect(outletUri.queryParameters['from'], '2026-09-01');
-        expect(outletUri.queryParameters['to'], '2026-09-26');
+      expect(recordingClient.getUrls.length, 1);
+      final outletUri = Uri.parse(recordingClient.getUrls.first);
+      expect(outletUri.queryParameters['outletId'], 'o1');
+      expect(outletUri.queryParameters['from'], '2026-09-01');
+      expect(outletUri.queryParameters['to'], '2026-09-26');
 
-        // 2. All-outlets scope
-        recordingClient.getUrls.clear();
-        await localCache.clearActiveOutletId();
-        await localCache.setAllOutletsScope(true);
-        await repo.getDashboardMetrics(from: '2026-09-01', to: '2026-09-26');
+      // 2. All-outlets scope
+      recordingClient.getUrls.clear();
+      await localCache.clearActiveOutletId();
+      await localCache.setAllOutletsScope(true);
+      await repo.getDashboardMetrics(from: '2026-09-01', to: '2026-09-26');
 
-        expect(recordingClient.getUrls.length, 1);
-        final allOutletsUri = Uri.parse(recordingClient.getUrls.first);
-        expect(allOutletsUri.queryParameters.containsKey('outletId'), isFalse);
-      },
-    );
+      expect(recordingClient.getUrls.length, 1);
+      final allOutletsUri = Uri.parse(recordingClient.getUrls.first);
+      expect(allOutletsUri.queryParameters.containsKey('outletId'), isFalse);
+    });
   });
 
   group('Expenses & Dashboard Outlet Scope Widget Tests', () {
@@ -457,7 +456,6 @@ void main() {
 }
 
 class _WidgetFakeLocalCache extends LocalCacheService {
-
   @override
   Map<String, dynamic>? getCachedUser() => null;
 

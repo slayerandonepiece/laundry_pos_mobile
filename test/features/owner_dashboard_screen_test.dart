@@ -213,7 +213,7 @@ void main() {
         expect(find.byType(AppBar), findsOneWidget);
 
         // Eyebrow and expanded title
-        expect(find.text('MYSHOP WORKSPACE'), findsOneWidget);
+        expect(find.text('WORKSPACE'), findsOneWidget);
         expect(find.text('Dashboard'), findsOneWidget);
 
         // Card 1: "Sales today"
@@ -582,10 +582,7 @@ void main() {
         await tester.pumpWidget(buildTestWidget());
         await pumpDashboard(tester);
 
-        expect(
-          find.text('Collected vs expenses — this month'),
-          findsOneWidget,
-        );
+        expect(find.text('Collected vs expenses — this month'), findsOneWidget);
         expect(find.text('payments collected this month'), findsOneWidget);
         expect(find.byType(BarChart), findsOneWidget);
 
@@ -679,9 +676,8 @@ void main() {
               body: BlocListener<OwnerBloc, OwnerState>(
                 listener: (context, state) {
                   if (state.error != null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(state.error!)),
-                    );
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text(state.error!)));
                   }
                 },
                 child: const SizedBox.expand(),
@@ -706,5 +702,48 @@ void main() {
         expect(find.text(error), findsNothing);
       },
     );
+
+    group('Chart Label Formatting & Visibility Tests', () {
+      test('formats verbose weekly date ranges into clean compact strings', () {
+        expect(formatChartLabel('1 Sept 2026–6 Sept 2026'), equals('1–6 Sep'));
+        expect(
+          formatChartLabel('7 Sept 2026 - 12 Sept 2026'),
+          equals('7–12 Sep'),
+        );
+        expect(
+          formatChartLabel('13 September 2026–18 September 2026'),
+          equals('13–18 Sep'),
+        );
+        expect(
+          formatChartLabel('28 Aug 2026–3 Sep 2026'),
+          equals('28 Aug–3 Sep'),
+        );
+      });
+
+      test('formats single dates and weekdays cleanly', () {
+        expect(formatChartLabel('1 Sept 2026'), equals('1 Sep'));
+        expect(formatChartLabel('28 September'), equals('28 Sep'));
+        expect(formatChartLabel('2026-09-15'), equals('15 Sep'));
+        expect(formatChartLabel('Monday'), equals('Mon'));
+        expect(formatChartLabel('Mon'), equals('Mon'));
+        expect(formatChartLabel('September 2026'), equals('Sep'));
+        expect(formatChartLabel(''), equals(''));
+      });
+
+      test('shouldShowChartLabel samples cleanly based on count', () {
+        // <= 7 points: all are shown
+        for (int i = 0; i < 5; i++) {
+          expect(shouldShowChartLabel(i, 5), isTrue);
+        }
+        for (int i = 0; i < 7; i++) {
+          expect(shouldShowChartLabel(i, 7), isTrue);
+        }
+
+        // > 7 points (e.g. 30 days): first and last always shown, others sampled
+        expect(shouldShowChartLabel(0, 30), isTrue);
+        expect(shouldShowChartLabel(29, 30), isTrue);
+        expect(shouldShowChartLabel(1, 30), isFalse);
+      });
+    });
   });
 }

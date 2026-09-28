@@ -438,7 +438,11 @@ class OrdersRepository {
       final key = groupEntry.key;
       final groupDue = groupEntry.value;
 
-      for (var start = 0; start < groupDue.length; start += _bulkSyncBatchSize) {
+      for (
+        var start = 0;
+        start < groupDue.length;
+        start += _bulkSyncBatchSize
+      ) {
         final end = (start + _bulkSyncBatchSize < groupDue.length)
             ? start + _bulkSyncBatchSize
             : groupDue.length;

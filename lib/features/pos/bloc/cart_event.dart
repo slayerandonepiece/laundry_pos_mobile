@@ -55,10 +55,25 @@ class SetCustomerDetailsEvent extends CartEvent {
 }
 
 class SubmitOrderEvent extends CartEvent {
-  final String paymentChoice; // 'prepaid' (needs paymentMethodName) | 'delivery'
+  final String
+  paymentChoice; // 'prepaid' (needs paymentMethodName) | 'delivery'
   final String? paymentMethodName;
+  final DateTime? dueDate;
+  final String? notes;
 
-  SubmitOrderEvent({required this.paymentChoice, this.paymentMethodName});
+  SubmitOrderEvent({
+    required this.paymentChoice,
+    this.paymentMethodName,
+    this.dueDate,
+    this.notes,
+  });
+}
+
+class UpdateOrderDetailsEvent extends CartEvent {
+  final DateTime? dueDate;
+  final String? notes;
+
+  UpdateOrderDetailsEvent({this.dueDate, this.notes});
 }
 
 class ResetSaleEvent extends CartEvent {

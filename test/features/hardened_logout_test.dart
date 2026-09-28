@@ -76,7 +76,7 @@ class FakeAuthBloc extends AuthBloc {
   FakeAuthBloc({required super.authRepository, super.localCache}) {
     emit(
       AuthenticatedState(
-        user: User(id: 'u1', name: 'John Doe', username: 'john'),
+        user: User(id: 'u1', name: 'John Doe', phone: 'john'),
         currentStore: StoreSummary(
           storeId: 's1',
           storeName: 'Main Store',

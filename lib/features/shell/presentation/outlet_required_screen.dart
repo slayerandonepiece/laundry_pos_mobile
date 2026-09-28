@@ -23,7 +23,9 @@ class OutletRequiredScreen extends StatelessWidget {
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return name.isEmpty ? '?' : name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+    return name.isEmpty
+        ? '?'
+        : name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
   }
 
   @override

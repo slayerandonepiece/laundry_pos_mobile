@@ -27,22 +27,34 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
+**/marketing/*
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+build/
+**/build/
 /coverage/
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
+# Gradle & Android build artifacts
+.gradle/
+**/.gradle/
 /android/app/debug
 /android/app/profile
 /android/app/release
+android/app/build/
+**/app/build/
+
+# iOS artifacts
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+
+# Symbolication & Obfuscation related
+**/symbols/
+app.*.symbols
+app.*.map.json
 
 # Widget Preview related
 .widget_preview/
@@ -55,3 +67,13 @@ app.*.map.json
 
 # Ephemeral per-session task-handoff checkpoint (personal, not durable knowledge)
 .claude/CHECKPOINT.md
+
+# Firebase credentials & configs
+**/google-services.json
+**/GoogleService-Info.plist
+ios/Firebase/**/*.plist
+
+# Android Signing / Keystore secrets
+*.keystore
+*.jks
+**/key.properties

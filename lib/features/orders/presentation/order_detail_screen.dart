@@ -12,6 +12,7 @@ import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/presentation/dialogs/collect_payment_dialog.dart';
 import 'package:myshop/features/orders/presentation/dialogs/ready_bill_actions_sheet.dart';
+import 'package:myshop/features/orders/presentation/dialogs/record_payment_dialog.dart';
 import 'package:myshop/features/orders/presentation/dialogs/status_dialog.dart';
 import 'package:myshop/features/orders/presentation/invoice_actions_sheet.dart';
 import 'package:myshop/features/orders/presentation/invoice_viewer_screen.dart';
@@ -129,10 +130,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    String storeName = 'MyShop Laundry';
-    if (authState is AuthenticatedState) {
-      storeName = authState.currentStore.storeName;
-    }
+    final String storeName = authState is AuthenticatedState
+        ? authState.currentStore.storeName
+        : '';
 
     return BlocConsumer<OrdersBloc, OrdersState>(
       listener: (context, state) {
@@ -507,6 +507,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         CollectPaymentDialog.show(context, order: order);
                       },
                     ),
+                    if (order.balanceDue > 0) ...[
+                      const SizedBox(height: 10),
+                      SecondaryButton(
+                        label: 'Record payment',
+                        onPressed: () {
+                          RecordPaymentDialog.show(context, order: order);
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     SecondaryButton(
                       label: 'Update status',
@@ -527,6 +536,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         StatusDialog.show(context, order: order);
                       },
                     ),
+                    if (order.balanceDue > 0) ...[
+                      const SizedBox(height: 10),
+                      SecondaryButton(
+                        label: 'Record payment',
+                        onPressed: () {
+                          RecordPaymentDialog.show(context, order: order);
+                        },
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 12),
 
@@ -641,7 +659,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                               'Hello ${order.name.isNotEmpty ? order.name : "Customer"},\n'
                               'Your laundry order ${order.displayCode} ($invoiceNo) has been completed and delivered.\n'
                               'Total: ${CurrencyFormatter.format(order.totalAmount)} (Paid in full).\n'
-                              'Thank you for visiting $storeName!',
+                              '${storeName.isNotEmpty ? "Thank you for choosing $storeName!" : "Thank you for your business!"}',
                             );
                             final cleanPhone = order.phone.replaceAll(
                               RegExp(r'[^0-9]'),

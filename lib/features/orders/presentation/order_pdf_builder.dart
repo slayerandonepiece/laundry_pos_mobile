@@ -8,9 +8,8 @@ import 'package:pdf/widgets.dart' as pw;
 
 /// Builds the PDF shown/shared for an order — shared by the post-delivery
 /// invoice (InvoiceActionsSheet) and the pre-collection "order ready" bill
-/// (ReadyBillActionsSheet), since both are the same line-item layout; only
-/// the header/total framing differs depending on whether the order has
-/// actually been paid and delivered yet.
+/// (ReadyBillActionsSheet), matching the server-rendered invoice PDF structure
+/// and labels.
 Future<Uint8List> buildOrderPdfBytes({
   required Order order,
   required String storeName,
@@ -21,184 +20,501 @@ Future<Uint8List> buildOrderPdfBytes({
   final pdf = pw.Document();
   final invoiceNo = order.invoice?.invoiceNumber ?? 'INV-${order.displayCode}';
   final dateStr = order.invoice != null
-      ? DateFormatter.formatDate(order.invoice!.issuedAt)
-      : DateFormatter.formatDate(DateTime.now());
+      ? DateFormatter.formatFull(order.invoice!.issuedAt)
+      : DateFormatter.formatFull(DateTime.now());
   final headerLabel = isFinalInvoice
       ? 'Invoice: $invoiceNo'
       : 'Bill for: ${order.displayCode}';
 
+  // Distinct payment methods calculation
+  String formatMethod(String method) {
+    final trimmed = method.trim();
+    if (trimmed.toUpperCase() == 'CASH') return 'Cash';
+    return trimmed;
+  }
+
+  final distinctMethods = order.payments
+      .map((p) => formatMethod(p.method))
+      .where((m) => m.isNotEmpty)
+      .toSet()
+      .toList();
+
+  final String methodLabel;
+  if (distinctMethods.isEmpty) {
+    methodLabel = '-';
+  } else if (distinctMethods.length == 1) {
+    methodLabel = distinctMethods.first;
+  } else {
+    methodLabel = 'Multiple';
+  }
+
+  // Footer date: order.invoice?.generatedAt if present, falling back to DateTime.now()
+  final footerDate = order.invoice?.generatedAt ?? DateTime.now();
+  final footerDateStr = DateFormatter.formatFull(footerDate);
+
+  final storeContact = [
+    storeAddress.trim(),
+    storePhone.trim(),
+  ].where((s) => s.isNotEmpty).join(' · ');
+
+  const textDark = PdfColor.fromInt(0xff1a2233);
+  const textMuted = PdfColor.fromInt(0xff565f6e);
+  const labelColor = PdfColor.fromInt(0xff8a93a3);
+  const borderColor = PdfColor.fromInt(0xffdde2e9);
+  const rowBorderColor = PdfColor.fromInt(0xffeef1f5);
+  const tableHeadBg = PdfColor.fromInt(0xfff6f8fb);
+  const kvBorderColor = PdfColor.fromInt(0xfff0f2f5);
+  const footerColor = PdfColor.fromInt(0xff9aa4b2);
+
+  pw.Widget kvRow(String label, String value) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: kvBorderColor, width: 0.8),
+        ),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            label,
+            style: const pw.TextStyle(fontSize: 9.5, color: textMuted),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: 9.5,
+              fontWeight: pw.FontWeight.bold,
+              color: textDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget sectionLabel(String label) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 4),
+      child: pw.Text(
+        label.toUpperCase(),
+        style: const pw.TextStyle(
+          fontSize: 8.5,
+          color: labelColor,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+
+  const thStyle = pw.TextStyle(
+    fontSize: 8.5,
+    color: labelColor,
+    letterSpacing: 0.4,
+  );
+
   pdf.addPage(
-    pw.Page(
+    pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
-      build: (pw.Context context) {
-        return pw.Padding(
-          padding: const pw.EdgeInsets.all(32),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              pw.Center(
-                child: pw.Column(
-                  children: [
-                    pw.Text(
-                      storeName,
-                      style: pw.TextStyle(
-                        fontSize: 22,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      '$storeAddress · $storePhone',
-                      style: const pw.TextStyle(
-                        fontSize: 10,
-                        color: PdfColors.grey700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 18),
-              pw.Divider(thickness: 2),
-              pw.SizedBox(height: 8),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(headerLabel, style: const pw.TextStyle(fontSize: 11)),
-                  pw.Text(
-                    'Order: ${order.displayCode}',
-                    style: const pw.TextStyle(fontSize: 11),
-                  ),
-                  pw.Text(
-                    'Date: $dateStr',
-                    style: const pw.TextStyle(fontSize: 11),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 12),
-              pw.Text(
-                'Billed to: ${order.name.isNotEmpty ? order.name : "Customer"} (+91 ${order.phone})',
-                style: const pw.TextStyle(fontSize: 11),
-              ),
-              pw.SizedBox(height: 16),
-              pw.Divider(),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Expanded(
-                    child: pw.Text(
-                      'SERVICE',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  pw.Text(
-                    'QTY',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.SizedBox(width: 30),
-                  pw.Text(
-                    'AMOUNT',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              pw.Divider(),
-              ...order.lines.map(
-                (line) => pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Expanded(
-                        child: pw.Text(
-                          line.productName,
-                          style: const pw.TextStyle(fontSize: 10),
-                        ),
-                      ),
-                      pw.Text(
-                        line.displayQuantity,
-                        style: const pw.TextStyle(fontSize: 10),
-                      ),
-                      pw.SizedBox(width: 30),
-                      pw.Text(
-                        CurrencyFormatter.formatPdf(line.totalAmount),
-                        style: const pw.TextStyle(fontSize: 10),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              pw.Divider(),
-              pw.SizedBox(height: 8),
-              if (isFinalInvoice) ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'Total Paid:',
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(
-                      CurrencyFormatter.formatPdf(order.paidAmount),
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'Total Bill:',
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(
-                      CurrencyFormatter.formatPdf(order.totalAmount),
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                if (order.balanceDue > 0) ...[
-                  pw.SizedBox(height: 4),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(
-                        'Balance Due:',
-                        style: const pw.TextStyle(fontSize: 11),
-                      ),
-                      pw.Text(
-                        CurrencyFormatter.formatPdf(order.balanceDue),
-                        style: const pw.TextStyle(fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ],
+      margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 36),
+      footer: (pw.Context context) {
+        return pw.Container(
+          alignment: pw.Alignment.center,
+          padding: const pw.EdgeInsets.only(top: 16),
+          child: pw.Text(
+            'Generated $footerDateStr - this is not a tax invoice.',
+            style: const pw.TextStyle(fontSize: 8, color: footerColor),
           ),
         );
       },
+      build: (pw.Context context) => [
+        // 1. Header
+        pw.Center(
+          child: pw.Column(
+            children: [
+              pw.Text(
+                storeName,
+                style: pw.TextStyle(
+                  fontSize: 22,
+                  fontWeight: pw.FontWeight.bold,
+                  color: textDark,
+                ),
+              ),
+              if (storeContact.isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  storeContact,
+                  style: const pw.TextStyle(fontSize: 10, color: textMuted),
+                ),
+              ],
+            ],
+          ),
+        ),
+        pw.SizedBox(height: 18),
+        pw.Divider(thickness: 2),
+        pw.SizedBox(height: 8),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              headerLabel,
+              style: const pw.TextStyle(fontSize: 11, color: textDark),
+            ),
+            pw.Text(
+              'Order: ${order.displayCode}',
+              style: const pw.TextStyle(fontSize: 11, color: textDark),
+            ),
+            pw.Text(
+              'Date: $dateStr',
+              style: const pw.TextStyle(fontSize: 11, color: textDark),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 16),
+        pw.Divider(),
+        pw.SizedBox(height: 12),
+
+        // 2. Two-column "Billed to" / "Order" section
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  sectionLabel('Billed to'),
+                  pw.Text(
+                    order.name.trim().isNotEmpty
+                        ? order.name.trim()
+                        : 'Walk-in customer',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                      color: textDark,
+                    ),
+                  ),
+                  if (order.phone.trim().isNotEmpty) ...[
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      order.phone.trim(),
+                      style: const pw.TextStyle(
+                        fontSize: 9.5,
+                        color: textMuted,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 24),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  sectionLabel('Order'),
+                  kvRow('Order number', order.displayCode),
+                  kvRow(
+                    'Order date',
+                    order.date.isNotEmpty
+                        ? DateFormatter.formatFull(order.date)
+                        : '-',
+                  ),
+                  kvRow(
+                    'Delivery date',
+                    order.due.isNotEmpty
+                        ? DateFormatter.formatFull(order.due)
+                        : '-',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 16),
+
+        // 3. Items table with FOUR columns: Service, Qty, Rate, Amount
+        sectionLabel('Items'),
+        pw.Container(
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              top: pw.BorderSide(color: borderColor, width: 1),
+              bottom: pw.BorderSide(color: borderColor, width: 1),
+            ),
+          ),
+          child: pw.Column(
+            children: [
+              pw.Container(
+                color: tableHeadBg,
+                padding: const pw.EdgeInsets.symmetric(
+                  vertical: 6,
+                  horizontal: 4,
+                ),
+                child: pw.Row(
+                  children: [
+                    pw.Expanded(
+                      flex: 46,
+                      child: pw.Text('Service', style: thStyle),
+                    ),
+                    pw.Expanded(
+                      flex: 18,
+                      child: pw.Text(
+                        'Qty',
+                        textAlign: pw.TextAlign.right,
+                        style: thStyle,
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 18,
+                      child: pw.Text(
+                        'Rate',
+                        textAlign: pw.TextAlign.right,
+                        style: thStyle,
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 18,
+                      child: pw.Text(
+                        'Amount',
+                        textAlign: pw.TextAlign.right,
+                        style: thStyle,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...order.lines.map((line) {
+                final isPiece =
+                    line.unit.toUpperCase() == 'PIECE' ||
+                    line.unit.toLowerCase() == 'pcs';
+                final String rateText = (isPiece && line.quantity > 0)
+                    ? CurrencyFormatter.formatPdf(
+                        (line.amount / line.quantity).round(),
+                      )
+                    : 'Slab pricing';
+
+                return pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    vertical: 6,
+                    horizontal: 4,
+                  ),
+                  decoration: const pw.BoxDecoration(
+                    border: pw.Border(
+                      top: pw.BorderSide(color: rowBorderColor, width: 1),
+                    ),
+                  ),
+                  child: pw.Row(
+                    children: [
+                      pw.Expanded(
+                        flex: 46,
+                        child: pw.Text(
+                          line.productName,
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            color: textDark,
+                          ),
+                        ),
+                      ),
+                      pw.Expanded(
+                        flex: 18,
+                        child: pw.Text(
+                          line.displayQuantity,
+                          textAlign: pw.TextAlign.right,
+                          style: const pw.TextStyle(
+                            fontSize: 10,
+                            color: textDark,
+                          ),
+                        ),
+                      ),
+                      pw.Expanded(
+                        flex: 18,
+                        child: pw.Text(
+                          rateText,
+                          textAlign: pw.TextAlign.right,
+                          style: const pw.TextStyle(
+                            fontSize: 10,
+                            color: textDark,
+                          ),
+                        ),
+                      ),
+                      pw.Expanded(
+                        flex: 18,
+                        child: pw.Text(
+                          CurrencyFormatter.formatPdf(line.totalAmount),
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            color: textDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+
+        // 4. "Order total" line
+        pw.Container(
+          margin: const pw.EdgeInsets.only(top: 12),
+          padding: const pw.EdgeInsets.only(top: 12),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(top: pw.BorderSide(color: textDark, width: 1)),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'Order total',
+                style: pw.TextStyle(
+                  fontSize: 11,
+                  fontWeight: pw.FontWeight.bold,
+                  color: textDark,
+                ),
+              ),
+              pw.Text(
+                CurrencyFormatter.formatPdf(order.totalAmount),
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                  color: textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // 5. "Payment" section
+        pw.Container(
+          margin: const pw.EdgeInsets.only(top: 20),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              sectionLabel('Payment'),
+              kvRow('Method', methodLabel),
+              kvRow(
+                'Amount paid',
+                CurrencyFormatter.formatPdf(order.paidAmount),
+              ),
+              kvRow(
+                'Balance due',
+                CurrencyFormatter.formatPdf(order.balanceDue),
+              ),
+            ],
+          ),
+        ),
+
+        // 6. "Payments received" table (only rendered when order.payments.isNotEmpty)
+        if (order.payments.isNotEmpty) ...[
+          pw.Container(
+            margin: const pw.EdgeInsets.only(top: 20),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                sectionLabel('Payments received'),
+                pw.Container(
+                  decoration: const pw.BoxDecoration(
+                    border: pw.Border(
+                      top: pw.BorderSide(color: borderColor, width: 1),
+                      bottom: pw.BorderSide(color: borderColor, width: 1),
+                    ),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Container(
+                        color: tableHeadBg,
+                        padding: const pw.EdgeInsets.symmetric(
+                          vertical: 6,
+                          horizontal: 4,
+                        ),
+                        child: pw.Row(
+                          children: [
+                            pw.Expanded(
+                              flex: 40,
+                              child: pw.Text('Date', style: thStyle),
+                            ),
+                            pw.Expanded(
+                              flex: 30,
+                              child: pw.Text('Method', style: thStyle),
+                            ),
+                            pw.Expanded(
+                              flex: 30,
+                              child: pw.Text(
+                                'Amount',
+                                textAlign: pw.TextAlign.right,
+                                style: thStyle,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ...order.payments.map((payment) {
+                        final paymentDateStr = payment.date.isNotEmpty
+                            ? DateFormatter.formatFull(payment.date)
+                            : '-';
+                        return pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(
+                            vertical: 6,
+                            horizontal: 4,
+                          ),
+                          decoration: const pw.BoxDecoration(
+                            border: pw.Border(
+                              top: pw.BorderSide(
+                                color: rowBorderColor,
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: pw.Row(
+                            children: [
+                              pw.Expanded(
+                                flex: 40,
+                                child: pw.Text(
+                                  paymentDateStr,
+                                  style: const pw.TextStyle(
+                                    fontSize: 10,
+                                    color: textDark,
+                                  ),
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 30,
+                                child: pw.Text(
+                                  formatMethod(payment.method),
+                                  style: const pw.TextStyle(
+                                    fontSize: 10,
+                                    color: textDark,
+                                  ),
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 30,
+                                child: pw.Text(
+                                  CurrencyFormatter.formatPdf(payment.amount),
+                                  textAlign: pw.TextAlign.right,
+                                  style: pw.TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: pw.FontWeight.bold,
+                                    color: textDark,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     ),
   );
 

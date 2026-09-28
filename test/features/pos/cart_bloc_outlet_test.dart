@@ -175,25 +175,25 @@ void main() {
       );
     });
 
-    test('SubmitOrderEvent forwards state.outletId to createOrderOptimistic', () async {
-      bloc.add(ResetSaleEvent(outletId: 'outlet_mth_02'));
-      await bloc.stream.firstWhere((s) => s.outletId == 'outlet_mth_02');
+    test(
+      'SubmitOrderEvent forwards state.outletId to createOrderOptimistic',
+      () async {
+        bloc.add(ResetSaleEvent(outletId: 'outlet_mth_02'));
+        await bloc.stream.firstWhere((s) => s.outletId == 'outlet_mth_02');
 
-      bloc.add(AddItemToCartEvent(product: testProduct, quantity: 2));
-      await bloc.stream.firstWhere((s) => s.items.isNotEmpty);
+        bloc.add(AddItemToCartEvent(product: testProduct, quantity: 2));
+        await bloc.stream.firstWhere((s) => s.items.isNotEmpty);
 
-      bloc.add(
-        SubmitOrderEvent(
-          paymentChoice: 'prepaid',
-          paymentMethodName: 'UPI',
-        ),
-      );
+        bloc.add(
+          SubmitOrderEvent(paymentChoice: 'prepaid', paymentMethodName: 'UPI'),
+        );
 
-      await bloc.stream.firstWhere((s) => s.placedOrder != null);
-      expect(fakeRepo.lastPassedOutletId, equals('outlet_mth_02'));
-      expect(fakeRepo.lastPassedPaymentMethodName, equals('UPI'));
-      expect(bloc.state.placedOrder?.outletId, equals('outlet_mth_02'));
-    });
+        await bloc.stream.firstWhere((s) => s.placedOrder != null);
+        expect(fakeRepo.lastPassedOutletId, equals('outlet_mth_02'));
+        expect(fakeRepo.lastPassedPaymentMethodName, equals('UPI'));
+        expect(bloc.state.placedOrder?.outletId, equals('outlet_mth_02'));
+      },
+    );
 
     test('LoadCatalogEvent populates paymentMethods on CartState', () async {
       bloc.add(LoadCatalogEvent());
@@ -209,21 +209,29 @@ void main() {
       );
     });
 
-    test('LoadCatalogEvent uses cached payment methods without the network', () async {
-      fakeRepo.cachedPaymentMethods = [
-        StorePaymentMethod.fromJson({'id': 'pm_c', 'name': 'Card', 'enabled': true}),
-      ];
-      bloc.add(LoadCatalogEvent());
-      await expectLater(
-        bloc.stream,
-        emitsThrough(
-          predicate<dynamic>(
-            (state) => state.paymentMethods.map((m) => m.name).join() == 'Card',
+    test(
+      'LoadCatalogEvent uses cached payment methods without the network',
+      () async {
+        fakeRepo.cachedPaymentMethods = [
+          StorePaymentMethod.fromJson({
+            'id': 'pm_c',
+            'name': 'Card',
+            'enabled': true,
+          }),
+        ];
+        bloc.add(LoadCatalogEvent());
+        await expectLater(
+          bloc.stream,
+          emitsThrough(
+            predicate<dynamic>(
+              (state) =>
+                  state.paymentMethods.map((m) => m.name).join() == 'Card',
+            ),
           ),
-        ),
-      );
-      expect(fakeRepo.listPaymentMethodsCalls, 0);
-    });
+        );
+        expect(fakeRepo.listPaymentMethodsCalls, 1);
+      },
+    );
 
     test('LoadCatalogEvent payment methods error defaults to empty list and does not fail catalog', () async {
       fakeRepo.throwOnPaymentMethods = true;

@@ -4,13 +4,16 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/text_styles.dart';
 import 'app_button.dart';
+import 'app_inset.dart';
 
 class BlockedScreen extends StatelessWidget {
   final String? reason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed' | 'no_outlet_assigned'
   final bool isOwner;
   final String? paidThroughDate;
   final String? ownerPhone;
+  final VoidCallback onRetry;
   final VoidCallback onSignOut;
+  final int? pendingCount;
 
   const BlockedScreen({
     super.key,
@@ -18,7 +21,9 @@ class BlockedScreen extends StatelessWidget {
     required this.isOwner,
     this.paidThroughDate,
     this.ownerPhone,
+    required this.onRetry,
     required this.onSignOut,
+    this.pendingCount,
   });
 
   void _callOwner(BuildContext context) async {
@@ -47,8 +52,7 @@ class BlockedScreen extends StatelessWidget {
           : 'Store access is temporarily locked. Please check with your store owner.';
     } else if (normReason == 'no_outlet_assigned') {
       title = 'No outlet assigned';
-      description =
-          "Your account isn't assigned to an outlet yet, so orders can't be loaded. Ask your store owner to assign you to one, then sign in again.";
+      description = "Your account isn't assigned to an outlet yet, so orders can't be loaded. Ask your store owner to assign you to one, then sign in again.";
     } else if (normReason == 'store_archived') {
       title = 'Store archived';
       description =
@@ -132,6 +136,33 @@ class BlockedScreen extends StatelessWidget {
                 const SizedBox(height: 20),
                 extraNotice,
               ],
+              if (pendingCount != null && pendingCount! > 0) ...[
+                const SizedBox(height: 16),
+                AppInset(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.cloud_upload_rounded,
+                        size: 20,
+                        color: AppColors.mutedText,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '$pendingCount ${pendingCount == 1 ? "action" : "actions"} saved on this device haven\'t synced yet. They\'ll go through automatically once your access is restored.',
+                          style: AppTextStyles.hint.copyWith(
+                            color: AppColors.mutedText,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Spacer(),
               if (!isOwner && ownerPhone != null && ownerPhone!.isNotEmpty) ...[
                 PrimaryButton(
@@ -141,6 +172,8 @@ class BlockedScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
               ],
+              PrimaryButton(label: 'Try again', onPressed: onRetry),
+              const SizedBox(height: 12),
               SecondaryButton(label: 'Sign out', onPressed: onSignOut),
             ],
           ),

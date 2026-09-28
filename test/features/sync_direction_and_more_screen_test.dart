@@ -106,11 +106,7 @@ void main() {
       );
     }
 
-    final testUser = User(
-      id: 'usr-1',
-      username: 'owner_user',
-      name: 'Jane Doe',
-    );
+    final testUser = User(id: 'usr-1', phone: 'owner_user', name: 'Jane Doe');
 
     testWidgets(
       'Active plan badge is rendered when paidThroughDate is > 7 days in future',
@@ -188,5 +184,126 @@ void main() {
       expect(find.text('Active plan'), findsNothing);
       expect(find.text('Renews soon'), findsNothing);
     });
+
+    testWidgets(
+      'Trial neutral badge is rendered when subscriptionState is TRIAL',
+      (tester) async {
+        final authState = AuthenticatedState(
+          user: testUser,
+          currentStore: StoreSummary(
+            storeId: 'store-1',
+            storeName: 'Main Laundromat',
+            role: 'OWNER',
+            subscriptionState: 'TRIAL',
+            trialEndsAt: '2026-10-20',
+          ),
+          availableStores: const [],
+        );
+
+        await tester.pumpWidget(buildMoreScreen(authState));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Trial'), findsOneWidget);
+        expect(find.text('Active plan'), findsNothing);
+        expect(find.text('Renews soon'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Trial ending warning badge is rendered when subscriptionState is TRIAL_ENDING',
+      (tester) async {
+        final authState = AuthenticatedState(
+          user: testUser,
+          currentStore: StoreSummary(
+            storeId: 'store-1',
+            storeName: 'Main Laundromat',
+            role: 'OWNER',
+            subscriptionState: 'TRIAL_ENDING',
+            trialEndsAt: '2026-10-01',
+          ),
+          availableStores: const [],
+        );
+
+        await tester.pumpWidget(buildMoreScreen(authState));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Trial ending'), findsOneWidget);
+        expect(find.text('Trial'), findsNothing);
+        expect(find.text('Active plan'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Renews soon warning badge is rendered when subscriptionState is SUBSCRIPTION_ENDING',
+      (tester) async {
+        final authState = AuthenticatedState(
+          user: testUser,
+          currentStore: StoreSummary(
+            storeId: 'store-1',
+            storeName: 'Main Laundromat',
+            role: 'OWNER',
+            subscriptionState: 'SUBSCRIPTION_ENDING',
+            paidThroughDate: '2026-10-05',
+          ),
+          availableStores: const [],
+        );
+
+        await tester.pumpWidget(buildMoreScreen(authState));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Renews soon'), findsOneWidget);
+        expect(find.text('Active plan'), findsNothing);
+      },
+    );
+
+    testWidgets('No badge is rendered when subscriptionState is RESTRICTED', (
+      tester,
+    ) async {
+      final authState = AuthenticatedState(
+        user: testUser,
+        currentStore: StoreSummary(
+          storeId: 'store-1',
+          storeName: 'Main Laundromat',
+          role: 'OWNER',
+          subscriptionState: 'RESTRICTED',
+        ),
+        availableStores: const [],
+      );
+
+      await tester.pumpWidget(buildMoreScreen(authState));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Trial'), findsNothing);
+      expect(find.text('Trial ending'), findsNothing);
+      expect(find.text('Renews soon'), findsNothing);
+      expect(find.text('Active plan'), findsNothing);
+    });
+
+    testWidgets(
+      'ACTIVE state with far paidThroughDate renders Active plan badge',
+      (tester) async {
+        final futureDate = DateTime.now().add(const Duration(days: 30));
+        final dateStr =
+            '${futureDate.year}-${futureDate.month.toString().padLeft(2, '0')}-${futureDate.day.toString().padLeft(2, '0')}';
+
+        final authState = AuthenticatedState(
+          user: testUser,
+          currentStore: StoreSummary(
+            storeId: 'store-1',
+            storeName: 'Main Laundromat',
+            role: 'OWNER',
+            subscriptionState: 'ACTIVE',
+            paidThroughDate: dateStr,
+          ),
+          availableStores: const [],
+        );
+
+        await tester.pumpWidget(buildMoreScreen(authState));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Active plan'), findsOneWidget);
+        expect(find.text('Renews soon'), findsNothing);
+      },
+    );
   });
 }

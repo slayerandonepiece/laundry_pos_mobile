@@ -26,11 +26,11 @@ class AuthRepository {
        _localCache = localCache ?? LocalCacheService(),
        _apiClient = apiClient ?? ApiClient();
 
-  /// Logs in using username and password
-  Future<AuthResult> login(String username, String password) async {
+  /// Logs in using phone and password
+  Future<AuthResult> login(String phone, String password) async {
     final response = await _apiClient.post(
       ApiEndpoints.login,
-      body: {'username': username.trim(), 'password': password},
+      body: {'phone': phone.trim(), 'password': password},
     );
 
     if (response is Map) {
@@ -178,10 +178,16 @@ class AuthRepository {
 
   /// Sets a new password when mustChangePassword == true
   Future<void> setPassword(String newPassword) async {
-    await _apiClient.post(
+    final response = await _apiClient.post(
       ApiEndpoints.setPassword,
       body: {'newPassword': newPassword},
     );
+    if (response is Map) {
+      final token = response['token']?.toString();
+      if (token != null && token.isNotEmpty) {
+        await _secureStorage.saveToken(token);
+      }
+    }
   }
 
   /// Changes password for owner/user

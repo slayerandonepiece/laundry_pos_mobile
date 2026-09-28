@@ -25,16 +25,16 @@ class ReadyBillActionsSheet extends StatelessWidget {
   const ReadyBillActionsSheet({
     super.key,
     required this.order,
-    this.storeName = 'MyShop Laundry',
-    this.storeAddress = 'Bengaluru, India',
+    this.storeName = '',
+    this.storeAddress = '',
     this.storePhone = '',
   });
 
   static Future<void> show(
     BuildContext context, {
     required Order order,
-    String storeName = 'MyShop Laundry',
-    String storeAddress = 'Bengaluru, India',
+    String storeName = '',
+    String storeAddress = '',
     String storePhone = '',
   }) {
     return showModalBottomSheet(
@@ -55,10 +55,19 @@ class ReadyBillActionsSheet extends StatelessWidget {
       'your order ${order.displayCode} is ready! Your total bill is '
       '${CurrencyFormatter.format(order.totalAmount)}. '
       'Please come and collect your order at your convenience. '
-      'Thank you for choosing $storeName!';
+      '${storeName.isNotEmpty ? "Thank you for choosing $storeName!" : "Thank you for your business!"}';
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardHeight = mediaQuery.viewInsets.bottom;
+    final safeBottom = mediaQuery.viewPadding.bottom > 0
+        ? mediaQuery.viewPadding.bottom
+        : mediaQuery.padding.bottom;
+    final bottomInset = keyboardHeight > 0
+        ? keyboardHeight + 16
+        : (safeBottom > 0 ? safeBottom + 16 : 26.0);
+
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surface,
@@ -68,7 +77,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
         left: 20,
         right: 20,
         top: 10,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 26,
+        bottom: bottomInset,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

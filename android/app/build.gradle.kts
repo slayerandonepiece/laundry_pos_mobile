@@ -1,11 +1,22 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
+}
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
-    namespace = "com.myshop.myshop"
+    namespace = "com.reddygona.klenpos"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +27,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.myshop.myshop"
+        applicationId = "com.reddygona.klenpos"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -27,7 +38,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appName"] = "MyShop"
+        manifestPlaceholders["appName"] = "KlenPOS"
     }
 
     flavorDimensions += "default"
@@ -36,24 +47,43 @@ android {
         create("dev") {
             dimension = "default"
             applicationIdSuffix = ".dev"
-            manifestPlaceholders["appName"] = "MyShop Dev"
+            manifestPlaceholders["appName"] = "KlenPOS Dev"
         }
         create("stage") {
             dimension = "default"
-            applicationIdSuffix = ".stage"
-            manifestPlaceholders["appName"] = "MyShop Stage"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "KlenPOS Stage"
         }
         create("prod") {
             dimension = "default"
-            manifestPlaceholders["appName"] = "MyShop"
+            manifestPlaceholders["appName"] = "KlenPOS"
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val alias = keystoreProperties["keyAlias"] as String?
+            val keyPass = keystoreProperties["keyPassword"] as String?
+            val storePass = keystoreProperties["storePassword"] as String?
+            val storeFilePath = keystoreProperties["storeFile"] as String?
+
+            if (!alias.isNullOrBlank() && !storeFilePath.isNullOrBlank()) {
+                keyAlias = alias
+                keyPassword = keyPass
+                storePassword = storePass
+                val candidateFile = file(storeFilePath)
+                storeFile = if (candidateFile.exists()) candidateFile else rootProject.file(storeFilePath)
+            }
         }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

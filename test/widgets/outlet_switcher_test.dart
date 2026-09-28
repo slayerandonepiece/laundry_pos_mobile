@@ -54,8 +54,7 @@ class FakeLocalCache extends LocalCacheService {
 
   @override
   Map<String, dynamic>? getCachedStoreDetails() =>
-      _memory[LocalCacheService.keyCachedStoreDetails]
-          as Map<String, dynamic>?;
+      _memory[LocalCacheService.keyCachedStoreDetails] as Map<String, dynamic>?;
   @override
   Future<void> setCachedStoreDetails(Map<String, dynamic> storeMap) async =>
       _memory[LocalCacheService.keyCachedStoreDetails] = storeMap;
@@ -68,8 +67,8 @@ class FakeLocalCache extends LocalCacheService {
   Future<void> setAllowedOutletsForStore(
     String storeId,
     List<Map<String, dynamic>> outlets,
-  ) async => _memory['${LocalCacheService.keyAllowedOutlets}::$storeId'] =
-      outlets;
+  ) async =>
+      _memory['${LocalCacheService.keyAllowedOutlets}::$storeId'] = outlets;
 
   @override
   String? getActiveOutletId() =>
@@ -83,8 +82,7 @@ class FakeLocalCache extends LocalCacheService {
 
   @override
   bool isAllOutletsScope() =>
-      _memory[_scoped(LocalCacheService.keyAllOutletsScope)] as bool? ??
-      false;
+      _memory[_scoped(LocalCacheService.keyAllOutletsScope)] as bool? ?? false;
   @override
   Future<void> setAllOutletsScope(bool value) async =>
       _memory[_scoped(LocalCacheService.keyAllOutletsScope)] = value;
@@ -141,9 +139,7 @@ void main() {
   testWidgets(
     'Single-outlet employee (allowed.length <= 1): shows plain title without chevron and tapping does not open menu',
     (tester) async {
-      await localCache.setAllowedOutletsForStore('store_a', [
-        twoOutlets.first,
-      ]);
+      await localCache.setAllowedOutletsForStore('store_a', [twoOutlets.first]);
       await localCache.setCachedStoreDetails({'role': 'EMPLOYEE'});
       cubit.adoptFromLogin(isOwner: false);
 

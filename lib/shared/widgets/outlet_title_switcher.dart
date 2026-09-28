@@ -136,8 +136,7 @@ class _OutletTitleSwitcherState extends State<OutletTitleSwitcher> {
         final rowSubtitle = isCached
             ? '${outlet.outletCode} · On this phone'
             : 'Not on this phone yet';
-        final subtitleColor =
-            isCached ? AppColors.success : AppColors.warning;
+        final subtitleColor = isCached ? AppColors.success : AppColors.warning;
         return PopupMenuItem<String>(
           value: outlet.id,
           onTap: () => handleSelectOutlet(outlet.id, outlet.displayName),

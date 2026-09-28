@@ -1,4 +1,4 @@
-package com.myshop.myshop
+package com.reddygona.klenpos
 
 import io.flutter.embedding.android.FlutterActivity
 

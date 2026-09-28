@@ -29,14 +29,20 @@ class FakeOwnerRepository implements OwnerRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-AuthState createAuthState({String? paidThroughDate}) {
+AuthState createAuthState({
+  String? paidThroughDate,
+  String? trialEndsAt,
+  String? subscriptionState,
+}) {
   return AuthenticatedState(
-    user: User(id: 'u1', name: 'Alice Owner', username: 'alice'),
+    user: User(id: 'u1', name: 'Alice Owner', phone: 'alice'),
     currentStore: StoreSummary(
       storeId: 's1',
       storeName: 'MyShop',
       role: 'OWNER',
       paidThroughDate: paidThroughDate,
+      trialEndsAt: trialEndsAt,
+      subscriptionState: subscriptionState,
     ),
     availableStores: [
       StoreSummary(
@@ -44,6 +50,8 @@ AuthState createAuthState({String? paidThroughDate}) {
         storeName: 'MyShop',
         role: 'OWNER',
         paidThroughDate: paidThroughDate,
+        trialEndsAt: trialEndsAt,
+        subscriptionState: subscriptionState,
       ),
     ],
   );
@@ -133,7 +141,109 @@ void main() {
     );
 
     testWidgets(
-      '4. Tapping "Subscription" in MoreScreen navigates to SubscriptionScreen',
+      '4. TRIAL state renders neutral card with "Trial" and trialEndsAt date',
+      (tester) async {
+        final authBloc = MockAuthBloc(
+          createAuthState(
+            subscriptionState: 'TRIAL',
+            trialEndsAt: '2026-10-15',
+          ),
+        );
+
+        await tester.pumpWidget(
+          BlocProvider<AuthBloc>.value(
+            value: authBloc,
+            child: const MaterialApp(home: SubscriptionScreen()),
+          ),
+        );
+
+        expect(find.text('Trial'), findsOneWidget);
+        expect(find.text('Trial ends on 2026-10-15'), findsOneWidget);
+        expect(find.text('Your plan is active'), findsNothing);
+        expect(find.text('Your plan renews soon'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '5. TRIAL_ENDING state renders warning card with "Trial ending" and trialEndsAt date',
+      (tester) async {
+        final authBloc = MockAuthBloc(
+          createAuthState(
+            subscriptionState: 'TRIAL_ENDING',
+            trialEndsAt: '2026-09-30',
+            paidThroughDate: '2026-10-30',
+          ),
+        );
+
+        await tester.pumpWidget(
+          BlocProvider<AuthBloc>.value(
+            value: authBloc,
+            child: const MaterialApp(home: SubscriptionScreen()),
+          ),
+        );
+
+        expect(find.text('Trial ending'), findsOneWidget);
+        expect(
+          find.text('Please keep payment updated. Trial ends on 2026-09-30.'),
+          findsOneWidget,
+        );
+        expect(find.text('Your plan is active'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '6. SUBSCRIPTION_ENDING state renders warning card with "Your plan renews soon" and paidThroughDate',
+      (tester) async {
+        final authBloc = MockAuthBloc(
+          createAuthState(
+            subscriptionState: 'SUBSCRIPTION_ENDING',
+            paidThroughDate: '2026-10-02',
+          ),
+        );
+
+        await tester.pumpWidget(
+          BlocProvider<AuthBloc>.value(
+            value: authBloc,
+            child: const MaterialApp(home: SubscriptionScreen()),
+          ),
+        );
+
+        expect(find.text('Your plan renews soon'), findsOneWidget);
+        expect(
+          find.text('Please keep payment updated. Renews on 2026-10-02.'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      '7. ACTIVE state with future date (> 7 days) renders "Your plan is active"',
+      (tester) async {
+        final futureDate = DateTime.now().add(const Duration(days: 25));
+        final dateStr =
+            '${futureDate.year}-${futureDate.month.toString().padLeft(2, '0')}-${futureDate.day.toString().padLeft(2, '0')}';
+
+        final authBloc = MockAuthBloc(
+          createAuthState(
+            subscriptionState: 'ACTIVE',
+            paidThroughDate: dateStr,
+          ),
+        );
+
+        await tester.pumpWidget(
+          BlocProvider<AuthBloc>.value(
+            value: authBloc,
+            child: const MaterialApp(home: SubscriptionScreen()),
+          ),
+        );
+
+        expect(find.text('Your plan is active'), findsOneWidget);
+        expect(find.text('Renews on $dateStr'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '8. Tapping "Subscription" in MoreScreen navigates to SubscriptionScreen',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;

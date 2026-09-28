@@ -23,6 +23,7 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     on<RemoveItemFromCartEvent>(_onRemoveItemFromCart);
     on<ClearCartEvent>(_onClearCart);
     on<SetCustomerDetailsEvent>(_onSetCustomerDetails);
+    on<UpdateOrderDetailsEvent>(_onUpdateOrderDetails);
     on<SubmitOrderEvent>(_onSubmitOrder);
     on<ResetSaleEvent>(_onResetSale);
   }
@@ -35,23 +36,23 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     Emitter<CartState> emit,
   ) async {
     final cachedProducts = posRepository.getCachedProductsList();
-    if (cachedProducts.isNotEmpty) {
-      emit(state.copyWith(allProducts: cachedProducts, error: null));
-    }
+    final cachedPaymentMethods = posRepository.getCachedPaymentMethodsList();
 
-    // Payment methods also come from the cache; fetched only if never
-    // synced. Best-effort: a failure must not break the catalog.
-    var paymentMethods = posRepository.getCachedPaymentMethodsList();
-    if (paymentMethods == null) {
+    if (cachedProducts.isNotEmpty) {
+      emit(
+        state.copyWith(
+          allProducts: cachedProducts,
+          paymentMethods: cachedPaymentMethods ?? state.paymentMethods,
+          error: null,
+        ),
+      );
+      // Background refresh payment methods when online
       try {
-        paymentMethods = await posRepository.listPaymentMethods();
+        final fresh = await posRepository.listPaymentMethods();
+        emit(state.copyWith(paymentMethods: fresh));
       } catch (_) {
-        paymentMethods = [];
+        // A failure keeps the cached list
       }
-    }
-
-    if (cachedProducts.isNotEmpty) {
-      emit(state.copyWith(paymentMethods: paymentMethods));
       return;
     }
 
@@ -62,15 +63,22 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         state.copyWith(
           isLoading: false,
           allProducts: products,
-          paymentMethods: paymentMethods,
+          paymentMethods: cachedPaymentMethods ?? state.paymentMethods,
         ),
       );
+      // Background refresh payment methods when online
+      try {
+        final fresh = await posRepository.listPaymentMethods();
+        emit(state.copyWith(paymentMethods: fresh));
+      } catch (_) {
+        // A failure keeps the cached list
+      }
     } catch (e) {
       AppLogger.log(_tag, 'load catalog failed', error: e);
       emit(
         state.copyWith(
           isLoading: false,
-          paymentMethods: paymentMethods,
+          paymentMethods: cachedPaymentMethods ?? state.paymentMethods,
           error: 'Could not load products — try again',
         ),
       );
@@ -186,13 +194,35 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     );
   }
 
+  void _onUpdateOrderDetails(
+    UpdateOrderDetailsEvent event,
+    Emitter<CartState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        dueDate: event.dueDate ?? state.dueDate,
+        notes: event.notes ?? state.notes,
+      ),
+    );
+  }
+
   Future<void> _onSubmitOrder(
     SubmitOrderEvent event,
     Emitter<CartState> emit,
   ) async {
     if (state.items.isEmpty) return;
 
-    emit(state.copyWith(isSubmitting: true, submissionError: null));
+    final dueDate = event.dueDate ?? state.dueDate;
+    final notes = event.notes ?? state.notes;
+
+    emit(
+      state.copyWith(
+        isSubmitting: true,
+        submissionError: null,
+        dueDate: dueDate,
+        notes: notes,
+      ),
+    );
 
     try {
       final entries = state.items.values.map((item) {
@@ -224,8 +254,8 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         idempotencyKey: state.idempotencyKey,
         phone: state.customerPhone,
         customerName: state.customerName,
-        dueDate: DateFormatter.toIsoDateString(state.dueDate),
-        notes: state.notes,
+        dueDate: DateFormatter.toIsoDateString(dueDate),
+        notes: notes,
         entries: entries,
         initialPayment: initialPayment,
         outletId: state.outletId,
@@ -245,13 +275,14 @@ class CartBloc extends Bloc<CartEvent, CartState> {
   }
 
   void _onResetSale(ResetSaleEvent event, Emitter<CartState> emit) {
+    final now = DateTime.now();
     emit(
       state.copyWith(
         items: const {},
         customerPhone: '',
         customerName: '',
         notes: '',
-        dueDate: DateTime.now().add(const Duration(days: 2)),
+        dueDate: DateTime(now.year, now.month, now.day),
         idempotencyKey: IdempotencyKeyGenerator.generate(),
         clearPlacedOrder: true,
         submissionError: null,

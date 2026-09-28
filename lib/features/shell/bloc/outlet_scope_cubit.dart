@@ -82,8 +82,7 @@ class OutletScopeCubit extends Cubit<OutletScope> {
 
     final allowed = (allowedMaps ?? const []).map(Outlet.fromJson).toList();
     var activeOutletId = _localCache.getActiveOutletId();
-    if (activeOutletId != null &&
-        !allowed.any((o) => o.id == activeOutletId)) {
+    if (activeOutletId != null && !allowed.any((o) => o.id == activeOutletId)) {
       _localCache.clearActiveOutletId();
       activeOutletId = null;
     }

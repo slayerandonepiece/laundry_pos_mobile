@@ -257,12 +257,7 @@ void main() {
   group('OwnerRepository listStaff, listPaymentMethods, getStoreProfile Cache-First Tests', () {
     test('Staff: offline with cache returns cached staff', () async {
       final staffList = [
-        {
-          'id': 'st-1',
-          'name': 'John Staff',
-          'username': 'john',
-          'active': true,
-        },
+        {'id': 'st-1', 'name': 'John Staff', 'phone': 'john', 'active': true},
       ];
       await localCache.setCachedStaff(staffList);
       fakeConnectivity.mockOffline = true;

@@ -58,10 +58,7 @@ void main() {
     });
 
     test('defaults to true when both active and enabled are null/absent', () {
-      final model = StorePaymentMethod.fromJson({
-        'id': 'pm_4',
-        'name': 'GPay',
-      });
+      final model = StorePaymentMethod.fromJson({'id': 'pm_4', 'name': 'GPay'});
       expect(model.active, isTrue);
     });
   });

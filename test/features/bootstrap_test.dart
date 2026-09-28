@@ -283,11 +283,7 @@ void main() {
       fakeOwnerRepo = FakeOwnerRepository();
       fakeConnectivity = FakeConnectivityService();
 
-      final employeeUser = User(
-        id: 'u-emp',
-        name: 'Staff John',
-        username: 'john',
-      );
+      final employeeUser = User(id: 'u-emp', name: 'Staff John', phone: 'john');
       final employeeStore = StoreSummary(
         storeId: 'store-1',
         storeName: 'Express Laundry Demo',
@@ -303,7 +299,7 @@ void main() {
       final ownerUser = User(
         id: 'u-owner',
         name: 'Owner Alice',
-        username: 'alice',
+        phone: 'alice',
       );
       final ownerStore = StoreSummary(
         storeId: 'store-1',

@@ -7,7 +7,6 @@ import '../../../core/theme/text_styles.dart';
 import '../../../core/utils/phone_normalizer.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_text_field.dart';
-import '../../../shared/widgets/step_progress_header.dart';
 import '../../orders/data/orders_repository.dart';
 import '../bloc/cart_bloc.dart';
 import '../bloc/cart_event.dart';
@@ -185,7 +184,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              // App Bar (Step 1 of 3)
+              // App Bar
               Container(
                 decoration: const BoxDecoration(
                   color: AppColors.surface,
@@ -193,21 +192,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     bottom: BorderSide(color: AppColors.border, width: 1),
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(8, 8, 20, 16),
-                child: Column(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.text),
-                          onPressed: () => _handleBack(context),
-                        ),
-                        const SizedBox(width: 4),
-                        const Text('New order', style: AppTextStyles.h3),
-                      ],
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.text),
+                      onPressed: () => _handleBack(context),
                     ),
-                    const SizedBox(height: 14),
-                    const StepProgressHeader(currentStep: 1),
+                    const SizedBox(width: 4),
+                    const Text('New order', style: AppTextStyles.h3),
                   ],
                 ),
               ),
@@ -215,10 +208,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
               // Body
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 24,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -226,14 +216,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                         'Who is this order for?',
                         style: AppTextStyles.h2,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Text(
                         'The phone number is required — the invoice goes to it on WhatsApp.',
                         style: AppTextStyles.bodyMedium.copyWith(
                           color: AppColors.mutedText,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 18),
 
                       // Phone field with +91 prefix and a search action
                       Column(
@@ -349,7 +339,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                         ],
                       ),
 
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 12),
 
                       // Customer Name (Optional) — auto-filled for a returning
                       // customer, but always editable.
@@ -373,7 +363,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 ),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
-                  vertical: 16,
+                  vertical: 12,
                 ),
                 child: PrimaryButton(
                   label: 'Next',

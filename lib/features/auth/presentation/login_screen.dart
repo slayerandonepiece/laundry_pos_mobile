@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/theme/text_styles.dart';
 import '../../../shared/widgets/app_button.dart';
@@ -18,41 +19,41 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  String? _usernameError;
+  String? _phoneError;
   String? _passwordError;
 
   @override
   void initState() {
     super.initState();
-    _usernameController.addListener(() => setState(() {}));
+    _phoneController.addListener(() => setState(() {}));
     _passwordController.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   void _submit() {
-    final username = _usernameController.text.trim();
+    final phone = _phoneController.text.trim();
     final password = _passwordController.text;
 
     setState(() {
-      _usernameError = username.isEmpty ? 'Enter your username' : null;
+      _phoneError = phone.isEmpty ? 'Enter your phone number' : null;
       _passwordError = password.isEmpty ? 'Enter your password' : null;
     });
 
-    if (_usernameError != null || _passwordError != null) {
+    if (_phoneError != null || _passwordError != null) {
       return;
     }
 
     context.read<AuthBloc>().add(
-      LoginSubmittedEvent(username: username, password: password),
+      LoginSubmittedEvent(phone: phone, password: password),
     );
   }
 
@@ -61,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final topInset = MediaQuery.of(context).padding.top;
     final effectiveTopInset = topInset > 0 ? topInset : 59.0;
     final isNotEmpty =
-        _usernameController.text.trim().isNotEmpty &&
+        _phoneController.text.trim().isNotEmpty &&
         _passwordController.text.isNotEmpty;
 
     return Scaffold(
@@ -95,19 +96,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 54,
-                            height: 54,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.local_laundry_service_rounded,
-                                color: Colors.white,
-                                size: 30,
-                              ),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Image.asset(
+                              AppAssets.logo,
+                              width: 54,
+                              height: 54,
                             ),
                           ),
                           const SizedBox(height: 18),
@@ -164,10 +158,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Form Fields
                       AppTextField(
-                        label: 'Username',
-                        hintText: 'Enter your username',
-                        controller: _usernameController,
-                        errorText: _usernameError,
+                        label: 'Phone number',
+                        hintText: 'Enter your phone number',
+                        keyboardType: TextInputType.phone,
+                        controller: _phoneController,
+                        errorText: _phoneError,
                         enabled: !isLoading,
                       ),
                       const SizedBox(height: 18),

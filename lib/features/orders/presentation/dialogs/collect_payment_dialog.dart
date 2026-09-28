@@ -57,8 +57,7 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
       // Local first: the network is asked only if methods were never synced.
       final repo = context.read<PosRepository>();
       final methods =
-          repo.getCachedPaymentMethodsList() ??
-          await repo.listPaymentMethods();
+          repo.getCachedPaymentMethodsList() ?? await repo.listPaymentMethods();
       if (!mounted) return;
       setState(() {
         _methods = methods;
@@ -116,7 +115,7 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(22),
+            padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -272,8 +271,8 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
                         onTap: isBusy
                             ? () {}
                             : () => setState(
-                                  () => _selectedMethodName = _methods[i].name,
-                                ),
+                                () => _selectedMethodName = _methods[i].name,
+                              ),
                       ),
                     ],
                     const SizedBox(height: 16),

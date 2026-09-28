@@ -18,7 +18,6 @@ import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 
 class FakeLocalCache extends LocalCacheService {
-
   @override
   Map<String, dynamic>? getCachedUser() => null;
 
@@ -172,9 +171,7 @@ void main() {
           completed: 7,
           overdue: 1,
           dueToday: 2,
-          serviceMix: [
-            ServiceMixItem(label: 'Dry Clean', amount: 80000),
-          ],
+          serviceMix: [ServiceMixItem(label: 'Dry Clean', amount: 80000)],
           cash: [
             CashPoint(label: 'Mon', income: 30000, expenses: 10000),
             CashPoint(label: 'Tue', income: 50000, expenses: 20000),
@@ -360,10 +357,7 @@ void main() {
         // New labels render
         expect(find.text('Open orders'), findsOneWidget);
         expect(find.text('Delivered'), findsWidgets); // chip + donut legend
-        expect(
-          find.text('Collected vs expenses — this month'),
-          findsOneWidget,
-        );
+        expect(find.text('Collected vs expenses — this month'), findsOneWidget);
         expect(find.text('payments collected this month'), findsOneWidget);
         expect(
           find.text('Collected'),

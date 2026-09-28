@@ -1,5 +1,7 @@
-> **Superseded (2026-09-26).** Historical note from 2026-09-11. Current state:
-> `docs/HANDOFF.md`; current offline-sync plan: `docs/OFFLINE-ID-SYNC-PLAN.md`.
+> **Superseded (2026-09-27).** Historical note from 2026-09-11. Current state:
+> `docs/HANDOFF.md` (workspace-improvements batch and merged main baseline).
+> Current offline-sync plan: `docs/OFFLINE-ID-SYNC-PLAN.md`.
+> New enhancement audit and acceptance checks: `docs/WEB-MOBILE-FEATURE-GAPS.md`.
 
 # Current Context & Offline Sync Status
 

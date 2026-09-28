@@ -63,7 +63,7 @@ class OrderPayment {
       id: json['id']?.toString() ?? '',
       amount: (json['amount'] as num?)?.toInt() ?? 0,
       date: json['date']?.toString() ?? '',
-      method: json['method']?.toString() ?? 'Cash',
+      method: json['method']?.toString() ?? '',
     );
   }
 
@@ -100,12 +100,14 @@ class InvoiceInfo {
   final int? invoiceSeq;
   final String? accessToken;
   final bool canGenerate;
+  final DateTime? generatedAt;
 
   InvoiceInfo({
     required this.exists,
     this.invoiceSeq,
     this.accessToken,
     this.canGenerate = false,
+    this.generatedAt,
   });
 
   String get formattedInvoiceNumber {
@@ -114,7 +116,7 @@ class InvoiceInfo {
   }
 
   String get invoiceNumber => formattedInvoiceNumber;
-  DateTime get issuedAt => DateTime.now();
+  DateTime get issuedAt => generatedAt ?? DateTime.now();
 
   factory InvoiceInfo.fromJson(Map<String, dynamic> json) {
     return InvoiceInfo(
@@ -122,6 +124,9 @@ class InvoiceInfo {
       invoiceSeq: (json['invoiceSeq'] as num?)?.toInt(),
       accessToken: json['accessToken']?.toString(),
       canGenerate: json['canGenerate'] == true,
+      generatedAt: json['generatedAt'] != null
+          ? DateTime.tryParse(json['generatedAt'].toString())?.toLocal()
+          : null,
     );
   }
 
@@ -131,6 +136,7 @@ class InvoiceInfo {
       'invoiceSeq': invoiceSeq,
       'accessToken': accessToken,
       'canGenerate': canGenerate,
+      if (generatedAt != null) 'generatedAt': generatedAt!.toIso8601String(),
     };
   }
 }
@@ -243,8 +249,11 @@ class Order {
       if (keepInv) 'invoice': cachedInv,
     };
   }
-  DateTime get createdAt => DateTime.tryParse(date)?.toLocal() ?? DateTime.now();
-  DateTime get dueDateTime => DateTime.tryParse(due)?.toLocal() ?? DateTime.now();
+
+  DateTime get createdAt =>
+      DateTime.tryParse(date)?.toLocal() ?? DateTime.now();
+  DateTime get dueDateTime =>
+      DateTime.tryParse(due)?.toLocal() ?? DateTime.now();
 
   factory Order.fromJson(Map<String, dynamic> json) {
     final rawLines = json['lines'] as List? ?? [];

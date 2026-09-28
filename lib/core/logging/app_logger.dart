@@ -1,23 +1,37 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
-/// Tiny structured-logging helper for the sync/connectivity/network path.
+/// Central structured logger for KlenPOS.
 ///
-/// Wraps [debugPrint] (not `print` — Android truncates long single `print`
-/// lines) and is a no-op outside debug builds, so it costs nothing in
-/// release. Every line is prefixed with a timestamp and a tag so device logs
-/// (e.g. `adb logcat`) can be filtered per subsystem while debugging exactly
-/// the kind of "why did the banner flip to offline" issue this was added
-/// for.
+/// In debug mode: prints timestamped formatted logs to the console (`debugPrint`).
+/// In release/staging mode: forwards logs to Firebase Crashlytics as breadcrumbs,
+/// ensuring all diagnostics and non-fatal errors are captured in real-time.
 class AppLogger {
   AppLogger._();
 
-  static void log(String tag, String message, {Object? error}) {
-    if (!kDebugMode) return;
+  static void log(String tag, String message, {Object? error, StackTrace? stackTrace}) {
     final now = DateTime.now();
     final ts =
         '${_two(now.hour)}:${_two(now.minute)}:${_two(now.second)}.${_three(now.millisecond)}';
     final suffix = error != null ? ' — $error' : '';
-    debugPrint('[$ts][$tag] $message$suffix');
+    final logLine = '[$ts][$tag] $message$suffix';
+
+    if (kDebugMode) {
+      debugPrint(logLine);
+    } else {
+      try {
+        FirebaseCrashlytics.instance.log(logLine);
+        if (error != null) {
+          FirebaseCrashlytics.instance.recordError(
+            error,
+            stackTrace,
+            reason: '[$tag] $message',
+          );
+        }
+      } catch (_) {
+        // Ignored if Firebase is not yet initialized or on unsupported platform
+      }
+    }
   }
 
   static String _two(int v) => v.toString().padLeft(2, '0');

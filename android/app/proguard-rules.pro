@@ -1,5 +1,5 @@
 # ==============================================================================
-# Flutter & Android ProGuard / R8 Rules for MyShop
+# Flutter & Android ProGuard / R8 Rules for KlenPOS
 # ==============================================================================
 
 # --- Line Numbers & Attributes for Crash Reporting & De-obfuscation ---
@@ -74,3 +74,7 @@
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
+
+# --- Firebase & Crashlytics ---
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**

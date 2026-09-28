@@ -116,7 +116,7 @@ void main() {
 
       ownerBloc = OwnerBloc(ownerRepository: fakeRepo);
 
-      final user = User(id: 'usr-1', name: 'John Doe', username: 'johndoe');
+      final user = User(id: 'usr-1', name: 'John Doe', phone: '9876500001');
       final store = StoreSummary(
         storeId: 'store-1',
         storeName: 'Express Laundry Demo',
@@ -157,7 +157,7 @@ void main() {
         await pumpAsync(tester);
 
         expect(find.text('Your details'), findsOneWidget);
-        expect(find.text('@johndoe'), findsOneWidget);
+        expect(find.text('9876500001'), findsOneWidget);
         expect(find.text('Store Owner'), findsOneWidget);
 
         final textFields = find.byType(TextField);
@@ -265,16 +265,16 @@ void main() {
         await tester.tap(switches.first);
         await pumpAsync(tester);
 
+        expect(find.text('Disable Cash?'), findsOneWidget);
+        await tester.tap(find.text('Disable method'));
+        await pumpAsync(tester);
+
         expect(fakeRepo.lastToggledPaymentMethod, isNotNull);
         expect(fakeRepo.lastToggledPaymentMethod!['id'], 'pm-1');
         expect(fakeRepo.lastToggledPaymentMethod!['active'], isFalse);
 
         fakeRepo.paymentMethods = [
-          StorePaymentMethod(
-            id: 'pm-3',
-            code: 'COD',
-            name: 'Pay on delivery',
-          ),
+          StorePaymentMethod(id: 'pm-3', code: 'COD', name: 'Pay on delivery'),
         ];
         await tester.tap(find.byIcon(Icons.refresh_rounded));
         await pumpAsync(tester);

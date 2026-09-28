@@ -4,6 +4,12 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
+  // Official KlenPOS Brand Palette
+  static const Color brandDeepHydro = Color(0xFF0A2540);
+  static const Color brandElectricCyan = Color(0xFF00D4FF);
+  static const Color brandCrispMint = Color(0xFF4CFFB3);
+  static const Color brandCleanObsidian = Color(0xFF0B0F14);
+
   static const Color primary = Color(0xFF0758D6);
   static const Color primaryPressed = Color(0xFF064BBB);
   static const Color primaryTint = Color(0xFFEAF1FF);

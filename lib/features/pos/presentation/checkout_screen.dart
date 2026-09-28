@@ -4,9 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/theme/text_styles.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../core/utils/date_formatter.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
-import '../../../shared/widgets/step_progress_header.dart';
+import '../../../shared/widgets/app_text_field.dart';
 import '../../shell/bloc/outlet_scope_cubit.dart';
 import '../bloc/cart_bloc.dart';
 import '../bloc/cart_event.dart';
@@ -23,7 +24,57 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _selectedMethodId;
-  bool _isDelivery = false;
+  late DateTime _selectedDueDate;
+  late final TextEditingController _notesController;
+  String? _dueDateError;
+
+  @override
+  void initState() {
+    super.initState();
+    final cartState = context.read<CartBloc>().state;
+    _selectedDueDate = cartState.dueDate;
+    _notesController = TextEditingController(text: cartState.notes);
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDueDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDueDate.isBefore(today) ? today : _selectedDueDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 5),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primary,
+            onPrimary: Colors.white,
+            onSurface: AppColors.text,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+
+    final pickedDate = DateTime(picked.year, picked.month, picked.day);
+    if (pickedDate.isBefore(today)) {
+      setState(() {
+        _dueDateError = 'Due date cannot be in the past';
+      });
+    } else {
+      setState(() {
+        _selectedDueDate = pickedDate;
+        _dueDateError = null;
+      });
+    }
+  }
 
   void _handleBack(BuildContext context) {
     DiscardOrderDialog.show(
@@ -63,8 +114,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               : null;
           final outletName = outlet?.displayName;
 
-          final hasSelection = _isDelivery ||
-              state.paymentMethods.any((m) => m.id == _selectedMethodId);
+          final selectedMethod = state.paymentMethods
+              .where((m) => m.id == _selectedMethodId)
+              .firstOrNull;
+          final hasSelection = selectedMethod != null;
 
           return Scaffold(
             backgroundColor: AppColors.surface,
@@ -79,36 +132,33 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         bottom: BorderSide(color: AppColors.border, width: 1),
                       ),
                     ),
-                    padding: const EdgeInsets.fromLTRB(8, 8, 20, 16),
-                    child: Column(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_back,
-                                    color: AppColors.text,
-                                  ),
-                                  onPressed: () => _handleBack(context),
-                                ),
-                                const SizedBox(width: 4),
-                                const Text('Checkout', style: AppTextStyles.h3),
-                              ],
-                            ),
                             IconButton(
                               icon: const Icon(
-                                Icons.close,
-                                color: AppColors.mutedText,
+                                Icons.arrow_back,
+                                color: AppColors.text,
                               ),
                               onPressed: () => _handleBack(context),
                             ),
+                            const SizedBox(width: 4),
+                            const Text('Checkout', style: AppTextStyles.h3),
                           ],
                         ),
-                        const SizedBox(height: 14),
-                        const StepProgressHeader(currentStep: 3),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close,
+                            color: AppColors.mutedText,
+                          ),
+                          onPressed: () => _handleBack(context),
+                        ),
                       ],
                     ),
                   ),
@@ -118,7 +168,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
-                        vertical: 20,
+                        vertical: 10,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -164,7 +214,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
                           // Order Summary Card
                           AppCard(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -193,6 +243,53 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                             '+91 ${state.customerPhone} · ${state.totalItemCount} services',
                                             style: AppTextStyles.hint,
                                           ),
+                                          const SizedBox(height: 5),
+                                          InkWell(
+                                            key: const Key(
+                                              'checkout_due_date_picker',
+                                            ),
+                                            onTap: _pickDueDate,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.calendar_today_outlined,
+                                                  size: 13,
+                                                  color: AppColors.primary,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Due date: ${DateFormatter.formatDate(_selectedDueDate)}',
+                                                  style: const TextStyle(
+                                                    fontFamily:
+                                                        AppTextStyles.fontBody,
+                                                    fontSize: 12.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppColors.primary,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                const Icon(
+                                                  Icons.edit_outlined,
+                                                  size: 12,
+                                                  color: AppColors.primary,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (_dueDateError != null) ...[
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              _dueDateError!,
+                                              style: const TextStyle(
+                                                fontFamily:
+                                                    AppTextStyles.fontBody,
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.danger,
+                                              ),
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
@@ -204,12 +301,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 10),
                                 const Divider(),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 10),
                                 ...state.items.values.map((item) {
                                   return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.only(bottom: 6),
                                     child: Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.spaceBetween,
@@ -236,7 +333,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                           ),
 
-                          const SizedBox(height: 22),
+                          const SizedBox(height: 14),
 
                           if (outletName != null) ...[
                             Row(
@@ -260,11 +357,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 10),
                           ],
 
                           Text('PAYMENT METHOD', style: AppTextStyles.label),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
 
                           if (state.paymentMethods.isEmpty)
                             const Padding(
@@ -281,43 +378,43 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             )
                           else
                             ...state.paymentMethods.map((method) {
-                              final isSelected = !_isDelivery &&
-                                  _selectedMethodId == method.id;
-                              final icon = (method.type == 'UPI' ||
-                                      method.name
-                                          .toUpperCase()
-                                          .contains('UPI'))
-                                  ? Icons.qr_code_scanner_outlined
-                                  : (method.name.toLowerCase().contains('card')
-                                      ? Icons.credit_card_outlined
-                                      : Icons.payments_outlined);
+                              final isSelected = _selectedMethodId == method.id;
+                              final codeUpper = method.code.toUpperCase();
+                              final IconData icon;
+                              if (codeUpper == 'UPI') {
+                                icon = Icons.qr_code_scanner_outlined;
+                              } else if (codeUpper == 'CARD') {
+                                icon = Icons.credit_card_outlined;
+                              } else if (codeUpper == 'COD' ||
+                                  method.isCashOnDelivery) {
+                                icon = Icons.schedule_outlined;
+                              } else {
+                                icon = Icons.payments_outlined;
+                              }
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _buildPaymentOption(
                                   id: method.id,
                                   title: method.name,
-                                  subtitle: 'Pay full amount now',
                                   icon: icon,
                                   isSelected: isSelected,
                                   onTap: () => setState(() {
                                     _selectedMethodId = method.id;
-                                    _isDelivery = false;
                                   }),
                                 ),
                               );
                             }),
 
-                          // Pay on delivery Choice (always present)
-                          _buildPaymentOption(
-                            id: 'delivery',
-                            title: 'Pay on delivery',
-                            subtitle: 'Collect full amount at handover',
-                            icon: Icons.schedule_outlined,
-                            isSelected: _isDelivery,
-                            onTap: () => setState(() {
-                              _selectedMethodId = null;
-                              _isDelivery = true;
-                            }),
+                          const SizedBox(height: 10),
+
+                          AppTextField(
+                            key: const Key('checkout_notes_field'),
+                            controller: _notesController,
+                            label: 'Notes',
+                            hintText:
+                                'Add special instructions or notes (optional)',
+                            maxLines: 3,
+                            keyboardType: TextInputType.multiline,
                           ),
                         ],
                       ),
@@ -337,31 +434,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       vertical: 16,
                     ),
                     child: PrimaryButton(
-                      label: _isDelivery
+                      label: selectedMethod?.isCashOnDelivery == true
                           ? 'Place order · Pay on delivery'
                           : 'Place order · ${CurrencyFormatter.format(totalAmount)}',
                       isLoading: state.isSubmitting,
                       onPressed: (state.isSubmitting || !hasSelection)
                           ? null
                           : () {
-                              if (_isDelivery) {
+                              if (selectedMethod.isCashOnDelivery) {
                                 context.read<CartBloc>().add(
                                   SubmitOrderEvent(
                                     paymentChoice: 'delivery',
+                                    dueDate: _selectedDueDate,
+                                    notes: _notesController.text.trim(),
                                   ),
                                 );
-                              } else if (_selectedMethodId != null) {
-                                final method = state.paymentMethods
-                                    .where((m) => m.id == _selectedMethodId)
-                                    .firstOrNull;
-                                if (method != null) {
-                                  context.read<CartBloc>().add(
-                                    SubmitOrderEvent(
-                                      paymentChoice: 'prepaid',
-                                      paymentMethodName: method.name,
-                                    ),
-                                  );
-                                }
+                              } else {
+                                context.read<CartBloc>().add(
+                                  SubmitOrderEvent(
+                                    paymentChoice: 'prepaid',
+                                    paymentMethodName: selectedMethod.name,
+                                    dueDate: _selectedDueDate,
+                                    notes: _notesController.text.trim(),
+                                  ),
+                                );
                               }
                             },
                     ),
@@ -378,7 +474,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget _buildPaymentOption({
     required String id,
     required String title,
-    required String subtitle,
     required IconData icon,
     required bool isSelected,
     required VoidCallback onTap,
@@ -420,8 +515,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       color: isSelected ? AppColors.primary : AppColors.text,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: AppTextStyles.hint),
                 ],
               ),
             ),

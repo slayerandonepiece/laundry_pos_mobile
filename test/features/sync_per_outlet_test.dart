@@ -138,14 +138,8 @@ void main() {
       secureStorage: _FakeSecureStorage(),
       localCache: localCache,
     );
-    ordersRepo = OrdersRepository(
-      apiClient: apiClient,
-      localCache: localCache,
-    );
-    posRepo = PosRepository(
-      apiClient: apiClient,
-      localCache: localCache,
-    );
+    ordersRepo = OrdersRepository(apiClient: apiClient, localCache: localCache);
+    posRepo = PosRepository(apiClient: apiClient, localCache: localCache);
     SyncEngine.instance = SyncEngine.internal(
       ordersRepository: ordersRepo,
       localCache: localCache,
@@ -163,177 +157,168 @@ void main() {
   });
 
   group('Per-outlet offline sync queue (Step 7 / O6)', () {
-    test(
-      'two create_orders in outlets o1 and o2 -> exactly two bulk-sync POSTs, headers o1 and o2',
-      () async {
-        // Offline while enqueueing so SyncEngine.trigger() inside
-        // createOrderOptimistic does not flush early.
-        fakeConnectivity.mockOffline = true;
+    test('two create_orders in outlets o1 and o2 -> exactly two bulk-sync POSTs, headers o1 and o2', () async {
+      // Offline while enqueueing so SyncEngine.trigger() inside
+      // createOrderOptimistic does not flush early.
+      fakeConnectivity.mockOffline = true;
 
-        await posRepo.createOrderOptimistic(
-          idempotencyKey: 'idem_o1',
-          phone: '9000000001',
-          dueDate: '2026-09-30',
-          entries: const [
-            {'productId': 'p1', 'quantity': 1},
-          ],
-          outletId: 'o1',
-        );
-        await posRepo.createOrderOptimistic(
-          idempotencyKey: 'idem_o2',
-          phone: '9000000002',
-          dueDate: '2026-09-30',
-          entries: const [
-            {'productId': 'p1', 'quantity': 2},
-          ],
-          outletId: 'o2',
-        );
+      await posRepo.createOrderOptimistic(
+        idempotencyKey: 'idem_o1',
+        phone: '9000000001',
+        dueDate: '2026-09-30',
+        entries: const [
+          {'productId': 'p1', 'quantity': 1},
+        ],
+        outletId: 'o1',
+      );
+      await posRepo.createOrderOptimistic(
+        idempotencyKey: 'idem_o2',
+        phone: '9000000002',
+        dueDate: '2026-09-30',
+        entries: const [
+          {'productId': 'p1', 'quantity': 2},
+        ],
+        outletId: 'o2',
+      );
 
-        final queued = localCache.getPendingSyncQueue();
-        expect(queued, hasLength(2));
-        expect(queued[0]['outletId'], 'o1');
-        expect(queued[1]['outletId'], 'o2');
+      final queued = localCache.getPendingSyncQueue();
+      expect(queued, hasLength(2));
+      expect(queued[0]['outletId'], 'o1');
+      expect(queued[1]['outletId'], 'o2');
 
-        // Come online and flush
-        fakeConnectivity.mockOffline = false;
-        final ok = await ordersRepo.processPendingSyncQueue();
-        expect(ok, isTrue);
+      // Come online and flush
+      fakeConnectivity.mockOffline = false;
+      final ok = await ordersRepo.processPendingSyncQueue();
+      expect(ok, isTrue);
 
-        expect(recordedPosts, hasLength(2));
-        expect(recordedPosts[0].passedHeaders?['X-Outlet-Id'], 'o1');
-        expect(recordedPosts[0].wireHeaders['X-Outlet-Id'], 'o1');
-        expect(recordedPosts[1].passedHeaders?['X-Outlet-Id'], 'o2');
-        expect(recordedPosts[1].wireHeaders['X-Outlet-Id'], 'o2');
-        expect(localCache.getPendingSyncQueue(), isEmpty);
-      },
-    );
+      expect(recordedPosts, hasLength(2));
+      expect(recordedPosts[0].passedHeaders?['X-Outlet-Id'], 'o1');
+      expect(recordedPosts[0].wireHeaders['X-Outlet-Id'], 'o1');
+      expect(recordedPosts[1].passedHeaders?['X-Outlet-Id'], 'o2');
+      expect(recordedPosts[1].wireHeaders['X-Outlet-Id'], 'o2');
+      expect(localCache.getPendingSyncQueue(), isEmpty);
+    });
 
-    test(
-      'null-outlet owner action -> passes kNoOutletHeader and omits X-Outlet-Id on the wire even when activeOutletId is set later',
-      () async {
-        // Owner in All-Outlets scope (no active outlet) updates a null-outlet order.
-        await localCache.setAllOutletsScope(true);
-        await localCache.clearActiveOutletId();
-        await localCache.setCachedOrders([
-          {
-            'id': 'EL-500',
-            'name': 'Owner Order',
-            'phone': '9111111111',
-            'date': '2026-09-26',
-            'due': '2026-09-28',
-            'status': 'Pending',
-            'lines': [],
-            'payments': [],
-            'outletId': null,
-          },
-        ]);
+    test('null-outlet owner action -> passes kNoOutletHeader and omits X-Outlet-Id on the wire even when activeOutletId is set later', () async {
+      // Owner in All-Outlets scope (no active outlet) updates a null-outlet order.
+      await localCache.setAllOutletsScope(true);
+      await localCache.clearActiveOutletId();
+      await localCache.setCachedOrders([
+        {
+          'id': 'EL-500',
+          'name': 'Owner Order',
+          'phone': '9111111111',
+          'date': '2026-09-26',
+          'due': '2026-09-28',
+          'status': 'Pending',
+          'lines': [],
+          'payments': [],
+          'outletId': null,
+        },
+      ]);
 
-        await ordersRepo.updateStatus('EL-500', 'Ready');
+      await ordersRepo.updateStatus('EL-500', 'Ready');
 
-        final queued = localCache.getPendingSyncQueue();
-        expect(queued, hasLength(1));
-        expect(queued.first.containsKey('outletId'), isTrue);
-        expect(queued.first['outletId'], isNull);
+      final queued = localCache.getPendingSyncQueue();
+      expect(queued, hasLength(1));
+      expect(queued.first.containsKey('outletId'), isTrue);
+      expect(queued.first['outletId'], isNull);
 
-        // Even if the user switches active outlet to o1 before flushing,
-        // the action's stamped null outlet must not resolve to o1 at flush.
-        await localCache.setAllOutletsScope(false);
-        await localCache.setActiveOutletId('o1');
+      // Even if the user switches active outlet to o1 before flushing,
+      // the action's stamped null outlet must not resolve to o1 at flush.
+      await localCache.setAllOutletsScope(false);
+      await localCache.setActiveOutletId('o1');
 
-        final ok = await ordersRepo.processPendingSyncQueue();
-        expect(ok, isTrue);
+      final ok = await ordersRepo.processPendingSyncQueue();
+      expect(ok, isTrue);
 
-        expect(recordedPosts, hasLength(1));
-        expect(
-          recordedPosts.single.passedHeaders?['X-Outlet-Id'],
-          kNoOutletHeader,
-        );
-        expect(
-          recordedPosts.single.wireHeaders.containsKey('X-Outlet-Id'),
-          isFalse,
-        );
-      },
-    );
+      expect(recordedPosts, hasLength(1));
+      expect(
+        recordedPosts.single.passedHeaders?['X-Outlet-Id'],
+        kNoOutletHeader,
+      );
+      expect(
+        recordedPosts.single.wireHeaders.containsKey('X-Outlet-Id'),
+        isFalse,
+      );
+    });
 
-    test(
-      '403 on o1 -> o1 actions dead-lettered with lastError "outlet access changed" and removed from pending queue; o2 still sent and completed',
-      () async {
-        await localCache.setPendingSyncQueue([
-          {
-            'type': 'create_order',
-            'clientActionId': 'act_o1_1',
-            'offlineCode': 'LOCAL-1',
-            'storeId': 'store_1',
-            'outletId': 'o1',
-            'body': {'phone': '9000000001', 'outletId': 'o1'},
-          },
-          {
-            'type': 'update_status',
-            'clientActionId': 'act_o1_2',
-            'orderCode': 'LOCAL-1',
-            'status': 'Ready',
-            'storeId': 'store_1',
-            'outletId': 'o1',
-          },
-          {
-            'type': 'create_order',
-            'clientActionId': 'act_o2_1',
-            'offlineCode': 'LOCAL-2',
-            'storeId': 'store_1',
-            'outletId': 'o2',
-            'body': {'phone': '9000000002', 'outletId': 'o2'},
-          },
-        ]);
+    test('403 on o1 -> o1 actions dead-lettered with lastError "outlet access changed" and removed from pending queue; o2 still sent and completed', () async {
+      await localCache.setPendingSyncQueue([
+        {
+          'type': 'create_order',
+          'clientActionId': 'act_o1_1',
+          'offlineCode': 'LOCAL-1',
+          'storeId': 'store_1',
+          'outletId': 'o1',
+          'body': {'phone': '9000000001', 'outletId': 'o1'},
+        },
+        {
+          'type': 'update_status',
+          'clientActionId': 'act_o1_2',
+          'orderCode': 'LOCAL-1',
+          'status': 'Ready',
+          'storeId': 'store_1',
+          'outletId': 'o1',
+        },
+        {
+          'type': 'create_order',
+          'clientActionId': 'act_o2_1',
+          'offlineCode': 'LOCAL-2',
+          'storeId': 'store_1',
+          'outletId': 'o2',
+          'body': {'phone': '9000000002', 'outletId': 'o2'},
+        },
+      ]);
 
-        dioHandler = (options) async {
-          final outletHeader = options.headers['X-Outlet-Id'];
-          if (outletHeader == 'o1') {
-            return mockJsonResponse(
-              {'error': 'Outlet access revoked', 'reason': 'outlet_forbidden'},
-              statusCode: 403,
-            );
-          }
+      dioHandler = (options) async {
+        final outletHeader = options.headers['X-Outlet-Id'];
+        if (outletHeader == 'o1') {
           return mockJsonResponse({
-            'results': [
-              {
-                'clientActionId': 'act_o2_1',
-                'status': 'success',
-                'order': {
-                  'id': 'EL-202',
-                  'phone': '9000000002',
-                  'status': 'Pending',
-                  'lines': [],
-                  'payments': [],
-                  'outletId': 'o2',
-                },
-              },
-            ],
-          });
-        };
-
-        final ok = await ordersRepo.processPendingSyncQueue();
-        expect(ok, isTrue);
-
-        // Both groups were attempted once (o1 got 403, o2 succeeded).
-        expect(recordedPosts, hasLength(2));
-        expect(recordedPosts[0].wireHeaders['X-Outlet-Id'], 'o1');
-        expect(recordedPosts[1].wireHeaders['X-Outlet-Id'], 'o2');
-
-        // Pending queue is now empty (o1 dead-lettered, o2 completed).
-        expect(localCache.getPendingSyncQueue(), isEmpty);
-
-        // Dead-letter queue contains both o1 actions with lastError set.
-        final deadLetter = localCache.getDeadLetterQueue();
-        expect(deadLetter, hasLength(2));
-        expect(
-          deadLetter.map((a) => a['clientActionId']),
-          containsAll(['act_o1_1', 'act_o1_2']),
-        );
-        for (final a in deadLetter) {
-          expect(a['lastError'], 'outlet access changed');
+            'error': 'Outlet access revoked',
+            'reason': 'outlet_forbidden',
+          }, statusCode: 403);
         }
-      },
-    );
+        return mockJsonResponse({
+          'results': [
+            {
+              'clientActionId': 'act_o2_1',
+              'status': 'success',
+              'order': {
+                'id': 'EL-202',
+                'phone': '9000000002',
+                'status': 'Pending',
+                'lines': [],
+                'payments': [],
+                'outletId': 'o2',
+              },
+            },
+          ],
+        });
+      };
+
+      final ok = await ordersRepo.processPendingSyncQueue();
+      expect(ok, isTrue);
+
+      // Both groups were attempted once (o1 got 403, o2 succeeded).
+      expect(recordedPosts, hasLength(2));
+      expect(recordedPosts[0].wireHeaders['X-Outlet-Id'], 'o1');
+      expect(recordedPosts[1].wireHeaders['X-Outlet-Id'], 'o2');
+
+      // Pending queue is now empty (o1 dead-lettered, o2 completed).
+      expect(localCache.getPendingSyncQueue(), isEmpty);
+
+      // Dead-letter queue contains both o1 actions with lastError set.
+      final deadLetter = localCache.getDeadLetterQueue();
+      expect(deadLetter, hasLength(2));
+      expect(
+        deadLetter.map((a) => a['clientActionId']),
+        containsAll(['act_o1_1', 'act_o1_2']),
+      );
+      for (final a in deadLetter) {
+        expect(a['lastError'], 'outlet access changed');
+      }
+    });
 
     test(
       'legacy create_order without top-level outletId groups by body.outletId',
@@ -346,10 +331,7 @@ void main() {
             'offlineCode': 'LOCAL-99',
             'storeId': 'store_1',
             // No top-level 'outletId'
-            'body': {
-              'phone': '9888888888',
-              'outletId': 'o2',
-            },
+            'body': {'phone': '9888888888', 'outletId': 'o2'},
           },
         ]);
 
@@ -362,117 +344,114 @@ void main() {
       },
     );
 
-    test(
-      'confirmed order from o2 is not inserted into o1 cache when not replacing a placeholder, but placeholder replacement stays unconditional',
-      () async {
-        // Active scope is o1. Cache for o1 has one existing order EL-100,
-        // and NO placeholder for LOCAL-O2.
-        await localCache.setAllOutletsScope(false);
-        await localCache.setActiveOutletId('o1');
-        await localCache.setCachedOrders([
-          {
-            'id': 'EL-100',
-            'name': 'Existing O1 Order',
-            'phone': '9000000100',
-            'date': '2026-09-26',
-            'due': '2026-09-28',
-            'status': 'Pending',
-            'lines': [],
-            'payments': [],
-            'outletId': 'o1',
-          },
-        ]);
+    test('confirmed order from o2 is not inserted into o1 cache when not replacing a placeholder, but placeholder replacement stays unconditional', () async {
+      // Active scope is o1. Cache for o1 has one existing order EL-100,
+      // and NO placeholder for LOCAL-O2.
+      await localCache.setAllOutletsScope(false);
+      await localCache.setActiveOutletId('o1');
+      await localCache.setCachedOrders([
+        {
+          'id': 'EL-100',
+          'name': 'Existing O1 Order',
+          'phone': '9000000100',
+          'date': '2026-09-26',
+          'due': '2026-09-28',
+          'status': 'Pending',
+          'lines': [],
+          'payments': [],
+          'outletId': 'o1',
+        },
+      ]);
 
-        await localCache.setPendingSyncQueue([
-          {
-            'type': 'create_order',
-            'clientActionId': 'act_o2_new',
-            'offlineCode': 'LOCAL-O2',
-            'storeId': 'store_1',
-            'outletId': 'o2',
-            'body': {'phone': '9000000200', 'outletId': 'o2'},
-          },
-        ]);
+      await localCache.setPendingSyncQueue([
+        {
+          'type': 'create_order',
+          'clientActionId': 'act_o2_new',
+          'offlineCode': 'LOCAL-O2',
+          'storeId': 'store_1',
+          'outletId': 'o2',
+          'body': {'phone': '9000000200', 'outletId': 'o2'},
+        },
+      ]);
 
-        dioHandler = (options) async {
-          return mockJsonResponse({
-            'results': [
-              {
-                'clientActionId': 'act_o2_new',
-                'status': 'success',
-                'order': {
-                  'id': 'EL-200',
-                  'name': 'Confirmed O2 Order',
-                  'phone': '9000000200',
-                  'status': 'Pending',
-                  'lines': [],
-                  'payments': [],
-                  'outletId': 'o2',
-                },
+      dioHandler = (options) async {
+        return mockJsonResponse({
+          'results': [
+            {
+              'clientActionId': 'act_o2_new',
+              'status': 'success',
+              'order': {
+                'id': 'EL-200',
+                'name': 'Confirmed O2 Order',
+                'phone': '9000000200',
+                'status': 'Pending',
+                'lines': [],
+                'payments': [],
+                'outletId': 'o2',
               },
-            ],
-          });
-        };
+            },
+          ],
+        });
+      };
 
-        final ok = await ordersRepo.processPendingSyncQueue();
-        expect(ok, isTrue);
+      final ok = await ordersRepo.processPendingSyncQueue();
+      expect(ok, isTrue);
 
-        // o1's cache must NOT have EL-200 inserted.
-        final cachedO1 = localCache.getCachedOrders() ?? [];
-        expect(cachedO1.map((c) => c['id']), ['EL-100']);
+      // o1's cache must NOT have EL-200 inserted.
+      final cachedO1 = localCache.getCachedOrders() ?? [];
+      expect(cachedO1.map((c) => c['id']), ['EL-100']);
 
-        // Now test that if a placeholder IS present in the current cache,
-        // replacing it stays unconditional even if outletId differs.
-        await localCache.setCachedOrders([
-          {
-            'id': 'LOCAL-PLACEHOLDER',
-            'name': 'Placeholder Order',
-            'phone': '9000000300',
-            'date': '2026-09-26',
-            'due': '2026-09-28',
-            'status': 'Pending',
-            'lines': [],
-            'payments': [],
-            'outletId': 'o2',
-          },
-        ]);
-        await localCache.setPendingSyncQueue([
-          {
-            'type': 'create_order',
-            'clientActionId': 'act_o2_replace',
-            'offlineCode': 'LOCAL-PLACEHOLDER',
-            'storeId': 'store_1',
-            'outletId': 'o2',
-            'body': {'phone': '9000000300', 'outletId': 'o2'},
-          },
-        ]);
+      // Now test that if a placeholder IS present in the current cache,
+      // replacing it stays unconditional even if outletId differs.
+      await localCache.setCachedOrders([
+        {
+          'id': 'LOCAL-PLACEHOLDER',
+          'name': 'Placeholder Order',
+          'phone': '9000000300',
+          'date': '2026-09-26',
+          'due': '2026-09-28',
+          'status': 'Pending',
+          'lines': [],
+          'payments': [],
+          'outletId': 'o2',
+        },
+      ]);
+      await localCache.setPendingSyncQueue([
+        {
+          'type': 'create_order',
+          'clientActionId': 'act_o2_replace',
+          'offlineCode': 'LOCAL-PLACEHOLDER',
+          'storeId': 'store_1',
+          'outletId': 'o2',
+          'body': {'phone': '9000000300', 'outletId': 'o2'},
+        },
+      ]);
 
-        dioHandler = (options) async {
-          return mockJsonResponse({
-            'results': [
-              {
-                'clientActionId': 'act_o2_replace',
-                'status': 'success',
-                'order': {
-                  'id': 'EL-300',
-                  'name': 'Placeholder Order',
-                  'phone': '9000000300',
-                  'status': 'Pending',
-                  'lines': [],
-                  'payments': [],
-                  'outletId': 'o2',
-                },
+      dioHandler = (options) async {
+        return mockJsonResponse({
+          'results': [
+            {
+              'clientActionId': 'act_o2_replace',
+              'status': 'success',
+              'order': {
+                'id': 'EL-300',
+                'name': 'Placeholder Order',
+                'phone': '9000000300',
+                'status': 'Pending',
+                'lines': [],
+                'payments': [],
+                'outletId': 'o2',
               },
-            ],
-          });
-        };
+            },
+          ],
+        });
+      };
 
-        final okReplace = await ordersRepo.processPendingSyncQueue();
-        expect(okReplace, isTrue);
+      final okReplace = await ordersRepo.processPendingSyncQueue();
+      expect(okReplace, isTrue);
 
-        final cachedAfterReplace = localCache.getCachedOrders() ?? [];
-        expect(cachedAfterReplace.map((c) => c['id']), ['EL-300']);
-      },
-    );
+      final cachedAfterReplace = localCache.getCachedOrders() ?? [];
+      expect(cachedAfterReplace.map((c) => c['id']), ['EL-300']);
+    });
   });
 }

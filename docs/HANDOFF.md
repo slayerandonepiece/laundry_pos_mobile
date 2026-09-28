@@ -1,8 +1,228 @@
-# Session handoff — offline ids, syncing screen, local-first, app audit (2026-09-26)
+# Session handoff — mobile workspace improvements (2026-09-28)
 
 Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
+
+## Current status — 28 September 2026 (KlenPOS rebrand + Firebase + gating)
+
+This section supersedes the "28 September 2026" web/mobile parity section
+below (that work is done and merged separately; this is a later, distinct
+batch the same day).
+
+Committed as `feb909f` on `feat/workspace-improvements`: `flutter analyze`
+clean, `flutter test` **402/402** pass.
+
+- **Rebrand**: app renamed MyShop → **KlenPOS**. Bundle ID / applicationId
+  changed `com.myshop.myshop` → `com.reddygona.klenpos` (with `.dev`/`.staging`
+  suffixes) across Android (`build.gradle.kts`, Kotlin package path) and iOS
+  (`project.pbxproj`, all schemes). Dart package name (`myshop` in
+  `pubspec.yaml`) was **left unchanged** — it's an internal identifier, not
+  user-facing, and renaming it would touch every import for no user benefit.
+  Brand palette: Electric Cyan `#00D4FF`, Crisp Mint `#4CFFB3`, Deep Hydro
+  `#0A2540`, Clean Obsidian `#0B0F14` (see `assets/branding/klenpos_palette.md`).
+- **App icon & splash assets**: final set in `assets/icons/` and
+  `assets/branding/` (iOS 1024 no-alpha icon, Android adaptive
+  foreground/background layers, Play Store/feature-graphic assets, logo
+  lockups, favicons). Wired into `ios/Runner/Assets.xcassets/AppIcon.appiconset`
+  and Android `mipmap-*` via `sips` (see `docs/BRANDING-AND-FIREBASE-SETUP.md`).
+  **Native splash is white background + the transparent
+  `klenpos_adaptive_foreground_432.png` logo only** — not a colored canvas;
+  an earlier colored-background version was explicitly reverted per user
+  request, and the two now-orphaned colored splash PNGs
+  (`klenpos_splash_android.png` / `klenpos_splash_ios.png`) were deleted
+  before this commit, never having been in history. The in-app Flutter
+  `SplashScreen` (not the native one) owns the actual Deep Hydro brand-color
+  experience, with a circular logo and an animated background reveal —
+  see `lib/features/auth/presentation/splash_screen.dart` and
+  `test/widgets/splash_screen_test.dart`.
+- **Firebase**: `lib/core/network/firebase_service.dart` initializes Core,
+  Crashlytics (disabled in debug), Analytics, Messaging, and Remote Config,
+  gated per dev/stage/prod flavor. Remote Config `setDefaults()` are
+  deliberately inert/empty (`min_supported_version: ""`,
+  `force_update_enabled: false`, `maintenance_mode_enabled: false`,
+  `ios_app_store_id: ""`) so nothing blocks the app until these are set in
+  each Firebase project's console — **not yet done**, no App Store/Play
+  Store listing exists yet either, so `ios_app_store_id` stays empty until
+  there's something to point it at.
+- **Maintenance mode + force update**: `lib/core/gate/app_gate_service.dart`
+  (`lib/core/app_gate_service.dart` is a thin re-export, kept for import
+  convenience but currently unused — harmless, not wired anywhere) evaluates,
+  in order: maintenance mode (highest priority, custom full-screen
+  `lib/features/maintenance/presentation/maintenance_screen.dart`) → Android
+  force update (`in_app_update` package, Play Core native immediate-update
+  flow) → iOS force update (`upgrader` package, non-dismissible alert via
+  `canDismissDialog: false` / `showIgnore: false` / `showLater: false`,
+  redirects to the App Store product page). Checked at startup and on app
+  resume from background (not on every route — this is a POS app, staff
+  leave it open all day; per-route checks would also risk interrupting a
+  live transaction). **Everything fails open** on any fetch/lookup/version-
+  parse error — Remote Config being unreachable, offline, or a sideloaded
+  dev/stage build never blocks the user, only an explicit successfully-
+  fetched "you're below minimum version" result does.
+- **Still open / not yet done**: Firebase Remote Config keys not yet created
+  in the 3 Firebase project consoles (dev/stage/prod); `ios_app_store_id`
+  and store URLs unset (no store listings yet); resume-check's
+  mid-transaction deferral (`AppGateService.isMidTransaction`) exists but
+  hasn't been independently device-verified; Android `in_app_update` flow
+  not yet tested against an actual Play Store internal-testing track (only
+  reachable once there's a Play Console listing).
+
+## Current status — 28 September 2026
+
+This section supersedes the 27 September section below, which is itself now
+historical (its own "Next work" item 2 predicted exactly this batch — web
+enhancement parity — so treat this as that work starting, not a new
+direction).
+
+### Web/mobile feature-parity audit
+
+Codex independently audited `../laundry_pos` (web, source of truth): all ten
+admin modules, 199 source-cited capability bullets, live browser/API
+verification, 89/89 integration tests passing. Artifacts in
+`../laundry_pos/audit/`. Five parallel Claude agents then cross-checked every
+bullet against this repo's actual Dart source (bloc → event → repository →
+API-client chains, not just filenames), classifying each as
+Implemented/Partial/Missing/Intentionally-different/N-A-for-mobile, and
+separately listing web-only defects not to copy into mobile. Full detail:
+local `.wiki/raw/notes/2026-09-28-web-mobile-parity-audit-and-fixes.md`
+(gitignored — this section is the cloud-visible summary).
+
+### Fixed and verified this batch (`flutter analyze` clean, `flutter test`
+**374/374** pass at the time of each verification)
+
+- **Payment/delivery decoupling** (the original complaint): payment collection
+  was hard-coupled to marking an order Delivered (`CollectPaymentDialog`
+  always paid the full balance and delivered in one step; no way to record a
+  partial payment or deliver with a balance due). Added `RecordPaymentEvent`
+  (standalone payment, any amount up to balance, any status, no status
+  change) + `record_payment_dialog.dart`; added `Delivered` to
+  `status_dialog.dart`'s status list with a "deliver anyway" confirmation when
+  a balance remains (dispatches the existing `HandoverOrderEvent`, which never
+  actually checked balance — it just wasn't reachable with money owed before).
+  The original combined "Collect payment & deliver" flow is untouched, kept as
+  a shortcut.
+- **Checkout**: removed hardcoded payment-option subtitles ("Collect full
+  amount at handover"/"Pay full amount now"); added a real due-date picker
+  (default changed from hardcoded +2 days to today, rejects past dates) and an
+  optional notes field — both fields already existed on `Order`/already
+  accepted by the create-order API, just never exposed in the UI.
+- **Payment methods**: disabling a method now shows a confirm dialog
+  ("Disable {name}? Customers will no longer be able to pay with {name}...",
+  reusing the existing `CentredDialog`); enabling stays instant.
+- **Invoice PDF**: rebuilt `order_pdf_builder.dart` to match web's
+  `OrderInvoicePdf.tsx` structure — added order/delivery dates, a Rate column
+  ("Slab pricing" for weight lines), a Payment summary, a per-payment
+  "Payments received" table (previously only an aggregate total), and the
+  "not a tax invoice" footer. Stayed client-side/offline-capable by design —
+  `getInvoicePdfBytes` (server-rendered PDF) remains intentionally unused.
+  Paired backend change: `../laundry_pos` now returns `invoice.generatedAt` on
+  the Order DTO (additive; covered by an extended B6.5 assertion, 89/89 still
+  pass) so the PDF footer date is accurate instead of always "now".
+- **BlockedScreen**: added `onRetry` (wired to the existing
+  `CheckAuthStatusEvent` — accepted a brief splash-screen flash rather than
+  adding a new bloc state) and `pendingCount` (from
+  `LocalCacheService.getTotalPendingCount()`) so a user isn't stuck with only
+  "Sign out" and no visibility into whether queued offline writes are safe
+  (they are — `SyncEngine` keeps retrying them in the background regardless of
+  block state, it just wasn't visible).
+- **Trial/subscription banner data plumbing**: backend's `getStoreAccessStatus`
+  already computed `trialEndsAt`/`subscriptionState` live per-request (a
+  renewal payment is reflected on the very next request, no caching) but only
+  attached them to the `organizations[]` array, not the `stores[]` array
+  mobile actually parses. Backend now mirrors both onto `stores[]`; mobile's
+  `StoreSummary` parses them and `more_screen.dart`/`subscription_screen.dart`
+  branch the renewal badge on actual state (TRIAL/TRIAL_ENDING/
+  SUBSCRIPTION_ENDING/ACTIVE) instead of one flat "paidThroughDate <= 7 days"
+  heuristic that couldn't tell a trial ending from a paid plan ending.
+  **Implemented but not yet independently re-verified this session** — do that
+  before treating it as done. Plan name/deposit/annual-fee display is still
+  missing from the billing card; this fix only addressed trial/renewal state.
+
+### Confirmed open — not yet fixed, not yet prompted
+
+- Subscription lockdown is still all-or-nothing: any blocked-reason 403
+  replaces the whole app via `BlockedScreen`. Web keeps historical reads
+  (orders/invoices/rollups) working during a `RESTRICTED` subscription state;
+  mobile has no partial-access mode. The BlockedScreen fix above is a smaller
+  companion, not this.
+- Staff editor has no outlet (re)assignment (joint gap — the mobile API
+  contract itself doesn't carry outlet fields on `/employees` yet either) or
+  password-reset (pure mobile gap — `PUT /api/v1/employees/{id}` already
+  accepts a password field server-side).
+- Dashboard missing: all-outlet per-branch cards, "Needs attention" combined
+  overdue/due-today list, recent-orders list, general empty state, "Last 14
+  days" trend default.
+- No read-only outlet/branch directory on mobile at all (distinct from the
+  outlet-scope switcher) — largely blocked by no `/api/v1/outlets` route
+  server-side (mobile only ever gets bare `allowedOutlets[]`: id/code/name/
+  status, no address/opened-date/staff/chart data).
+- Product editor's slab-limit validation is looser than web (silently sorts
+  non-increasing limits instead of rejecting).
+- No proactive session/subscription refresh on app resume, only on cold start
+  or reactively on a 403 (`AppResumeSync` only triggers order sync).
+
+### Backend/API gaps — flag to the web team, not mobile tasks
+
+- Expense edit/delete/backdated-pay have no REST endpoint (web-only Next.js
+  server actions).
+- No `/api/v1/outlets` list/detail route.
+- Rollups endpoint lets an employee omit outlet and silently falls back
+  instead of the documented 403.
+- **Security-relevant, worth prioritizing independent of mobile's schedule**:
+  an employee can currently fetch another outlet's invoice PDF via
+  `/invoice/pdf` with no outlet-membership check.
+- No mobile-facing announcements endpoint exists at all.
+
+### Confirmed fine — don't "fix" these chasing parity
+
+- Login body `{phone,password}` matches the contract exactly.
+- Offline-first caching/idempotency/bulk-sync batching — don't simplify to
+  match web's simpler model.
+- Mobile's checkout already avoids a real web bug (COD pre-selected, so a
+  positive amount charges even when COD is picked) — don't copy that in.
+- Mobile's strict 10-digit Indian-mobile phone regex is correct as-is; web's
+  looser 8-15-digit rule is the actual bug, for an India-only business.
+- Mobile already forces the mandatory first-login password change; web has a
+  known enforcement gap here, mobile is stricter/correct.
+
+## Historical: current status — 27 September 2026
+
+This section formerly superseded the branch/test-status notes below it; it is
+now itself historical, superseded by 28 September above.
+
+### Repository baseline and this batch
+
+- Mobile `main` is `cdfc121d2f34bdc301c05f95a6feb0ad3b876c13`, Merge pull request #1 from `slayerandonepiece/frontend/offline-id` (26 September). Offline-ID phases, bootstrap/local-first flow, outlet handling and consistency fixes from that branch are merged. The older “pushed, not merged” statements below are historical.
+- User authorized including all current mobile changes from Claude/Gemini/GPT on `feat/workspace-improvements`. This batch remains separate from `laundry_pos`; no backend changes are committed here.
+- Claude chat reviewed: **Pending mobile app test cases** (local mobile project). Its latest commit/push attempt stopped at a session limit. Git inspection confirms today's files were still uncommitted on main before this batch. Visible conversations are context, not independent proof of their test claims.
+- GPT authored `docs/WEB-MOBILE-FEATURE-GAPS.md`: feature-by-feature source audit with 68 pending acceptance checks, including eight offline regression checks. This is a plan/checklist, not implemented web parity. GPT made no application-code changes during that audit.
+
+### Changes included from the working tree
+
+- Username → phone login/model/staff payload alignment; account/contact display updates and matching test fixtures.
+- Password setup retains the API's rotated token; owner password change sends `oldPassword` and retains its returned token.
+- Staff creation sends `active: true`.
+- Checkout options come from enabled store methods. Real COD submits no initial payment; no synthetic pay-later option or invented Cash fallback. No enabled COD means no pay-later choice. Cached methods are emitted first, then refreshed with cache retained on failure.
+- Keyboard/safe-area/layout improvements in weighted/item dialogs, shared buttons/scaffold/bottom navigation, invoice sheets and forms; weighted sheet uses `useSafeArea: true`.
+- Owner shell refreshes dashboard/expenses on store switch and expenses on opening More, addressing stale overview badges.
+- New tests cover password-token/API behavior, configured checkout methods/COD and weighted-sheet safe area. Manual run and outstanding cases are recorded in `docs/E2E-MANUAL-TEST.md` and `docs/MANUAL-TEST-CASES.md`.
+
+### Verification and limits
+
+- Current batch: `flutter analyze` passed, no issues (27 September).
+- Current batch: `flutter test --reporter expanded` passed all **333 tests** (27 September); `git diff --check` passed. Historical counts below describe older snapshots. Logs for this run: `/private/tmp/laundry-mobile-analyze.log` and `/private/tmp/laundry-mobile-tests.log`.
+- Earlier GPT launch check: iPhone 17 Pro dev build launched, auth/status and order delta returned 200 and sync completed. GPT did not visually verify the app screen; its computer-use tool could not bind Simulator. Android Pixel 9 disconnected before app launch.
+- Claude's manual test document contains pass/view-only/pending/blocked results. Do not convert view-only or older blocker entries to completed workflows. X10/X12/X14 were later withdrawn as origin/input-tooling artifacts; preserve that correction.
+- Test-environment cleanup in the manual documents remains a follow-up: historical notes report a trial organization temporarily unlocked and an employee intentionally inactive. Their current state has not been rechecked in this batch. Do not change shared state without user authorization.
+
+### Next work
+
+1. Complete the manual checks that remain applicable, especially configured-method refresh, COD, weighted dialog with keyboard, employee flows and offline replay.
+2. Implement web enhancement parity only after a scoped plan: dashboard metric semantics/cards/drill-down, expenses edit/delete/paid-date/attribution, staff assignments/reset, outlet views, richer profile facts, trial/lock/announcement notices.
+3. Preserve mobile offline identities, caches, scoped queues, idempotent replay, reconnect/resume and local PDF sharing. Avoid replacing repositories with web fetching patterns.
+4. Check backend endpoint readiness before native controls: announcements, locked reads, expense mutations/paid date and full profile/outlet facts have API gaps.
+5. No new parity feature is implemented merely because its checkbox exists; device acceptance stays pending until actually observed.
 
 ## Read first, in this order
 
@@ -83,7 +303,7 @@ cloud, so everything needed to continue is in this file and the docs it links.
   cold start, orders list and outlet switching all pass; the setup screen
   rows, a never-opened outlet and the employee flow were not seen. Details
   in the plan doc §8. Build command: `flutter build ios --simulator --debug
-  --flavor dev --dart-define=ENV=dev` (bundle `com.myshop.myshop.dev`).
+  --flavor dev --dart-define=ENV=dev` (bundle `com.reddygona.klenpos.dev`).
 - Superseded branch `claude/nifty-newton-8w8fhh` and the merged
   `chore/backend-and-setup` branches (both repos) are for the user to delete
   on GitHub (session git proxy refuses remote deletes).

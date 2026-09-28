@@ -14,8 +14,8 @@ class InvoiceViewerScreen extends StatelessWidget {
   const InvoiceViewerScreen({
     super.key,
     required this.order,
-    this.storeName = 'MyShop Laundry',
-    this.storeAddress = 'Bengaluru, India',
+    this.storeName = '',
+    this.storeAddress = '',
     this.storePhone = '',
   });
 

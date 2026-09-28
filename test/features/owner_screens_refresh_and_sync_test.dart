@@ -45,7 +45,7 @@ class TrackingOwnerBloc extends Bloc<OwnerEvent, OwnerState>
                 StaffMember(
                   id: 'staff-1',
                   name: 'Alex Staff',
-                  username: 'alex',
+                  phone: 'alex',
                   active: true,
                 ),
               ],

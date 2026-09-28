@@ -5,9 +5,12 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 /// Application deployment environments
 enum AppEnvironment { dev, stage, prod }
 
-/// Central environment configuration for MyShop
+/// Central environment configuration for KlenPOS
 class AppEnvironmentConfig {
   AppEnvironmentConfig._();
+
+  /// Canonical single source of truth for the application name.
+  static const String appName = 'KlenPOS';
 
   /// Reads compile-time environment from `--dart-define=ENV=<dev|stage|prod>`.
   /// Defaults to `dev` if not specified.

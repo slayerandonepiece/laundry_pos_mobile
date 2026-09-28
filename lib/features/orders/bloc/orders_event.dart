@@ -44,6 +44,18 @@ class CollectPaymentEvent extends OrdersEvent {
   });
 }
 
+class RecordPaymentEvent extends OrdersEvent {
+  final String orderCode;
+  final int amount;
+  final String method;
+
+  RecordPaymentEvent({
+    required this.orderCode,
+    required this.amount,
+    required this.method,
+  });
+}
+
 class HandoverOrderEvent extends OrdersEvent {
   final String orderCode;
 

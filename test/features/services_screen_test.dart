@@ -481,53 +481,50 @@ void main() {
       },
     );
 
-    testWidgets('Toggling grid/list view switches between ListView and GridView', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
-      addTearDown(() => tester.view.resetDevicePixelRatio());
-
-      await tester.pumpWidget(buildTestWidget());
-      await tester.pumpAndSettle();
-
-      // By default list view is active (ListView is present, GridView is not)
-      expect(find.byType(ListView), findsOneWidget);
-      expect(find.byType(GridView), findsNothing);
-
-      // Tap grid icon
-      await tester.tap(find.byIcon(Icons.grid_view_rounded));
-      await tester.pumpAndSettle();
-
-      // Now GridView is present, ListView is not
-      expect(find.byType(GridView), findsOneWidget);
-      expect(find.byType(ListView), findsNothing);
-
-      // Tap list icon
-      await tester.tap(find.byIcon(Icons.view_list_rounded));
-      await tester.pumpAndSettle();
-
-      // Back to ListView
-      expect(find.byType(ListView), findsOneWidget);
-      expect(find.byType(GridView), findsNothing);
-    });
-
     testWidgets(
-      'Shows error SnackBar when listProducts throws',
+      'Toggling grid/list view switches between ListView and GridView',
       (tester) async {
-        fakePosRepo.shouldThrowOnList = true;
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+        addTearDown(() => tester.view.resetDevicePixelRatio());
 
         await tester.pumpWidget(buildTestWidget());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
 
-        expect(
-          find.text('Could not load services — try again'),
-          findsOneWidget,
-        );
+        // By default list view is active (ListView is present, GridView is not)
+        expect(find.byType(ListView), findsOneWidget);
+        expect(find.byType(GridView), findsNothing);
+
+        // Tap grid icon
+        await tester.tap(find.byIcon(Icons.grid_view_rounded));
+        await tester.pumpAndSettle();
+
+        // Now GridView is present, ListView is not
+        expect(find.byType(GridView), findsOneWidget);
+        expect(find.byType(ListView), findsNothing);
+
+        // Tap list icon
+        await tester.tap(find.byIcon(Icons.view_list_rounded));
+        await tester.pumpAndSettle();
+
+        // Back to ListView
+        expect(find.byType(ListView), findsOneWidget);
+        expect(find.byType(GridView), findsNothing);
       },
     );
+
+    testWidgets('Shows error SnackBar when listProducts throws', (
+      tester,
+    ) async {
+      fakePosRepo.shouldThrowOnList = true;
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Could not load services — try again'), findsOneWidget);
+    });
 
     testWidgets(
       'Tapping Create service a second time after a failed create sends the SAME client id',
@@ -558,7 +555,10 @@ void main() {
         expect(fakeOwnerRepo.createdIds.length, 2);
         expect(fakeOwnerRepo.createdIds[0], isNotNull);
         expect(fakeOwnerRepo.createdIds[0], isNotEmpty);
-        expect(fakeOwnerRepo.createdIds[1], equals(fakeOwnerRepo.createdIds[0]));
+        expect(
+          fakeOwnerRepo.createdIds[1],
+          equals(fakeOwnerRepo.createdIds[0]),
+        );
       },
     );
   });

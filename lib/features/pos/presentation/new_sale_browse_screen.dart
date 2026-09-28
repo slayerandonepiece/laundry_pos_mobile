@@ -8,7 +8,6 @@ import '../../../core/utils/quantity_formatter.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/status_pill.dart';
-import '../../../shared/widgets/step_progress_header.dart';
 import '../../../shared/widgets/sync_status_bar.dart';
 import '../bloc/cart_bloc.dart';
 import '../bloc/cart_event.dart';
@@ -189,9 +188,7 @@ class _NewSaleBrowseScreenState extends State<NewSaleBrowseScreen> {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    const StepProgressHeader(currentStep: 2),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
 
                     // Search box
                     Container(

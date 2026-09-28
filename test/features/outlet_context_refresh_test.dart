@@ -152,125 +152,119 @@ void main() {
   };
 
   group('AuthRepository cold-start & refreshOutletContext', () {
-    test(
-      'checkSession caches organizations[].allowedOutlets per org id; response WITHOUT organizations leaves existing cache untouched',
-      () async {
-        var includeOrganizations = true;
-        final mockDio = createMockDio((options) async {
-          return mockJsonResponse({
-            'user': {'id': 'u1', 'name': 'User', 'username': 'user'},
-            'stores': [
-              {'storeId': 's1', 'storeName': 'Store 1', 'role': 'EMPLOYEE'},
-              {'storeId': 's2', 'storeName': 'Store 2', 'role': 'OWNER'},
-            ],
-            if (includeOrganizations)
-              'organizations': [
-                {
-                  'id': 's1',
-                  'allowedOutlets': [outlet1],
-                },
-                {
-                  'id': 's2',
-                  'allowedOutlets': [outlet1, outlet2],
-                },
-              ],
-          });
-        });
-
-        final storage = FakeSecureStorage();
-        final cache = InMemoryLocalCache();
-        final apiClient = ApiClient(
-          dio: mockDio,
-          secureStorage: storage,
-          localCache: cache,
-        );
-        final repo = AuthRepository(
-          apiClient: apiClient,
-          secureStorage: storage,
-          localCache: cache,
-        );
-
-        final res = await repo.checkSession();
-        expect(res, isNotNull);
-        expect(cache.getActiveStoreId(), 's1');
-        expect(cache.getAllowedOutlets(), equals([outlet1]));
-
-        await cache.setActiveStoreId('s2');
-        expect(cache.getAllowedOutlets(), equals([outlet1, outlet2]));
-
-        // Second checkSession WITHOUT 'organizations' key leaves cache untouched
-        await cache.setActiveStoreId('s1');
-        includeOrganizations = false;
-        await repo.checkSession();
-        expect(cache.getAllowedOutlets(), equals([outlet1]));
-      },
-    );
-
-    test(
-      'refreshOutletContext returns active store fresh list, null on network error, and calls logout on 401',
-      () async {
-        var mode = 'ok';
-        var logoutPosts = 0;
-
-        final mockDio = createMockDio((options) async {
-          if (options.uri.path.contains('/auth/logout')) {
-            logoutPosts++;
-            return mockJsonResponse({'ok': true});
-          }
-          if (mode == 'network_error') {
-            throw Exception('Connection refused');
-          }
-          if (mode == '401') {
-            return mockJsonResponse({'error': 'Unauthorized'}, statusCode: 401);
-          }
-          return mockJsonResponse({
-            'user': {'id': 'u1', 'name': 'User', 'username': 'user'},
-            'stores': [
-              {'storeId': 's1', 'storeName': 'Store 1', 'role': 'EMPLOYEE'},
-            ],
+    test('checkSession caches organizations[].allowedOutlets per org id; response WITHOUT organizations leaves existing cache untouched', () async {
+      var includeOrganizations = true;
+      final mockDio = createMockDio((options) async {
+        return mockJsonResponse({
+          'user': {'id': 'u1', 'name': 'User', 'phone': 'user'},
+          'stores': [
+            {'storeId': 's1', 'storeName': 'Store 1', 'role': 'EMPLOYEE'},
+            {'storeId': 's2', 'storeName': 'Store 2', 'role': 'OWNER'},
+          ],
+          if (includeOrganizations)
             'organizations': [
               {
                 'id': 's1',
-                'allowedOutlets': [outlet2],
+                'allowedOutlets': [outlet1],
+              },
+              {
+                'id': 's2',
+                'allowedOutlets': [outlet1, outlet2],
               },
             ],
-          });
         });
+      });
 
-        final storage = FakeSecureStorage();
-        final cache = InMemoryLocalCache();
-        await cache.setActiveStoreId('s1');
-        await cache.setAllowedOutletsForStore('s1', [outlet1]);
+      final storage = FakeSecureStorage();
+      final cache = InMemoryLocalCache();
+      final apiClient = ApiClient(
+        dio: mockDio,
+        secureStorage: storage,
+        localCache: cache,
+      );
+      final repo = AuthRepository(
+        apiClient: apiClient,
+        secureStorage: storage,
+        localCache: cache,
+      );
 
-        final apiClient = ApiClient(
-          dio: mockDio,
-          secureStorage: storage,
-          localCache: cache,
-        );
-        final repo = AuthRepository(
-          apiClient: apiClient,
-          secureStorage: storage,
-          localCache: cache,
-        );
+      final res = await repo.checkSession();
+      expect(res, isNotNull);
+      expect(cache.getActiveStoreId(), 's1');
+      expect(cache.getAllowedOutlets(), equals([outlet1]));
 
-        final fresh = await repo.refreshOutletContext();
-        expect(fresh, equals([outlet2]));
-        expect(cache.getAllowedOutlets(), equals([outlet2]));
+      await cache.setActiveStoreId('s2');
+      expect(cache.getAllowedOutlets(), equals([outlet1, outlet2]));
 
-        mode = 'network_error';
-        final onErr = await repo.refreshOutletContext();
-        expect(onErr, isNull);
-        // Existing cache preserved on network failure
-        expect(cache.getAllowedOutlets(), equals([outlet2]));
+      // Second checkSession WITHOUT 'organizations' key leaves cache untouched
+      await cache.setActiveStoreId('s1');
+      includeOrganizations = false;
+      await repo.checkSession();
+      expect(cache.getAllowedOutlets(), equals([outlet1]));
+    });
 
-        mode = '401';
-        final on401 = await repo.refreshOutletContext();
-        expect(on401, isNull);
-        expect(logoutPosts, 1);
-        expect(storage.token, isNull);
-        expect(cache.cleared, isTrue);
-      },
-    );
+    test('refreshOutletContext returns active store fresh list, null on network error, and calls logout on 401', () async {
+      var mode = 'ok';
+      var logoutPosts = 0;
+
+      final mockDio = createMockDio((options) async {
+        if (options.uri.path.contains('/auth/logout')) {
+          logoutPosts++;
+          return mockJsonResponse({'ok': true});
+        }
+        if (mode == 'network_error') {
+          throw Exception('Connection refused');
+        }
+        if (mode == '401') {
+          return mockJsonResponse({'error': 'Unauthorized'}, statusCode: 401);
+        }
+        return mockJsonResponse({
+          'user': {'id': 'u1', 'name': 'User', 'phone': 'user'},
+          'stores': [
+            {'storeId': 's1', 'storeName': 'Store 1', 'role': 'EMPLOYEE'},
+          ],
+          'organizations': [
+            {
+              'id': 's1',
+              'allowedOutlets': [outlet2],
+            },
+          ],
+        });
+      });
+
+      final storage = FakeSecureStorage();
+      final cache = InMemoryLocalCache();
+      await cache.setActiveStoreId('s1');
+      await cache.setAllowedOutletsForStore('s1', [outlet1]);
+
+      final apiClient = ApiClient(
+        dio: mockDio,
+        secureStorage: storage,
+        localCache: cache,
+      );
+      final repo = AuthRepository(
+        apiClient: apiClient,
+        secureStorage: storage,
+        localCache: cache,
+      );
+
+      final fresh = await repo.refreshOutletContext();
+      expect(fresh, equals([outlet2]));
+      expect(cache.getAllowedOutlets(), equals([outlet2]));
+
+      mode = 'network_error';
+      final onErr = await repo.refreshOutletContext();
+      expect(onErr, isNull);
+      // Existing cache preserved on network failure
+      expect(cache.getAllowedOutlets(), equals([outlet2]));
+
+      mode = '401';
+      final on401 = await repo.refreshOutletContext();
+      expect(on401, isNull);
+      expect(logoutPosts, 1);
+      expect(storage.token, isNull);
+      expect(cache.cleared, isTrue);
+    });
   });
 
   group('OutletScopeCubit.hydrate() stale activeOutletId handling', () {
@@ -285,68 +279,107 @@ void main() {
 
     tearDown(() => cubit.close());
 
-    test(
-      'employee with stale activeOutletId and 1 remaining outlet auto-selects it',
-      () async {
-        await cache.setCachedStoreDetails({'role': 'EMPLOYEE'});
-        await cache.setAllowedOutlets([outlet2]);
-        await cache.setActiveOutletId('o_stale');
+    test('employee with stale activeOutletId and 1 remaining outlet auto-selects it', () async {
+      await cache.setCachedStoreDetails({'role': 'EMPLOYEE'});
+      await cache.setAllowedOutlets([outlet2]);
+      await cache.setActiveOutletId('o_stale');
 
-        cubit.hydrate();
+      cubit.hydrate();
 
-        expect(cache.getActiveOutletId(), 'o2');
-        expect(cubit.state.activeOutletId, 'o2');
-        expect(cubit.state.requiresSelection, isFalse);
-        expect(cubit.state.blockedNoOutlet, isFalse);
-      },
-    );
+      expect(cache.getActiveOutletId(), 'o2');
+      expect(cubit.state.activeOutletId, 'o2');
+      expect(cubit.state.requiresSelection, isFalse);
+      expect(cubit.state.blockedNoOutlet, isFalse);
+    });
 
-    test(
-      'employee with stale activeOutletId and 2 remaining outlets requiresSelection',
-      () async {
-        await cache.setCachedStoreDetails({'role': 'EMPLOYEE'});
-        await cache.setAllowedOutlets([outlet1, outlet2]);
-        await cache.setActiveOutletId('o_stale');
+    test('employee with stale activeOutletId and 2 remaining outlets requiresSelection', () async {
+      await cache.setCachedStoreDetails({'role': 'EMPLOYEE'});
+      await cache.setAllowedOutlets([outlet1, outlet2]);
+      await cache.setActiveOutletId('o_stale');
 
-        cubit.hydrate();
+      cubit.hydrate();
 
-        expect(cache.getActiveOutletId(), isNull);
-        expect(cubit.state.activeOutletId, isNull);
-        expect(cubit.state.requiresSelection, isTrue);
-        expect(cubit.state.blockedNoOutlet, isFalse);
-      },
-    );
+      expect(cache.getActiveOutletId(), isNull);
+      expect(cubit.state.activeOutletId, isNull);
+      expect(cubit.state.requiresSelection, isTrue);
+      expect(cubit.state.blockedNoOutlet, isFalse);
+    });
 
-    test(
-      'employee with stale activeOutletId and 0 remaining outlets is blockedNoOutlet',
-      () async {
-        await cache.setCachedStoreDetails({'role': 'EMPLOYEE'});
-        await cache.setAllowedOutlets([]);
-        await cache.setActiveOutletId('o_stale');
+    test('employee with stale activeOutletId and 0 remaining outlets is blockedNoOutlet', () async {
+      await cache.setCachedStoreDetails({'role': 'EMPLOYEE'});
+      await cache.setAllowedOutlets([]);
+      await cache.setActiveOutletId('o_stale');
 
-        cubit.hydrate();
+      cubit.hydrate();
 
-        expect(cache.getActiveOutletId(), isNull);
-        expect(cubit.state.activeOutletId, isNull);
-        expect(cubit.state.blockedNoOutlet, isTrue);
-        expect(cubit.state.requiresSelection, isFalse);
-      },
-    );
+      expect(cache.getActiveOutletId(), isNull);
+      expect(cubit.state.activeOutletId, isNull);
+      expect(cubit.state.blockedNoOutlet, isTrue);
+      expect(cubit.state.requiresSelection, isFalse);
+    });
 
-    test(
-      'owner with stale activeOutletId falls back to All outlets',
-      () async {
-        await cache.setCachedStoreDetails({'role': 'OWNER'});
-        await cache.setAllowedOutlets([outlet1, outlet2]);
-        await cache.setActiveOutletId('o_stale');
-        await cache.setAllOutletsScope(false);
+    test('owner with stale activeOutletId falls back to All outlets', () async {
+      await cache.setCachedStoreDetails({'role': 'OWNER'});
+      await cache.setAllowedOutlets([outlet1, outlet2]);
+      await cache.setActiveOutletId('o_stale');
+      await cache.setAllOutletsScope(false);
 
-        cubit.hydrate();
+      cubit.hydrate();
 
-        expect(cache.getActiveOutletId(), isNull);
-        expect(cubit.state.activeOutletId, isNull);
-        expect(cubit.state.allOutlets, isTrue);
-      },
-    );
+      expect(cache.getActiveOutletId(), isNull);
+      expect(cubit.state.activeOutletId, isNull);
+      expect(cubit.state.allOutlets, isTrue);
+    });
+
+    test('login posts phone (not username) with the password', () async {
+      Object? sentBody;
+      final mockDio = createMockDio((options) async {
+        sentBody = options.data;
+        return mockJsonResponse({
+          'token': 'tok_new',
+          'user': {'id': 'u1', 'name': 'User', 'phone': '9876500001'},
+          'stores': [
+            {'storeId': 's1', 'storeName': 'Store 1', 'role': 'OWNER'},
+          ],
+        });
+      });
+      final storage = FakeSecureStorage(token: null);
+      final cache = InMemoryLocalCache();
+      final repo = AuthRepository(
+        apiClient: ApiClient(
+          dio: mockDio,
+          secureStorage: storage,
+          localCache: cache,
+        ),
+        secureStorage: storage,
+        localCache: cache,
+      );
+
+      final res = await repo.login(' 9876500001 ', 'secret123');
+
+      expect(sentBody, {'phone': '9876500001', 'password': 'secret123'});
+      expect(res.user.phone, '9876500001');
+    });
+
+    test('setPassword stores the rotated session token', () async {
+      final mockDio = createMockDio((options) async {
+        return mockJsonResponse({'ok': true, 'token': 'tok_rotated'});
+      });
+      final storage = FakeSecureStorage(token: 'tok_old');
+      final cache = InMemoryLocalCache();
+      final repo = AuthRepository(
+        apiClient: ApiClient(
+          dio: mockDio,
+          secureStorage: storage,
+          localCache: cache,
+        ),
+        secureStorage: storage,
+        localCache: cache,
+      );
+
+      await repo.setPassword('NewPass123');
+
+      expect(storage.token, 'tok_rotated');
+    });
   });
 }

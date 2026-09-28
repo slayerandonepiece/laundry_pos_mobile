@@ -441,8 +441,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   ? const EmptyState(
                       icon: Icons.receipt_long_outlined,
                       title: "Can't load orders",
-                      subtitle:
-                          "You're offline or the server can't be reached. Pull down to try again.",
+                      subtitle: "You're offline or the server can't be reached. Pull down to try again.",
                     )
                   : EmptyState(
                       icon: Icons.receipt_long_outlined,

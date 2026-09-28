@@ -45,14 +45,14 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     String fallbackName = 'Owner';
-    String username = 'owner';
+    String loginPhone = '';
     String role = 'Store Owner';
 
     if (authState is AuthenticatedState) {
       fallbackName = authState.user.name.isNotEmpty
           ? authState.user.name
-          : authState.user.username;
-      username = authState.user.username;
+          : authState.user.phone;
+      loginPhone = authState.user.phone;
       role = authState.isOwner ? 'Store Owner' : 'Staff Member';
     }
 
@@ -214,7 +214,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: [
-                            _buildRow('USERNAME', '@$username'),
+                            _buildRow('SIGN-IN PHONE', loginPhone),
                             const Divider(color: AppColors.border, height: 20),
                             _buildRow('ROLE', role),
                           ],

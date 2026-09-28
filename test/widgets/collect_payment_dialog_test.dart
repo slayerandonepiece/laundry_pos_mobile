@@ -144,8 +144,18 @@ void main() {
       mockRepo = MockCollectOrdersRepository();
       ordersBloc = OrdersBloc(ordersRepository: mockRepo);
       fakePosRepo = FakeDialogPosRepository([
-        StorePaymentMethod(id: 'pm_cash', name: 'Cash', type: 'Cash', active: true),
-        StorePaymentMethod(id: 'pm_upi', name: 'Upi', type: 'UPI', active: true),
+        StorePaymentMethod(
+          id: 'pm_cash',
+          name: 'Cash',
+          type: 'Cash',
+          active: true,
+        ),
+        StorePaymentMethod(
+          id: 'pm_upi',
+          name: 'Upi',
+          type: 'UPI',
+          active: true,
+        ),
       ]);
     });
 
@@ -207,7 +217,9 @@ void main() {
         expect(submitBtn.onPressed, isNotNull);
 
         // Tap Collect & deliver
-        await tester.tap(find.widgetWithText(PrimaryButton, 'Collect & deliver'));
+        await tester.tap(
+          find.widgetWithText(PrimaryButton, 'Collect & deliver'),
+        );
         await tester.runAsync(() async {
           await ordersBloc.stream.firstWhere(
             (s) => s.actionSuccessMessage != null,
@@ -228,7 +240,11 @@ void main() {
       tester,
     ) async {
       fakePosRepo.cachedMethods = [
-        StorePaymentMethod.fromJson({'id': 'pm_c', 'name': 'Card', 'enabled': true}),
+        StorePaymentMethod.fromJson({
+          'id': 'pm_c',
+          'name': 'Card',
+          'enabled': true,
+        }),
       ];
       await tester.pumpWidget(createTestDialog());
 
@@ -303,6 +319,33 @@ void main() {
         expect(deliverBtn.onPressed, isNotNull);
         // Nothing to collect, so no payment-method fetch.
         expect(fakePosRepo.listCalls, 0);
+      },
+    );
+
+    testWidgets(
+      'Does not overflow on narrow mobile screens (360x800 and 402x874)',
+      (tester) async {
+        // Test on standard iPhone 17 Pro width (402)
+        tester.view.physicalSize = const Size(402 * 3, 874 * 3);
+        tester.view.devicePixelRatio = 3.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(createTestDialog());
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Collect & deliver'), findsOneWidget);
+
+        // Also test on even narrower screen (360dp width)
+        tester.view.physicalSize = const Size(360 * 3, 800 * 3);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Collect & deliver'), findsOneWidget);
       },
     );
   });

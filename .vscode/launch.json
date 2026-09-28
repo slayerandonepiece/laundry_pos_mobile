@@ -2,10 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "MyShop (Dev)",
+      "name": "KlenPOS (Dev)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "debug",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "dev",
@@ -13,10 +14,11 @@
       ]
     },
     {
-      "name": "MyShop (Stage)",
+      "name": "KlenPOS (Stage)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "debug",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "stage",
@@ -24,10 +26,11 @@
       ]
     },
     {
-      "name": "MyShop (Prod)",
+      "name": "KlenPOS (Prod)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "debug",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "prod",
@@ -35,10 +38,11 @@
       ]
     },
     {
-      "name": "MyShop (Dev - Profile)",
+      "name": "KlenPOS (Dev - Profile)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "dev",
@@ -46,10 +50,11 @@
       ]
     },
     {
-      "name": "MyShop (Stage - Profile)",
+      "name": "KlenPOS (Stage - Profile)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "stage",
@@ -57,10 +62,11 @@
       ]
     },
     {
-      "name": "MyShop (Prod - Profile)",
+      "name": "KlenPOS (Prod - Profile)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "prod",
@@ -68,10 +74,23 @@
       ]
     },
     {
-      "name": "MyShop (Prod - Release)",
+      "name": "KlenPOS (Stage - Release)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "release",
+      "program": "lib/main.dart",
+      "args": [
+        "--flavor",
+        "stage",
+        "--dart-define=ENV=stage"
+      ]
+    },
+    {
+      "name": "KlenPOS (Prod - Release)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "program": "lib/main.dart",
       "args": [
         "--flavor",
         "prod",

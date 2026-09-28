@@ -7,9 +7,7 @@ machine-local and do **not** reach cloud sessions — this file does.
 ## How the user wants to work
 
 - Never commit without explicit permission, per batch of work.
-- Keep **one working branch per repo, named per side**: `frontend/offline-id`
-  here, `backend/offline-id` in `laundry_pos`. Pull `main` into it before
-  each batch.
+- Keep **one working branch per repo** using the user-requested name. Keep mobile and backend commits separate; inspect the actual main baseline before each batch.
 - Frontend and backend work happen in **separate chats**, each with its own
   prompt and its own diff — never club the two repos in one session or diff.
 - Merge finished work to `main`; merging does not deploy (auto-deploy
@@ -33,7 +31,7 @@ machine-local and do **not** reach cloud sessions — this file does.
 - Test against the local backend: the app's default `ENV=dev` already points
   to `127.0.0.1:3000` (iOS sim) / `10.0.2.2:3000` (Android emu); run the
   backend with `npm run dev` in `../laundry_pos`. iOS builds need
-  `--flavor dev` (bundle `com.myshop.myshop.dev`). Tell test agents
+  `--flavor dev` (bundle `com.reddygona.klenpos.dev`). Tell test agents
   whether signing out is allowed.
 - Update this file, `docs/HANDOFF.md` and the relevant plan doc at the end of
   every session, and mention artifacts and discussions.
@@ -86,7 +84,53 @@ machine-local and do **not** reach cloud sessions — this file does.
   refused (HTTP 403) by the session git proxy — ask the user to delete them
   on GitHub.
 
+## KlenPOS rebrand, Firebase, and gating (28 September 2026)
+
+- App is **KlenPOS**; bundle ID/applicationId `com.reddygona.klenpos`
+  (`.dev`/`.staging` suffixes). Dart package name stays `myshop` —
+  intentional, internal-only. Full detail: `docs/HANDOFF.md` "KlenPOS
+  rebrand + Firebase + gating" section.
+- Brand palette: Electric Cyan `#00D4FF`, Crisp Mint `#4CFFB3`, Deep
+  Hydro `#0A2540`, Clean Obsidian `#0B0F14`. Source assets in
+  `assets/icons/` and `assets/branding/`; see
+  `assets/branding/klenpos_palette.md`.
+- Native splash (Android `launch_background.xml`, iOS
+  `LaunchScreen.storyboard`) is **white background + transparent logo
+  only** — never a colored canvas. The in-app Flutter `SplashScreen`
+  (`lib/features/auth/presentation/splash_screen.dart`) owns the actual
+  Deep Hydro brand-color reveal. Don't reintroduce a colored native
+  splash; it was explicitly reverted once already.
+- Firebase (`lib/core/network/firebase_service.dart`): Crashlytics,
+  Analytics, Messaging, Remote Config, initialized per dev/stage/prod
+  flavor. Remote Config keys (`min_supported_version`,
+  `force_update_enabled`, `maintenance_mode_enabled`, `ios_app_store_id`,
+  `maintenance_message`, `maintenance_eta`) default to inert/empty in
+  code — **not yet created in the Firebase console** for any of the 3
+  projects. Nothing blocks the app until someone sets these remotely.
+- Maintenance-mode + force-update gate: `lib/core/gate/app_gate_service.dart`
+  (`lib/core/app_gate_service.dart` is a re-export, unused, harmless).
+  Priority: maintenance mode > Android force-update (`in_app_update`,
+  Play Core native flow) > iOS force-update (`upgrader`, non-dismissible
+  via `canDismissDialog: false`/`showIgnore: false`/`showLater: false`).
+  Checked at startup + app resume only, never per-route. Everything fails
+  open on any error — only an explicit fetched "below minimum version"
+  blocks. `ios_app_store_id` is empty until there's an actual App Store
+  listing; `upgrader` no-ops gracefully until then.
+- No App Store or Play Store listing exists yet — this whole gating
+  system is dormant/inert by design until those exist and the Remote
+  Config values are set.
+
 ## Artifacts
 
 - Owner-screen wireframes (every owner screen, minimal UI):
   https://claude.ai/artifact/KXDqbi19o2crwHR9rw8to3
+
+## Workspace enhancement rules (27 September 2026)
+
+- Bring new web features/enhancements to Flutter feature by feature; retain mobile-only offline behavior. A source parity report is not implementation or device verification.
+- Checkout methods are API/store-configured, in supplied order, with no synthetic pay-later method, Cash fallback or default preselection. COD detection uses normalized code first, then name (`COD` or `CASHONDELIVERY`); COD creates no initial payment.
+- Catalog loads show cached products/methods immediately, then refresh enabled methods without losing the cache on failure. This is a deliberate freshness exception to cached screen navigation.
+- Mobile password endpoints can rotate and return a token. Save it before later authenticated requests; owner change-password payload uses `oldPassword`, not `currentPassword`.
+- Weighted full-height sheets need top safe-area protection with a keyboard; preserve their bottom keyboard/safe-area handling and scrollable content.
+- Browser web-console checks use `localhost:3000`; the iOS API still uses `127.0.0.1:3000`. Do not classify non-localhost dev-asset failure or screenshot-pixel/device-point mismatch as an app bug.
+- Never store account credentials in committed context, reports or memory. Keep historical test claims separate from fresh checks.
