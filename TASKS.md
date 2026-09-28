@@ -1,9 +1,11 @@
 # KlenPOS mobile — task list (Phase 2)
 
-Flutter app for the Laundry POS backend. "MyShop" is a **working title**
-— it appears only on the splash and login screens, never on anything a
-customer sees. The Flutter package is `myshop` / `com.myshop`; renaming
-is cheap now and expensive after the first store install.
+Flutter app for the Laundry POS backend. Branded **KlenPOS** (rebranded
+2026-09-28, commit `feb909f`) — bundle ID / applicationId is
+`com.reddygona.klenpos` (`.dev`/`.staging` suffixes per flavor). The Dart
+package name (`myshop` in `pubspec.yaml`) is intentionally unchanged — an
+internal identifier, not user-facing; see `docs/HANDOFF.md` "KlenPOS
+rebrand + Firebase + gating" for the full rebrand scope.
 
 ## Current status — 27 September 2026
 

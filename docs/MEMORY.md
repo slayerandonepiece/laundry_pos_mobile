@@ -31,7 +31,7 @@ machine-local and do **not** reach cloud sessions — this file does.
 - Test against the local backend: the app's default `ENV=dev` already points
   to `127.0.0.1:3000` (iOS sim) / `10.0.2.2:3000` (Android emu); run the
   backend with `npm run dev` in `../laundry_pos`. iOS builds need
-  `--flavor dev` (bundle `com.reddygona.lpos.dev`). Tell test agents
+  `--flavor dev` (bundle `com.reddygona.klenpos.dev`). Tell test agents
   whether signing out is allowed.
 - Update this file, `docs/HANDOFF.md` and the relevant plan doc at the end of
   every session, and mention artifacts and discussions.
@@ -83,6 +83,42 @@ machine-local and do **not** reach cloud sessions — this file does.
   (3.47.x, Dart ≥ 3.13.1) into the scratchpad. Deleting remote branches is
   refused (HTTP 403) by the session git proxy — ask the user to delete them
   on GitHub.
+
+## KlenPOS rebrand, Firebase, and gating (28 September 2026)
+
+- App is **KlenPOS**; bundle ID/applicationId `com.reddygona.klenpos`
+  (`.dev`/`.staging` suffixes). Dart package name stays `myshop` —
+  intentional, internal-only. Full detail: `docs/HANDOFF.md` "KlenPOS
+  rebrand + Firebase + gating" section.
+- Brand palette: Electric Cyan `#00D4FF`, Crisp Mint `#4CFFB3`, Deep
+  Hydro `#0A2540`, Clean Obsidian `#0B0F14`. Source assets in
+  `assets/icons/` and `assets/branding/`; see
+  `assets/branding/klenpos_palette.md`.
+- Native splash (Android `launch_background.xml`, iOS
+  `LaunchScreen.storyboard`) is **white background + transparent logo
+  only** — never a colored canvas. The in-app Flutter `SplashScreen`
+  (`lib/features/auth/presentation/splash_screen.dart`) owns the actual
+  Deep Hydro brand-color reveal. Don't reintroduce a colored native
+  splash; it was explicitly reverted once already.
+- Firebase (`lib/core/network/firebase_service.dart`): Crashlytics,
+  Analytics, Messaging, Remote Config, initialized per dev/stage/prod
+  flavor. Remote Config keys (`min_supported_version`,
+  `force_update_enabled`, `maintenance_mode_enabled`, `ios_app_store_id`,
+  `maintenance_message`, `maintenance_eta`) default to inert/empty in
+  code — **not yet created in the Firebase console** for any of the 3
+  projects. Nothing blocks the app until someone sets these remotely.
+- Maintenance-mode + force-update gate: `lib/core/gate/app_gate_service.dart`
+  (`lib/core/app_gate_service.dart` is a re-export, unused, harmless).
+  Priority: maintenance mode > Android force-update (`in_app_update`,
+  Play Core native flow) > iOS force-update (`upgrader`, non-dismissible
+  via `canDismissDialog: false`/`showIgnore: false`/`showLater: false`).
+  Checked at startup + app resume only, never per-route. Everything fails
+  open on any error — only an explicit fetched "below minimum version"
+  blocks. `ios_app_store_id` is empty until there's an actual App Store
+  listing; `upgrader` no-ops gracefully until then.
+- No App Store or Play Store listing exists yet — this whole gating
+  system is dormant/inert by design until those exist and the Remote
+  Config values are set.
 
 ## Artifacts
 

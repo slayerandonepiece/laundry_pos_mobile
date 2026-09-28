@@ -5,7 +5,7 @@ Reference guide for wiring the finalized brand assets (see `assets/icons/` and
 Firebase across dev/stage/prod.
 
 - App name: **KlenPOS**
-- Bundle ID / applicationId: `com.reddygona.lpos` (prod), `com.reddygona.lpos.dev`, `com.reddygona.lpos.stage`
+- Bundle ID / applicationId: `com.reddygona.klenpos` (prod), `com.reddygona.klenpos.dev`, `com.reddygona.klenpos.staging`
 - Palette: Electric Cyan `#00D4FF`, Crisp Mint `#4CFFB3`, Deep Hydro `#0A2540`, Clean Obsidian `#0B0F14`
 
 ---
@@ -212,8 +212,8 @@ IF you have Firebase MCP tools available:
   availability), and billing account if Blaze plan is required for any
   feature.
 - Use the MCP tools to create the 3 Firebase projects, register the
-  Android app (applicationId com.reddygona.lpos, with .dev/.stage
-  suffixes) and iOS app (bundle ID com.reddygona.lpos, with .dev/.stage
+  Android app (applicationId com.reddygona.klenpos, with .dev/.staging
+  suffixes) and iOS app (bundle ID com.reddygona.klenpos, with .dev/.staging
   suffixes) in each project, enable Crashlytics, Analytics, Cloud
   Messaging, and Remote Config on each, and fetch the resulting
   google-services.json / GoogleService-Info.plist for each of the 3
@@ -227,10 +227,10 @@ IF you do NOT have Firebase MCP tools available:
   console (https://console.firebase.google.com) to:
   1. Create 3 separate projects: klenpos-dev, klenpos-stage, klenpos-prod
   2. In each project, register an Android app with applicationId
-     com.reddygona.lpos.dev / com.reddygona.lpos.stage /
-     com.reddygona.lpos (prod), and an iOS app with bundle ID
-     com.reddygona.lpos.dev / com.reddygona.lpos.stage /
-     com.reddygona.lpos (prod)
+     com.reddygona.klenpos.dev / com.reddygona.klenpos.staging /
+     com.reddygona.klenpos (prod), and an iOS app with bundle ID
+     com.reddygona.klenpos.dev / com.reddygona.klenpos.staging /
+     com.reddygona.klenpos (prod)
   3. Enable Crashlytics, Analytics, Cloud Messaging, Remote Config in each
      project
   4. Download google-services.json and GoogleService-Info.plist for each

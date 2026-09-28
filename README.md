@@ -26,8 +26,110 @@ The HTTP API and offline-ID sync work are implemented; mobile main includes PR #
 
 Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Android/iOS are the targets. New web enhancements are tracked feature by feature in `docs/WEB-MOBILE-FEATURE-GAPS.md`, with offline regression checks. The audit does not mean those enhancements are implemented.
 
+---
+
+## Build & Release Commands (Copy-Paste Ready)
+
+### 1. Android Release Commands (with Obfuscation & R8)
+
+> [!NOTE]
+> All release builds automatically apply R8 code/resource shrinking via `proguard-rules.pro` and require signing credentials in `android/key.properties`.
+
+#### A. Android App Bundles (`.aab` for Google Play Store)
+
+* **Stage / Beta (`com.reddygona.klenpos.staging`)**:
+  ```bash
+  flutter build appbundle \
+    --flavor stage \
+    -t lib/main.dart \
+    --dart-define=ENV=stage \
+    --obfuscate \
+    --split-debug-info=build/symbols/stage
+  ```
+  *Output:* `build/app/outputs/bundle/stageRelease/app-stage-release.aab`
+
+* **Production (`com.reddygona.klenpos`)**:
+  ```bash
+  flutter build appbundle \
+    --flavor prod \
+    -t lib/main.dart \
+    --dart-define=ENV=prod \
+    --obfuscate \
+    --split-debug-info=build/symbols/prod
+  ```
+  *Output:* `build/app/outputs/bundle/prodRelease/app-prod-release.aab`
+
+---
+
+#### B. Android Release APKs (for Direct Sideloading / Device Testing)
+
+* **Stage / Beta APK**:
+  ```bash
+  flutter build apk \
+    --flavor stage \
+    -t lib/main.dart \
+    --dart-define=ENV=stage \
+    --obfuscate \
+    --split-debug-info=build/symbols/stage
+  ```
+  *Output:* `build/app/outputs/flutter-apk/app-stage-release.apk`
+
+* **Production APK**:
+  ```bash
+  flutter build apk \
+    --flavor prod \
+    -t lib/main.dart \
+    --dart-define=ENV=prod \
+    --obfuscate \
+    --split-debug-info=build/symbols/prod
+  ```
+  *Output:* `build/app/outputs/flutter-apk/app-prod-release.apk`
+
+---
+
+### 2. iOS Release Commands (for TestFlight & App Store)
+
+* **Stage / Beta (`com.reddygona.klenpos.staging`)**:
+  ```bash
+  flutter build ipa \
+    --flavor stage \
+    -t lib/main.dart \
+    --dart-define=ENV=stage \
+    --obfuscate \
+    --split-debug-info=build/symbols/ios-stage
+  ```
+  *Output:* `build/ios/ipa/KlenPOS Stage.ipa`
+
+* **Production (`com.reddygona.klenpos`)**:
+  ```bash
+  flutter build ipa \
+    --flavor prod \
+    -t lib/main.dart \
+    --dart-define=ENV=prod \
+    --obfuscate \
+    --split-debug-info=build/symbols/ios-prod
+  ```
+  *Output:* `build/ios/ipa/KlenPOS.ipa`
+
+---
+
+### 3. Local Development & Debugging
+
+* **Run Dev (local emulator/device)**:
+  ```bash
+  flutter run --flavor dev -t lib/main.dart --dart-define=ENV=dev
+  ```
+* **Run Stage**:
+  ```bash
+  flutter run --flavor stage -t lib/main.dart --dart-define=ENV=stage
+  ```
+* **Run Prod**:
+  ```bash
+  flutter run --flavor prod -t lib/main.dart --dart-define=ENV=prod
+  ```
+
+---
+
 ## Note
 
-`.claude/launch.json` starts the **web** app (`npm --prefix
-../laundry_pos run dev`) for design-parity checks. It is not used by the
-Flutter build; delete it if you find it confusing.
+`.claude/launch.json` starts the **web** app (`npm --prefix ../laundry_pos run dev`) for design-parity checks. It is not used by the Flutter build; delete it if you find it confusing.

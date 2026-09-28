@@ -4,6 +4,70 @@ Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
+## Current status — 28 September 2026 (KlenPOS rebrand + Firebase + gating)
+
+This section supersedes the "28 September 2026" web/mobile parity section
+below (that work is done and merged separately; this is a later, distinct
+batch the same day).
+
+Committed as `feb909f` on `feat/workspace-improvements`: `flutter analyze`
+clean, `flutter test` **402/402** pass.
+
+- **Rebrand**: app renamed MyShop → **KlenPOS**. Bundle ID / applicationId
+  changed `com.myshop.myshop` → `com.reddygona.klenpos` (with `.dev`/`.staging`
+  suffixes) across Android (`build.gradle.kts`, Kotlin package path) and iOS
+  (`project.pbxproj`, all schemes). Dart package name (`myshop` in
+  `pubspec.yaml`) was **left unchanged** — it's an internal identifier, not
+  user-facing, and renaming it would touch every import for no user benefit.
+  Brand palette: Electric Cyan `#00D4FF`, Crisp Mint `#4CFFB3`, Deep Hydro
+  `#0A2540`, Clean Obsidian `#0B0F14` (see `assets/branding/klenpos_palette.md`).
+- **App icon & splash assets**: final set in `assets/icons/` and
+  `assets/branding/` (iOS 1024 no-alpha icon, Android adaptive
+  foreground/background layers, Play Store/feature-graphic assets, logo
+  lockups, favicons). Wired into `ios/Runner/Assets.xcassets/AppIcon.appiconset`
+  and Android `mipmap-*` via `sips` (see `docs/BRANDING-AND-FIREBASE-SETUP.md`).
+  **Native splash is white background + the transparent
+  `klenpos_adaptive_foreground_432.png` logo only** — not a colored canvas;
+  an earlier colored-background version was explicitly reverted per user
+  request, and the two now-orphaned colored splash PNGs
+  (`klenpos_splash_android.png` / `klenpos_splash_ios.png`) were deleted
+  before this commit, never having been in history. The in-app Flutter
+  `SplashScreen` (not the native one) owns the actual Deep Hydro brand-color
+  experience, with a circular logo and an animated background reveal —
+  see `lib/features/auth/presentation/splash_screen.dart` and
+  `test/widgets/splash_screen_test.dart`.
+- **Firebase**: `lib/core/network/firebase_service.dart` initializes Core,
+  Crashlytics (disabled in debug), Analytics, Messaging, and Remote Config,
+  gated per dev/stage/prod flavor. Remote Config `setDefaults()` are
+  deliberately inert/empty (`min_supported_version: ""`,
+  `force_update_enabled: false`, `maintenance_mode_enabled: false`,
+  `ios_app_store_id: ""`) so nothing blocks the app until these are set in
+  each Firebase project's console — **not yet done**, no App Store/Play
+  Store listing exists yet either, so `ios_app_store_id` stays empty until
+  there's something to point it at.
+- **Maintenance mode + force update**: `lib/core/gate/app_gate_service.dart`
+  (`lib/core/app_gate_service.dart` is a thin re-export, kept for import
+  convenience but currently unused — harmless, not wired anywhere) evaluates,
+  in order: maintenance mode (highest priority, custom full-screen
+  `lib/features/maintenance/presentation/maintenance_screen.dart`) → Android
+  force update (`in_app_update` package, Play Core native immediate-update
+  flow) → iOS force update (`upgrader` package, non-dismissible alert via
+  `canDismissDialog: false` / `showIgnore: false` / `showLater: false`,
+  redirects to the App Store product page). Checked at startup and on app
+  resume from background (not on every route — this is a POS app, staff
+  leave it open all day; per-route checks would also risk interrupting a
+  live transaction). **Everything fails open** on any fetch/lookup/version-
+  parse error — Remote Config being unreachable, offline, or a sideloaded
+  dev/stage build never blocks the user, only an explicit successfully-
+  fetched "you're below minimum version" result does.
+- **Still open / not yet done**: Firebase Remote Config keys not yet created
+  in the 3 Firebase project consoles (dev/stage/prod); `ios_app_store_id`
+  and store URLs unset (no store listings yet); resume-check's
+  mid-transaction deferral (`AppGateService.isMidTransaction`) exists but
+  hasn't been independently device-verified; Android `in_app_update` flow
+  not yet tested against an actual Play Store internal-testing track (only
+  reachable once there's a Play Console listing).
+
 ## Current status — 28 September 2026
 
 This section supersedes the 27 September section below, which is itself now
@@ -239,7 +303,7 @@ now itself historical, superseded by 28 September above.
   cold start, orders list and outlet switching all pass; the setup screen
   rows, a never-opened outlet and the employee flow were not seen. Details
   in the plan doc §8. Build command: `flutter build ios --simulator --debug
-  --flavor dev --dart-define=ENV=dev` (bundle `com.reddygona.lpos.dev`).
+  --flavor dev --dart-define=ENV=dev` (bundle `com.reddygona.klenpos.dev`).
 - Superseded branch `claude/nifty-newton-8w8fhh` and the merged
   `chore/backend-and-setup` branches (both repos) are for the user to delete
   on GitHub (session git proxy refuses remote deletes).

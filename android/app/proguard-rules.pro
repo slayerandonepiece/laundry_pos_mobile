@@ -74,3 +74,7 @@
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
+
+# --- Firebase & Crashlytics ---
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**

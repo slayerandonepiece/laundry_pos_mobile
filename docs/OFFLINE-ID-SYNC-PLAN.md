@@ -300,7 +300,7 @@ merge to `main` together with `backend/offline-id` (user's call).
   Neon dev DB, including `20260926100000_add_order_offline_id`.
 - Simulator pass of Phase 2 (Sonnet subagent, iPhone 17 Pro, worktree at
   `dadee1d`, owner account, user signed in). Build needs
-  `--flavor dev --dart-define=ENV=dev` (bundle `com.reddygona.lpos.dev`).
+  `--flavor dev --dart-define=ENV=dev` (bundle `com.reddygona.klenpos.dev`).
   - PASS: cold start of a synced scope opens straight to the dashboard;
     after sign-out + fresh sign-in the app synced and landed on the
     dashboard with "All data synced", same totals as before; Orders shows
