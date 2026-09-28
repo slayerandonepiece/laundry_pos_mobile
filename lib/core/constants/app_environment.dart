@@ -60,13 +60,13 @@ class AppEnvironmentConfig {
   /// Staging URL definition (commented by default per requirements)
   static String get stageUrl {
     // Stage URL — uncomment when ready to point to remote staging:
-    return 'https://express-laundry-staging.vercel.app';
+    return 'https://klenpos-staging.vercel.app/';
   }
 
   /// Production URL definition (left empty per requirements, add when ready)
   static String get prodUrl {
     // Production URL — leave empty for now, add when ready:
-    return '';
+    return 'https://klenpos-prod.vercel.app/';
   }
 
   /// Resolves the base URL for the active environment:
