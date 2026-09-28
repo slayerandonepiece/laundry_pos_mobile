@@ -193,9 +193,7 @@ class SpyAuthRepository extends AuthRepository {
   Future<AuthResult?> checkSession() async {
     return AuthResult(
       user: User(id: 'u1', name: 'Priya', phone: 'priya'),
-      stores: [
-        StoreSummary(storeId: 's1', storeName: 'Store 1', role: role),
-      ],
+      stores: [StoreSummary(storeId: 's1', storeName: 'Store 1', role: role)],
     );
   }
 
@@ -616,55 +614,52 @@ void main() {
       },
     );
 
-    test(
-      '400 {"error":"Invalid outlet."} fires onInvalidOutlet and still throws ValidationException; other 400 messages do not fire',
-      () async {
-        var invalidOutletCalls = 0;
+    test('400 {"error":"Invalid outlet."} fires onInvalidOutlet and still throws ValidationException; other 400 messages do not fire', () async {
+      var invalidOutletCalls = 0;
 
-        final mockDio = createMockDio((options) async {
-          if (options.uri.path.contains('/invalid-outlet')) {
-            return mockJsonResponse({
-              'error': 'Invalid outlet.',
-            }, statusCode: 400);
-          }
+      final mockDio = createMockDio((options) async {
+        if (options.uri.path.contains('/invalid-outlet')) {
           return mockJsonResponse({
-            'error': 'Some other validation error',
+            'error': 'Invalid outlet.',
           }, statusCode: 400);
-        });
+        }
+        return mockJsonResponse({
+          'error': 'Some other validation error',
+        }, statusCode: 400);
+      });
 
-        final apiClient = ApiClient(
-          dio: mockDio,
-          secureStorage: FakeSecureStorage(),
-          localCache: InMemoryLocalCache(),
-          onInvalidOutlet: () {
-            invalidOutletCalls++;
-          },
-        );
+      final apiClient = ApiClient(
+        dio: mockDio,
+        secureStorage: FakeSecureStorage(),
+        localCache: InMemoryLocalCache(),
+        onInvalidOutlet: () {
+          invalidOutletCalls++;
+        },
+      );
 
-        await expectLater(
-          () => apiClient.get('https://example.com/api/v1/invalid-outlet'),
-          throwsA(
-            isA<ValidationException>().having(
-              (e) => e.message,
-              'message',
-              'Invalid outlet.',
-            ),
+      await expectLater(
+        () => apiClient.get('https://example.com/api/v1/invalid-outlet'),
+        throwsA(
+          isA<ValidationException>().having(
+            (e) => e.message,
+            'message',
+            'Invalid outlet.',
           ),
-        );
-        expect(invalidOutletCalls, 1);
+        ),
+      );
+      expect(invalidOutletCalls, 1);
 
-        await expectLater(
-          () => apiClient.get('https://example.com/api/v1/other-400'),
-          throwsA(
-            isA<ValidationException>().having(
-              (e) => e.message,
-              'message',
-              'Some other validation error',
-            ),
+      await expectLater(
+        () => apiClient.get('https://example.com/api/v1/other-400'),
+        throwsA(
+          isA<ValidationException>().having(
+            (e) => e.message,
+            'message',
+            'Some other validation error',
           ),
-        );
-        expect(invalidOutletCalls, 1);
-      },
-    );
+        ),
+      );
+      expect(invalidOutletCalls, 1);
+    });
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:myshop/core/constants/app_assets.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
@@ -444,20 +445,9 @@ class _BootstrapHeader extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Centered branding icon
-        Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            color: AppColors.primaryTint,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.local_laundry_service_rounded,
-              size: 40,
-              color: AppColors.primary,
-            ),
-          ),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Image.asset(AppAssets.logo, width: 72, height: 72),
         ),
         const SizedBox(height: 20),
 

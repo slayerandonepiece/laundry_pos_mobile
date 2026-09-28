@@ -1,5 +1,5 @@
 name: myshop
-description: "MyShop — Laundry POS mobile app"
+description: "KlenPOS — Laundry POS mobile app"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -49,6 +49,14 @@ dependencies:
   package_info_plus: ^10.2.1
   dio: ^5.11.1
   fl_chart: ^1.2.0
+  firebase_core: ^4.15.0
+  firebase_crashlytics: ^5.4.0
+  firebase_analytics: ^12.6.0
+  firebase_messaging: ^16.7.0
+  firebase_remote_config: ^6.7.0
+  in_app_update: ^5.0.0
+  upgrader: ^13.7.0
+  version: ^3.0.2
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +77,8 @@ flutter:
 
   assets:
     - assets/fonts/
+    - assets/branding/
+    - assets/icons/
 
   fonts:
     - family: Manrope

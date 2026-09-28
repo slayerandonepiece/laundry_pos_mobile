@@ -25,16 +25,16 @@ class ReadyBillActionsSheet extends StatelessWidget {
   const ReadyBillActionsSheet({
     super.key,
     required this.order,
-    this.storeName = 'MyShop Laundry',
-    this.storeAddress = 'Bengaluru, India',
+    this.storeName = '',
+    this.storeAddress = '',
     this.storePhone = '',
   });
 
   static Future<void> show(
     BuildContext context, {
     required Order order,
-    String storeName = 'MyShop Laundry',
-    String storeAddress = 'Bengaluru, India',
+    String storeName = '',
+    String storeAddress = '',
     String storePhone = '',
   }) {
     return showModalBottomSheet(
@@ -55,7 +55,7 @@ class ReadyBillActionsSheet extends StatelessWidget {
       'your order ${order.displayCode} is ready! Your total bill is '
       '${CurrencyFormatter.format(order.totalAmount)}. '
       'Please come and collect your order at your convenience. '
-      'Thank you for choosing $storeName!';
+      '${storeName.isNotEmpty ? "Thank you for choosing $storeName!" : "Thank you for your business!"}';
 
   @override
   Widget build(BuildContext context) {

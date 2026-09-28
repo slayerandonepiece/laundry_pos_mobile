@@ -35,9 +35,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: const TextScaler.linear(0.8),
-            ),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(0.8)),
             child: child!,
           ),
           home: Scaffold(
@@ -70,7 +69,10 @@ void main() {
       final addToSaleFinder = find.text('Add to sale');
       expect(addToSaleFinder, findsOneWidget);
       expect(tester.getTopLeft(addToSaleFinder).dy, lessThan(874 - 336));
-      expect(tester.getBottomRight(addToSaleFinder).dy, lessThanOrEqualTo(874 - 336));
+      expect(
+        tester.getBottomRight(addToSaleFinder).dy,
+        lessThanOrEqualTo(874 - 336),
+      );
     },
   );
 }

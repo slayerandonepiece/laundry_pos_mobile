@@ -55,3 +55,8 @@ app.*.map.json
 
 # Ephemeral per-session task-handoff checkpoint (personal, not durable knowledge)
 .claude/CHECKPOINT.md
+
+# Firebase credentials & configs
+**/google-services.json
+**/GoogleService-Info.plist
+ios/Firebase/**/*.plist

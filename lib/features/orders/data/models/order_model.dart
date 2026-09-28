@@ -249,8 +249,11 @@ class Order {
       if (keepInv) 'invoice': cachedInv,
     };
   }
-  DateTime get createdAt => DateTime.tryParse(date)?.toLocal() ?? DateTime.now();
-  DateTime get dueDateTime => DateTime.tryParse(due)?.toLocal() ?? DateTime.now();
+
+  DateTime get createdAt =>
+      DateTime.tryParse(date)?.toLocal() ?? DateTime.now();
+  DateTime get dueDateTime =>
+      DateTime.tryParse(due)?.toLocal() ?? DateTime.now();
 
   factory Order.fromJson(Map<String, dynamic> json) {
     final rawLines = json['lines'] as List? ?? [];

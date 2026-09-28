@@ -108,9 +108,7 @@ class PosRepository {
       final cached = _localCache.getCachedPaymentMethods();
       if (cached != null) {
         return cached
-            .map(
-              (m) => StorePaymentMethod.fromJson(m),
-            )
+            .map((m) => StorePaymentMethod.fromJson(m))
             .where((m) => m.active)
             .toList();
       }
@@ -136,9 +134,7 @@ class PosRepository {
       final cached = _localCache.getCachedPaymentMethods();
       if (cached != null) {
         return cached
-            .map(
-              (m) => StorePaymentMethod.fromJson(m),
-            )
+            .map((m) => StorePaymentMethod.fromJson(m))
             .where((m) => m.active)
             .toList();
       }

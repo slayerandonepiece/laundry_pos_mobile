@@ -57,8 +57,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
     try {
       final repo = context.read<PosRepository>();
       final methods =
-          repo.getCachedPaymentMethodsList() ??
-          await repo.listPaymentMethods();
+          repo.getCachedPaymentMethodsList() ?? await repo.listPaymentMethods();
       if (!mounted) return;
       setState(() {
         _methods = methods;
@@ -131,7 +130,8 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
       },
       builder: (context, state) {
         final isBusy = state.isCollectingPayment;
-        final canSubmit = !isBusy &&
+        final canSubmit =
+            !isBusy &&
             _isAmountValid &&
             !_loadingMethods &&
             _selectedMethodName != null;
@@ -212,8 +212,9 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                     label: 'Amount (₹)',
                     controller: _amountController,
                     hintText: '0.00',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     errorText: _amountError,
                     onChanged: (_) => setState(() {}),
                     suffixIcon: TextButton(
@@ -288,8 +289,8 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                         onTap: isBusy
                             ? () {}
                             : () => setState(
-                                  () => _selectedMethodName = _methods[i].name,
-                                ),
+                                () => _selectedMethodName = _methods[i].name,
+                              ),
                       ),
                     ],
                     const SizedBox(height: 20),
@@ -301,8 +302,9 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                       Expanded(
                         child: SecondaryButton(
                           label: 'Cancel',
-                          onPressed:
-                              isBusy ? null : () => Navigator.pop(context),
+                          onPressed: isBusy
+                              ? null
+                              : () => Navigator.pop(context),
                         ),
                       ),
                       const SizedBox(width: 10),

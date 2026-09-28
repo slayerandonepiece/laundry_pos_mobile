@@ -462,31 +462,34 @@ void main() {
       expect(cached.map((m) => m.name), ['Card']);
     });
 
-    test('createOrderOptimistic puts outletId in queued payload and local order', () async {
-      final posRepo = PosRepository(
-        apiClient: mockApiClient,
-        localCache: localCache,
-      );
-      fakeConnectivity.mockOffline = true;
+    test(
+      'createOrderOptimistic puts outletId in queued payload and local order',
+      () async {
+        final posRepo = PosRepository(
+          apiClient: mockApiClient,
+          localCache: localCache,
+        );
+        fakeConnectivity.mockOffline = true;
 
-      final order = await posRepo.createOrderOptimistic(
-        idempotencyKey: 'idem_1',
-        phone: '9999999999',
-        dueDate: '2026-01-01',
-        entries: [
-          {'productId': 'p1', 'quantity': 1},
-        ],
-        outletId: 'outlet_A',
-      );
+        final order = await posRepo.createOrderOptimistic(
+          idempotencyKey: 'idem_1',
+          phone: '9999999999',
+          dueDate: '2026-01-01',
+          entries: [
+            {'productId': 'p1', 'quantity': 1},
+          ],
+          outletId: 'outlet_A',
+        );
 
-      expect(order.outletId, 'outlet_A');
-      final queued = localCache
-          .getPendingSyncQueue()
-          .where((a) => a['type'] == 'create_order')
-          .toList();
-      expect(queued, hasLength(1));
-      expect(queued.first['body']['outletId'], 'outlet_A');
-    });
+        expect(order.outletId, 'outlet_A');
+        final queued = localCache
+            .getPendingSyncQueue()
+            .where((a) => a['type'] == 'create_order')
+            .toList();
+        expect(queued, hasLength(1));
+        expect(queued.first['body']['outletId'], 'outlet_A');
+      },
+    );
 
     test('SyncManager pendingOnline state and getters', () {
       final syncManager = SyncManager.instance;
@@ -620,66 +623,55 @@ void main() {
       expect(cached.any((o) => o.id == 'EL-RUN2'), isTrue);
     });
 
-    test(
-      'SyncEngine skips sync when not signed in and runs once active store is set',
-      () async {
-        await localCache.clearActiveStoreId();
-        await localCache.setPendingSyncQueue([
-          {
-            'type': 'update_status',
-            'clientActionId': 'act_unauth_1',
-            'orderCode': 'EL-100',
-            'status': 'Ready',
-          },
-        ]);
-        mockApiClient.postResponse = {'results': []};
-        mockApiClient.getResponse = {'orders': [], 'nextCursor': null};
+    test('SyncEngine skips sync when not signed in and runs once active store is set', () async {
+      await localCache.clearActiveStoreId();
+      await localCache.setPendingSyncQueue([
+        {
+          'type': 'update_status',
+          'clientActionId': 'act_unauth_1',
+          'orderCode': 'EL-100',
+          'status': 'Ready',
+        },
+      ]);
+      mockApiClient.postResponse = {'results': []};
+      mockApiClient.getResponse = {'orders': [], 'nextCursor': null};
 
-        await SyncEngine.instance.trigger();
+      await SyncEngine.instance.trigger();
 
-        expect(mockApiClient.getCallCount, 0);
-        expect(mockApiClient.postCallCount, 0);
+      expect(mockApiClient.getCallCount, 0);
+      expect(mockApiClient.postCallCount, 0);
 
-        await localCache.setActiveStoreId('store_1');
-        await SyncEngine.instance.trigger();
+      await localCache.setActiveStoreId('store_1');
+      await SyncEngine.instance.trigger();
 
-        expect(mockApiClient.postCallCount, 1);
-        expect(mockApiClient.getCallCount, 1);
-      },
-    );
+      expect(mockApiClient.postCallCount, 1);
+      expect(mockApiClient.getCallCount, 1);
+    });
 
-    test(
-      'syncOrdersDelta preserves cached invoice when server order omits invoice',
-      () async {
-        await localCache.setCachedOrders([
-          {
-            'id': 'EL-1001',
-            'status': 'Delivered',
-            'lines': [],
-            'payments': [],
-            'invoice': {'exists': true, 'invoiceSeq': 42},
-          },
-        ]);
+    test('syncOrdersDelta preserves cached invoice when server order omits invoice', () async {
+      await localCache.setCachedOrders([
+        {
+          'id': 'EL-1001',
+          'status': 'Delivered',
+          'lines': [],
+          'payments': [],
+          'invoice': {'exists': true, 'invoiceSeq': 42},
+        },
+      ]);
 
-        mockApiClient.getResponse = {
-          'orders': [
-            {
-              'id': 'EL-1001',
-              'status': 'Delivered',
-              'lines': [],
-              'payments': [],
-            },
-          ],
-          'nextCursor': null,
-        };
+      mockApiClient.getResponse = {
+        'orders': [
+          {'id': 'EL-1001', 'status': 'Delivered', 'lines': [], 'payments': []},
+        ],
+        'nextCursor': null,
+      };
 
-        expect(await repository.syncOrdersDelta(), isTrue);
+      expect(await repository.syncOrdersDelta(), isTrue);
 
-        final cached = repository.getCachedOrdersList().single;
-        expect(cached.invoice, isNotNull);
-        expect(cached.invoice!.invoiceSeq, 42);
-      },
-    );
+      final cached = repository.getCachedOrdersList().single;
+      expect(cached.invoice, isNotNull);
+      expect(cached.invoice!.invoiceSeq, 42);
+    });
   });
 
   group('Two ids per order (offlineId)', () {
@@ -849,7 +841,12 @@ void main() {
     test('pulls from the start and merges, keeping unsynced orders', () async {
       await localCache.setLastSyncCursor('old-cursor');
       await localCache.setCachedOrders([
-        {'id': '', 'offlineId': 'off-9', 'phone': '9000000000', 'isSynced': false},
+        {
+          'id': '',
+          'offlineId': 'off-9',
+          'phone': '9000000000',
+          'isSynced': false,
+        },
       ]);
       final urls = <String>[];
       mockApiClient.onGet = (url) async {

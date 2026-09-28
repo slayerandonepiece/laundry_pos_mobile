@@ -121,7 +121,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                   const moreTabIndex = 2;
                   if (index == moreTabIndex) {
                     try {
-                      context.read<OwnerBloc>().add(LoadExpensesEvent(refresh: true));
+                      context.read<OwnerBloc>().add(
+                        LoadExpensesEvent(refresh: true),
+                      );
                     } catch (_) {}
                   }
                 },

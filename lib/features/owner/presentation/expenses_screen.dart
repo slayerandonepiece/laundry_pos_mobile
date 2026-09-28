@@ -31,7 +31,8 @@ class ExpensesScreen extends StatefulWidget {
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
   final TextEditingController _searchController = TextEditingController();
-  String _selectedPeriod = '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
+  String _selectedPeriod =
+      '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
   DateTime? _customFrom;
   DateTime? _customTo;
   String _activeFilter = 'all'; // 'all' | 'unpaid' | 'recurring'
@@ -229,8 +230,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           return isLast30d || isThisMonth;
         }
         final fromDate = _startOfDay(_customFrom!);
-        final toDateTomorrow =
-            _startOfDay(_customTo!).add(const Duration(days: 1));
+        final toDateTomorrow = _startOfDay(_customTo!)
+            .add(const Duration(days: 1));
         return !d.isBefore(fromDate) && d.isBefore(toDateTomorrow);
       default:
         return true;
@@ -702,7 +703,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       else
                         ...displayedExpenses.map((expense) {
                           final dueDt = _parseDate(expense.due);
-                          final isUpcoming = !expense.isPaid &&
+                          final isUpcoming =
+                              !expense.isPaid &&
                               dueDt != null &&
                               dueDt.isAfter(todayStart);
 
@@ -784,13 +786,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                         label: expense.isPaid
                                             ? 'Paid'
                                             : (isUpcoming
-                                                ? 'Upcoming'
-                                                : 'Unpaid'),
+                                                  ? 'Upcoming'
+                                                  : 'Unpaid'),
                                         variant: expense.isPaid
                                             ? PillVariant.paid
                                             : (isUpcoming
-                                                ? PillVariant.neutral
-                                                : PillVariant.warning),
+                                                  ? PillVariant.neutral
+                                                  : PillVariant.warning),
                                       ),
                                     ],
                                   ),
@@ -997,10 +999,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              scopeHint,
-              style: AppTextStyles.hint,
-            ),
+            Text(scopeHint, style: AppTextStyles.hint),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
               Text(

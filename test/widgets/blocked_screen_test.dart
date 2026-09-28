@@ -5,14 +5,14 @@ import 'package:myshop/shared/widgets/app_inset.dart';
 import 'package:myshop/shared/widgets/blocked_screen.dart';
 
 Widget createTestApp(Widget child) {
-  return MaterialApp(
-    home: child,
-  );
+  return MaterialApp(home: child);
 }
 
 void main() {
   group('BlockedScreen', () {
-    testWidgets('"Try again" button dispatches onRetry callback', (tester) async {
+    testWidgets('"Try again" button dispatches onRetry callback', (
+      tester,
+    ) async {
       bool retried = false;
       bool signedOut = false;
 
@@ -37,7 +37,9 @@ void main() {
       expect(signedOut, isFalse);
     });
 
-    testWidgets('"Sign out" button dispatches onSignOut callback', (tester) async {
+    testWidgets('"Sign out" button dispatches onSignOut callback', (
+      tester,
+    ) async {
       bool retried = false;
       bool signedOut = false;
 
@@ -62,30 +64,35 @@ void main() {
       expect(retried, isFalse);
     });
 
-    testWidgets('pendingCount > 0 renders note with correct count in text (plural)', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          BlockedScreen(
-            reason: 'store_locked',
-            isOwner: true,
-            onRetry: () {},
-            onSignOut: () {},
-            pendingCount: 4,
+    testWidgets(
+      'pendingCount > 0 renders note with correct count in text (plural)',
+      (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            BlockedScreen(
+              reason: 'store_locked',
+              isOwner: true,
+              onRetry: () {},
+              onSignOut: () {},
+              pendingCount: 4,
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(find.byType(AppInset), findsOneWidget);
-      expect(
-        find.text(
-          "4 actions saved on this device haven't synced yet. They'll go through automatically once your access is restored.",
-        ),
-        findsOneWidget,
-      );
-      expect(find.byIcon(Icons.cloud_upload_rounded), findsOneWidget);
-    });
+        expect(find.byType(AppInset), findsOneWidget);
+        expect(
+          find.text(
+            "4 actions saved on this device haven't synced yet. They'll go through automatically once your access is restored.",
+          ),
+          findsOneWidget,
+        );
+        expect(find.byIcon(Icons.cloud_upload_rounded), findsOneWidget);
+      },
+    );
 
-    testWidgets('pendingCount == 1 renders note with singular action wording', (tester) async {
+    testWidgets('pendingCount == 1 renders note with singular action wording', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestApp(
           BlockedScreen(
@@ -107,7 +114,9 @@ void main() {
       );
     });
 
-    testWidgets('pendingCount == 0 renders nothing extra (no pending note)', (tester) async {
+    testWidgets('pendingCount == 0 renders nothing extra (no pending note)', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestApp(
           BlockedScreen(
@@ -125,7 +134,9 @@ void main() {
       expect(find.byIcon(Icons.cloud_upload_rounded), findsNothing);
     });
 
-    testWidgets('pendingCount null renders nothing extra (no pending note)', (tester) async {
+    testWidgets('pendingCount null renders nothing extra (no pending note)', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestApp(
           BlockedScreen(

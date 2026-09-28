@@ -1,8 +1,7 @@
-# MyShop — laundry POS mobile app
+# KlenPOS — laundry POS mobile app
 
-Flutter app for the store workspace in `../laundry_pos`. "MyShop" is a
-**working title**; it appears only on splash and login, never on
-customer-facing output.
+Flutter app for the store workspace in `../laundry_pos`. "KlenPOS" is the
+app display name and branding.
 
 ## Start here
 

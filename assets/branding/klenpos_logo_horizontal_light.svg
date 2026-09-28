@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100" width="340" height="100">
+  <defs>
+    <linearGradient id="kgrad_h_light" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A2540"/>
+      <stop offset="1" stop-color="#00D4FF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(0,0)">
+    <rect x="24" y="14" width="15" height="74" rx="6" fill="url(#kgrad_h_light)"/>
+    <line x1="38" y1="53" x2="80" y2="15" stroke="url(#kgrad_h_light)" stroke-width="15" stroke-linecap="round"/>
+    <line x1="38" y1="53" x2="80" y2="90" stroke="url(#kgrad_h_light)" stroke-width="15" stroke-linecap="round"/>
+    <polygon points="83,6 85.47,12.53 92,15 85.47,17.47 83,24 80.53,17.47 74,15 80.53,12.53" fill="url(#kgrad_h_light)"/>
+  </g>
+  <text x="118" y="66" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="52">
+    <tspan fill="#0A2540">Klen</tspan><tspan fill="#00D4FF">POS</tspan>
+  </text>
+</svg>

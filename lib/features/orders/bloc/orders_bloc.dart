@@ -37,11 +37,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     final cachedOrders = ordersRepository.getCachedOrdersList();
     if (cachedOrders.isNotEmpty) {
       emit(
-        state.copyWith(
-          allOrders: cachedOrders,
-          loadFailed: false,
-          error: null,
-        ),
+        state.copyWith(allOrders: cachedOrders, loadFailed: false, error: null),
       );
       return;
     }
@@ -274,11 +270,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       );
       SyncEngine.instance.trigger();
     } catch (e) {
-      AppLogger.log(
-        _tag,
-        'recordPayment(${event.orderCode}) failed',
-        error: e,
-      );
+      AppLogger.log(_tag, 'recordPayment(${event.orderCode}) failed', error: e);
       emit(
         state.copyWith(
           isCollectingPayment: false,

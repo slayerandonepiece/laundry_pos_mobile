@@ -128,11 +128,7 @@ class SubscriptionScreen extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            planStatus.icon,
-            size: 24,
-            color: planStatus.textColor,
-          ),
+          Icon(planStatus.icon, size: 24, color: planStatus.textColor),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -203,7 +199,7 @@ class SubscriptionScreen extends StatelessWidget {
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Contact support at support@myshop.com'),
+                  content: Text('Contact support at support@klenpos.com'),
                   behavior: SnackBarBehavior.floating,
                 ),
               );

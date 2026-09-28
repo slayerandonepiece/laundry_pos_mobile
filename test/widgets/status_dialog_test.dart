@@ -127,7 +127,9 @@ void main() {
 
         // Warning banner is NOT rendered for initial Pending status
         expect(
-          find.text('An outstanding balance remains. Marking delivered will ask for confirmation.'),
+          find.text(
+            'An outstanding balance remains. Marking delivered will ask for confirmation.',
+          ),
           findsNothing,
         );
 
@@ -175,7 +177,9 @@ void main() {
 
         // Warning notice banner is now visible
         expect(
-          find.text('An outstanding balance remains. Marking delivered will ask for confirmation.'),
+          find.text(
+            'An outstanding balance remains. Marking delivered will ask for confirmation.',
+          ),
           findsOneWidget,
         );
 
@@ -194,7 +198,10 @@ void main() {
           matching: find.widgetWithText(SecondaryButton, 'Cancel'),
         );
         expect(dialogCancelFinder, findsOneWidget);
-        expect(find.widgetWithText(PrimaryButton, 'Deliver anyway'), findsOneWidget);
+        expect(
+          find.widgetWithText(PrimaryButton, 'Deliver anyway'),
+          findsOneWidget,
+        );
 
         // Cancel confirmation
         await tester.tap(dialogCancelFinder);
@@ -264,7 +271,9 @@ void main() {
 
         // Warning banner is NOT shown since balanceDue == 0
         expect(
-          find.text('An outstanding balance remains. Marking delivered will ask for confirmation.'),
+          find.text(
+            'An outstanding balance remains. Marking delivered will ask for confirmation.',
+          ),
           findsNothing,
         );
 

@@ -139,26 +139,29 @@ void main() {
       expect(repo.networkCalls, ['dashboard 2026-09-01-2026-09-10']);
     });
 
-    test('LoadStaffEvent completes done on success, failure, and cache-only path', () async {
-      // 1. Cache-only path
-      fillCache();
-      final cCache = Completer<void>();
-      bloc.add(LoadStaffEvent(refresh: false, done: cCache));
-      await cCache.future;
-      expect(cCache.isCompleted, isTrue);
+    test(
+      'LoadStaffEvent completes done on success, failure, and cache-only path',
+      () async {
+        // 1. Cache-only path
+        fillCache();
+        final cCache = Completer<void>();
+        bloc.add(LoadStaffEvent(refresh: false, done: cCache));
+        await cCache.future;
+        expect(cCache.isCompleted, isTrue);
 
-      // 2. Refresh success path
-      final cSuccess = Completer<void>();
-      bloc.add(LoadStaffEvent(refresh: true, done: cSuccess));
-      await cSuccess.future;
-      expect(cSuccess.isCompleted, isTrue);
+        // 2. Refresh success path
+        final cSuccess = Completer<void>();
+        bloc.add(LoadStaffEvent(refresh: true, done: cSuccess));
+        await cSuccess.future;
+        expect(cSuccess.isCompleted, isTrue);
 
-      // 3. Refresh failure path
-      repo.shouldThrowOnStaff = true;
-      final cFail = Completer<void>();
-      bloc.add(LoadStaffEvent(refresh: true, done: cFail));
-      await cFail.future;
-      expect(cFail.isCompleted, isTrue);
-    });
+        // 3. Refresh failure path
+        repo.shouldThrowOnStaff = true;
+        final cFail = Completer<void>();
+        bloc.add(LoadStaffEvent(refresh: true, done: cFail));
+        await cFail.future;
+        expect(cFail.isCompleted, isTrue);
+      },
+    );
   });
 }

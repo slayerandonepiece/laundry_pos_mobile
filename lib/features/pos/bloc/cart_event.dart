@@ -55,7 +55,8 @@ class SetCustomerDetailsEvent extends CartEvent {
 }
 
 class SubmitOrderEvent extends CartEvent {
-  final String paymentChoice; // 'prepaid' (needs paymentMethodName) | 'delivery'
+  final String
+  paymentChoice; // 'prepaid' (needs paymentMethodName) | 'delivery'
   final String? paymentMethodName;
   final DateTime? dueDate;
   final String? notes;

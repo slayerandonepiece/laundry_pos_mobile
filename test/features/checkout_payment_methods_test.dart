@@ -22,15 +22,15 @@ class _FakePosRepo implements PosRepository {
 
   @override
   List<Product> getCachedProductsList() => [
-        Product(
-          id: 'p1',
-          name: 'Shirt Wash',
-          category: 'wash',
-          type: 'item',
-          price: 100,
-          active: true,
-        ),
-      ];
+    Product(
+      id: 'p1',
+      name: 'Shirt Wash',
+      category: 'wash',
+      type: 'item',
+      price: 100,
+      active: true,
+    ),
+  ];
 
   @override
   List<StorePaymentMethod>? getCachedPaymentMethodsList() => cachedMethods;
@@ -101,35 +101,38 @@ void main() {
     });
 
     test('Cash -> false', () {
-      final method = StorePaymentMethod(
-        id: '3',
-        code: 'CASH',
-        name: 'Cash',
-      );
+      final method = StorePaymentMethod(id: '3', code: 'CASH', name: 'Cash');
       expect(method.isCashOnDelivery, isFalse);
     });
   });
 
   group('CartBloc background refresh of payment methods', () {
-    test('cached [Cash, UPI], API returns [Cash] -> state ends with [Cash]', () async {
-      final repo = _FakePosRepo();
-      final cashMethod = StorePaymentMethod(id: 'c', code: 'CASH', name: 'Cash');
-      final upiMethod = StorePaymentMethod(id: 'u', code: 'UPI', name: 'UPI');
-      repo.cachedMethods = [cashMethod, upiMethod];
-      repo.apiMethods = [cashMethod];
+    test(
+      'cached [Cash, UPI], API returns [Cash] -> state ends with [Cash]',
+      () async {
+        final repo = _FakePosRepo();
+        final cashMethod = StorePaymentMethod(
+          id: 'c',
+          code: 'CASH',
+          name: 'Cash',
+        );
+        final upiMethod = StorePaymentMethod(id: 'u', code: 'UPI', name: 'UPI');
+        repo.cachedMethods = [cashMethod, upiMethod];
+        repo.apiMethods = [cashMethod];
 
-      final bloc = CartBloc(posRepository: repo);
-      bloc.add(LoadCatalogEvent());
+        final bloc = CartBloc(posRepository: repo);
+        bloc.add(LoadCatalogEvent());
 
-      await expectLater(
-        bloc.stream.map((s) => s.paymentMethods.map((m) => m.name).toList()),
-        emitsThrough(['Cash']),
-      );
+        await expectLater(
+          bloc.stream.map((s) => s.paymentMethods.map((m) => m.name).toList()),
+          emitsThrough(['Cash']),
+        );
 
-      expect(bloc.state.paymentMethods.length, 1);
-      expect(bloc.state.paymentMethods.first.name, 'Cash');
-      await bloc.close();
-    });
+        expect(bloc.state.paymentMethods.length, 1);
+        expect(bloc.state.paymentMethods.first.name, 'Cash');
+        await bloc.close();
+      },
+    );
   });
 
   group('CheckoutScreen payment methods tests', () {
@@ -178,9 +181,7 @@ void main() {
           BlocProvider<CartBloc>.value(value: cartBloc),
           BlocProvider<OutletScopeCubit>.value(value: outletCubit),
         ],
-        child: const MaterialApp(
-          home: CheckoutScreen(),
-        ),
+        child: const MaterialApp(home: CheckoutScreen()),
       );
     }
 
@@ -191,9 +192,24 @@ void main() {
           cartBloc.state.copyWith(
             items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
             paymentMethods: [
-              StorePaymentMethod(id: 'pm_cash', code: 'CASH', name: 'Cash', active: true),
-              StorePaymentMethod(id: 'pm_cod', code: 'COD', name: 'Cash On Delivery', active: true),
-              StorePaymentMethod(id: 'pm_upi', code: 'UPI', name: 'UPI', active: true),
+              StorePaymentMethod(
+                id: 'pm_cash',
+                code: 'CASH',
+                name: 'Cash',
+                active: true,
+              ),
+              StorePaymentMethod(
+                id: 'pm_cod',
+                code: 'COD',
+                name: 'Cash On Delivery',
+                active: true,
+              ),
+              StorePaymentMethod(
+                id: 'pm_upi',
+                code: 'UPI',
+                name: 'UPI',
+                active: true,
+              ),
             ],
             outletId: 'outlet_a',
           ),
@@ -214,7 +230,9 @@ void main() {
         expect(find.text('Pay full amount now'), findsNothing);
 
         // Submit button is disabled
-        final submitButton = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
+        final submitButton = tester.widget<PrimaryButton>(
+          find.byType(PrimaryButton),
+        );
         expect(submitButton.onPressed, isNull);
       },
     );
@@ -226,9 +244,24 @@ void main() {
           cartBloc.state.copyWith(
             items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
             paymentMethods: [
-              StorePaymentMethod(id: 'pm_cash', code: 'CASH', name: 'Cash', active: true),
-              StorePaymentMethod(id: 'pm_cod', code: 'COD', name: 'Cash On Delivery', active: true),
-              StorePaymentMethod(id: 'pm_upi', code: 'UPI', name: 'UPI', active: true),
+              StorePaymentMethod(
+                id: 'pm_cash',
+                code: 'CASH',
+                name: 'Cash',
+                active: true,
+              ),
+              StorePaymentMethod(
+                id: 'pm_cod',
+                code: 'COD',
+                name: 'Cash On Delivery',
+                active: true,
+              ),
+              StorePaymentMethod(
+                id: 'pm_upi',
+                code: 'UPI',
+                name: 'UPI',
+                active: true,
+              ),
             ],
             outletId: 'outlet_a',
           ),
@@ -263,9 +296,24 @@ void main() {
           cartBloc.state.copyWith(
             items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
             paymentMethods: [
-              StorePaymentMethod(id: 'pm_cash', code: 'CASH', name: 'Cash', active: true),
-              StorePaymentMethod(id: 'pm_cod', code: 'COD', name: 'Cash On Delivery', active: true),
-              StorePaymentMethod(id: 'pm_upi', code: 'UPI', name: 'UPI', active: true),
+              StorePaymentMethod(
+                id: 'pm_cash',
+                code: 'CASH',
+                name: 'Cash',
+                active: true,
+              ),
+              StorePaymentMethod(
+                id: 'pm_cod',
+                code: 'COD',
+                name: 'Cash On Delivery',
+                active: true,
+              ),
+              StorePaymentMethod(
+                id: 'pm_upi',
+                code: 'UPI',
+                name: 'UPI',
+                active: true,
+              ),
             ],
             outletId: 'outlet_a',
           ),
@@ -315,7 +363,9 @@ void main() {
         // No options at all
         expect(find.text('Pay on delivery'), findsNothing);
 
-        final submitButton = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
+        final submitButton = tester.widget<PrimaryButton>(
+          find.byType(PrimaryButton),
+        );
         expect(submitButton.onPressed, isNull);
       },
     );

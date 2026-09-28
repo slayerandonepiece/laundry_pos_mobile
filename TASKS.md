@@ -1,4 +1,4 @@
-# MyShop mobile — task list (Phase 2)
+# KlenPOS mobile — task list (Phase 2)
 
 Flutter app for the Laundry POS backend. "MyShop" is a **working title**
 — it appears only on the splash and login screens, never on anything a

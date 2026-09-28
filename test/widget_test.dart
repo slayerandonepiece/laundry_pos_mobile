@@ -19,10 +19,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.theme,
-        home: const Scaffold(body: Center(child: Text('MyShop Smoke Test'))),
+        home: const Scaffold(body: Center(child: Text('KlenPOS Smoke Test'))),
       ),
     );
 
-    expect(find.text('MyShop Smoke Test'), findsOneWidget);
+    expect(find.text('KlenPOS Smoke Test'), findsOneWidget);
   });
 }

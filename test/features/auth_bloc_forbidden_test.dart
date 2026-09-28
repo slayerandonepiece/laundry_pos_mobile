@@ -74,40 +74,37 @@ void main() {
     setUp(() async {
       authRepository = FakeAuthRepository();
       localCache = InMemoryLocalCache();
-      authBloc = AuthBloc(authRepository: authRepository, localCache: localCache);
+      authBloc = AuthBloc(
+        authRepository: authRepository,
+        localCache: localCache,
+      );
       authBloc.add(CheckAuthStatusEvent());
       await authBloc.stream.firstWhere((s) => s is AuthenticatedState);
     });
 
     tearDown(() => authBloc.close());
 
-    test(
-      'reason-less 403 forces sign-out instead of "store locked"',
-      () async {
-        authBloc.add(AccessForbiddenEvent());
+    test('reason-less 403 forces sign-out instead of "store locked"', () async {
+      authBloc.add(AccessForbiddenEvent());
 
-        await expectLater(
-          authBloc.stream,
-          emits(
-            isA<UnauthenticatedState>().having(
-              (s) => s.errorMessage,
-              'errorMessage',
-              contains('sign in again'),
-            ),
+      await expectLater(
+        authBloc.stream,
+        emits(
+          isA<UnauthenticatedState>().having(
+            (s) => s.errorMessage,
+            'errorMessage',
+            contains('sign in again'),
           ),
-        );
+        ),
+      );
 
-        expect(authRepository.loggedOut, isTrue);
-        expect(localCache.clearedActiveOutletId, 'cleared');
-      },
-    );
+      expect(authRepository.loggedOut, isTrue);
+      expect(localCache.clearedActiveOutletId, 'cleared');
+    });
 
     test('reasoned 403 still shows the blocked screen as before', () async {
       authBloc.add(
-        AccessForbiddenEvent(
-          reason: 'store_locked',
-          paidThroughDate: null,
-        ),
+        AccessForbiddenEvent(reason: 'store_locked', paidThroughDate: null),
       );
 
       await expectLater(

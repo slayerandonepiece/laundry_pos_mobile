@@ -199,7 +199,10 @@ void main() {
         },
       ]);
       expect(localCache.getAllowedOutlets()?.length, 1);
-      expect(localCache.getAllowedOutlets()?.first['displayName'], 'Chinnapanahalli');
+      expect(
+        localCache.getAllowedOutlets()?.first['displayName'],
+        'Chinnapanahalli',
+      );
 
       await localCache.setActiveOutletId('outlet_1');
       expect(localCache.getActiveOutletId(), 'outlet_1');

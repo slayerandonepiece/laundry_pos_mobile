@@ -56,11 +56,7 @@ class FakeOwnerRepository extends OwnerRepository {
     required String name,
     required String phone,
   }) async {
-    lastUpdatedStaff = {
-      'employeeId': employeeId,
-      'name': name,
-      'phone': phone,
-    };
+    lastUpdatedStaff = {'employeeId': employeeId, 'name': name, 'phone': phone};
     final index = staff.indexWhere((m) => m.id == employeeId);
     if (index >= 0) {
       final updated = staff[index].copyWith(name: name, phone: phone);
@@ -327,10 +323,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        expect(
-          find.text('Could not load staff — try again'),
-          findsOneWidget,
-        );
+        expect(find.text('Could not load staff — try again'), findsOneWidget);
       },
     );
   });

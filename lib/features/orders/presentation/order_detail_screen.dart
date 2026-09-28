@@ -130,10 +130,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    String storeName = 'MyShop Laundry';
-    if (authState is AuthenticatedState) {
-      storeName = authState.currentStore.storeName;
-    }
+    final String storeName = authState is AuthenticatedState
+        ? authState.currentStore.storeName
+        : '';
 
     return BlocConsumer<OrdersBloc, OrdersState>(
       listener: (context, state) {
@@ -660,7 +659,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                               'Hello ${order.name.isNotEmpty ? order.name : "Customer"},\n'
                               'Your laundry order ${order.displayCode} ($invoiceNo) has been completed and delivered.\n'
                               'Total: ${CurrencyFormatter.format(order.totalAmount)} (Paid in full).\n'
-                              'Thank you for visiting $storeName!',
+                              '${storeName.isNotEmpty ? "Thank you for choosing $storeName!" : "Thank you for your business!"}',
                             );
                             final cleanPhone = order.phone.replaceAll(
                               RegExp(r'[^0-9]'),

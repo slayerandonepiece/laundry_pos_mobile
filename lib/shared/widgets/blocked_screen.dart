@@ -52,8 +52,7 @@ class BlockedScreen extends StatelessWidget {
           : 'Store access is temporarily locked. Please check with your store owner.';
     } else if (normReason == 'no_outlet_assigned') {
       title = 'No outlet assigned';
-      description =
-          "Your account isn't assigned to an outlet yet, so orders can't be loaded. Ask your store owner to assign you to one, then sign in again.";
+      description = "Your account isn't assigned to an outlet yet, so orders can't be loaded. Ask your store owner to assign you to one, then sign in again.";
     } else if (normReason == 'store_archived') {
       title = 'Store archived';
       description =
@@ -173,10 +172,7 @@ class BlockedScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
               ],
-              PrimaryButton(
-                label: 'Try again',
-                onPressed: onRetry,
-              ),
+              PrimaryButton(label: 'Try again', onPressed: onRetry),
               const SizedBox(height: 12),
               SecondaryButton(label: 'Sign out', onPressed: onSignOut),
             ],

@@ -19,26 +19,26 @@ class TrackingOwnerBloc extends Bloc<OwnerEvent, OwnerState>
   final List<OwnerEvent> dispatchedEvents = [];
 
   TrackingOwnerBloc([OwnerState? initialState])
-      : super(
-          initialState ??
-              OwnerState(
-                paymentMethods: [
-                  StorePaymentMethod(
-                    id: 'pm-cash',
-                    name: 'Cash',
-                    type: 'Cash',
-                    active: true,
-                  ),
-                  StorePaymentMethod(
-                    id: 'pm-upi',
-                    name: 'UPI QR',
-                    type: 'UPI',
-                    code: 'MERCHANT-UPI',
-                    active: false,
-                  ),
-                ],
-              ),
-        ) {
+    : super(
+        initialState ??
+            OwnerState(
+              paymentMethods: [
+                StorePaymentMethod(
+                  id: 'pm-cash',
+                  name: 'Cash',
+                  type: 'Cash',
+                  active: true,
+                ),
+                StorePaymentMethod(
+                  id: 'pm-upi',
+                  name: 'UPI QR',
+                  type: 'UPI',
+                  code: 'MERCHANT-UPI',
+                  active: false,
+                ),
+              ],
+            ),
+      ) {
     on<OwnerEvent>((event, emit) {
       dispatchedEvents.add(event);
     });
@@ -66,18 +66,14 @@ class FakeOrdersBloc extends Bloc<OrdersEvent, OrdersState>
 }
 
 void main() {
-  Widget buildTestApp({
-    required TrackingOwnerBloc ownerBloc,
-  }) {
+  Widget buildTestApp({required TrackingOwnerBloc ownerBloc}) {
     return MultiBlocProvider(
       providers: [
         BlocProvider<OwnerBloc>.value(value: ownerBloc),
         BlocProvider<AuthBloc>(create: (_) => FakeAuthBloc()),
         BlocProvider<OrdersBloc>(create: (_) => FakeOrdersBloc()),
       ],
-      child: const MaterialApp(
-        home: PaymentMethodsScreen(),
-      ),
+      child: const MaterialApp(home: PaymentMethodsScreen()),
     );
   }
 
@@ -187,8 +183,9 @@ void main() {
         expect(find.byType(CentredDialog), findsNothing);
 
         // TogglePaymentMethodEvent should have been dispatched with id and active: false
-        final toggleEvents =
-            bloc.dispatchedEvents.whereType<TogglePaymentMethodEvent>().toList();
+        final toggleEvents = bloc.dispatchedEvents
+            .whereType<TogglePaymentMethodEvent>()
+            .toList();
         expect(toggleEvents.length, equals(1));
         expect(toggleEvents.first.id, equals('pm-cash'));
         expect(toggleEvents.first.active, isFalse);
@@ -217,8 +214,9 @@ void main() {
         expect(find.byType(CentredDialog), findsNothing);
 
         // TogglePaymentMethodEvent dispatched immediately with active: true
-        final toggleEvents =
-            bloc.dispatchedEvents.whereType<TogglePaymentMethodEvent>().toList();
+        final toggleEvents = bloc.dispatchedEvents
+            .whereType<TogglePaymentMethodEvent>()
+            .toList();
         expect(toggleEvents.length, equals(1));
         expect(toggleEvents.first.id, equals('pm-upi'));
         expect(toggleEvents.first.active, isTrue);

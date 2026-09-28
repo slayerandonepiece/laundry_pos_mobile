@@ -1,4 +1,4 @@
-# MyShop mobile — design specification
+# KlenPOS mobile — design specification
 
 The approved designs live in a Claude Design canvas (link in
 `../prompts/README.md`; shared with anyone who has the link). This file

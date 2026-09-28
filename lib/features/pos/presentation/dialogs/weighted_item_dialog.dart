@@ -206,7 +206,9 @@ class _WeightedItemDialogState extends State<WeightedItemDialog> {
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: _showError ? AppColors.danger : AppColors.primary,
+                          color: _showError
+                              ? AppColors.danger
+                              : AppColors.primary,
                           width: 1.8,
                         ),
                       ),
@@ -217,9 +219,10 @@ class _WeightedItemDialogState extends State<WeightedItemDialog> {
                             child: TextField(
                               controller: _controller,
                               autofocus: true,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
                                   RegExp(r'^\d*\.?\d{0,3}'),
@@ -239,7 +242,9 @@ class _WeightedItemDialogState extends State<WeightedItemDialog> {
                                   fontFamily: AppTextStyles.fontDisplay,
                                   fontSize: 24,
                                   fontWeight: FontWeight.w800,
-                                  color: AppColors.mutedText.withValues(alpha: 0.4),
+                                  color: AppColors.mutedText.withValues(
+                                    alpha: 0.4,
+                                  ),
                                 ),
                               ),
                               onChanged: _onTextChanged,
@@ -266,7 +271,9 @@ class _WeightedItemDialogState extends State<WeightedItemDialog> {
                                   vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Text(

@@ -24,16 +24,16 @@ class InvoiceActionsSheet extends StatelessWidget {
   const InvoiceActionsSheet({
     super.key,
     required this.order,
-    this.storeName = 'MyShop Laundry',
-    this.storeAddress = 'Bengaluru, India',
+    this.storeName = '',
+    this.storeAddress = '',
     this.storePhone = '',
   });
 
   static Future<void> show(
     BuildContext context, {
     required Order order,
-    String storeName = 'MyShop Laundry',
-    String storeAddress = 'Bengaluru, India',
+    String storeName = '',
+    String storeAddress = '',
     String storePhone = '',
   }) {
     return showModalBottomSheet(
@@ -150,8 +150,10 @@ class InvoiceActionsSheet extends StatelessWidget {
                     'Hello ${order.name.isNotEmpty ? order.name : "Customer"}, '
                     'your laundry order ${order.displayCode} ($invoiceNo) has been '
                     'completed and paid in full (${CurrencyFormatter.format(order.totalAmount)}). '
-                    'Thank you for choosing $storeName!',
-                subject: 'Invoice $invoiceNo - $storeName',
+                    '${storeName.isNotEmpty ? "Thank you for choosing $storeName!" : "Thank you for your business!"}',
+                subject: storeName.isNotEmpty
+                    ? 'Invoice $invoiceNo - $storeName'
+                    : 'Invoice $invoiceNo',
                 invoiceNo: invoiceNo,
               );
             },
@@ -170,8 +172,11 @@ class InvoiceActionsSheet extends StatelessWidget {
                 messenger: messenger,
                 text:
                     'Invoice $invoiceNo for order ${order.displayCode}: '
-                    '${CurrencyFormatter.format(order.totalAmount)} paid in full at $storeName.',
-                subject: 'Invoice $invoiceNo - $storeName',
+                    '${CurrencyFormatter.format(order.totalAmount)} paid in full'
+                    '${storeName.isNotEmpty ? " at $storeName" : ""}.',
+                subject: storeName.isNotEmpty
+                    ? 'Invoice $invoiceNo - $storeName'
+                    : 'Invoice $invoiceNo',
                 invoiceNo: invoiceNo,
               );
             },

@@ -493,11 +493,7 @@ class OwnerRepository {
   }) async {
     await apiClient.put(
       ApiEndpoints.employeeDetail(employeeId),
-      body: {
-        'name': name.trim(),
-        'phone': phone.trim(),
-        'active': active,
-      },
+      body: {'name': name.trim(), 'phone': phone.trim(), 'active': active},
     );
   }
 
@@ -534,9 +530,7 @@ class OwnerRepository {
     final cached = localCache.getCachedStaff() ?? [];
     final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
     final name = idx != -1 ? (cached[idx]['name']?.toString() ?? '') : '';
-    final phone = idx != -1
-        ? (cached[idx]['phone']?.toString() ?? '')
-        : '';
+    final phone = idx != -1 ? (cached[idx]['phone']?.toString() ?? '') : '';
     final currentActive = idx != -1 ? (cached[idx]['active'] != false) : true;
     final newActive = !currentActive;
 

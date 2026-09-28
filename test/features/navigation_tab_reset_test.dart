@@ -145,9 +145,7 @@ void main() {
           BlocProvider<CartBloc>.value(value: cartBloc),
           BlocProvider<OutletScopeCubit>.value(value: outletScopeCubit),
         ],
-        child: const MaterialApp(
-          home: MainNavigationShell(),
-        ),
+        child: const MaterialApp(home: MainNavigationShell()),
       );
     }
 
@@ -190,39 +188,38 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Switching away from Orders tab resets its quick filters',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 1600);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('Switching away from Orders tab resets its quick filters', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(buildTestWidget());
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
 
-        // Switch to Orders tab
-        await tester.tap(find.text('Orders'));
-        await tester.pumpAndSettle();
+      // Switch to Orders tab
+      await tester.tap(find.text('Orders'));
+      await tester.pumpAndSettle();
 
-        // Initially "Selected dates" is selected
-        expect(find.text('Selected dates'), findsOneWidget);
+      // Initially "Selected dates" is selected
+      expect(find.text('Selected dates'), findsOneWidget);
 
-        // Tap "Late" quick filter chip
-        await tester.tap(find.text('Late'));
-        await tester.pumpAndSettle();
+      // Tap "Late" quick filter chip
+      await tester.tap(find.text('Late'));
+      await tester.pumpAndSettle();
 
-        // Switch to Dashboard tab
-        await tester.tap(find.text('Dashboard'));
-        await tester.pumpAndSettle();
+      // Switch to Dashboard tab
+      await tester.tap(find.text('Dashboard'));
+      await tester.pumpAndSettle();
 
-        // Switch back to Orders tab
-        await tester.tap(find.text('Orders'));
-        await tester.pumpAndSettle();
+      // Switch back to Orders tab
+      await tester.tap(find.text('Orders'));
+      await tester.pumpAndSettle();
 
-        // Filters have reset: "Selected dates" is back to active
-        expect(find.text('Selected dates'), findsOneWidget);
-      },
-    );
+      // Filters have reset: "Selected dates" is back to active
+      expect(find.text('Selected dates'), findsOneWidget);
+    });
   });
 }

@@ -1,5 +1,5 @@
 # ==============================================================================
-# Flutter & Android ProGuard / R8 Rules for MyShop
+# Flutter & Android ProGuard / R8 Rules for KlenPOS
 # ==============================================================================
 
 # --- Line Numbers & Attributes for Crash Reporting & De-obfuscation ---

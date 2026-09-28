@@ -39,7 +39,8 @@ class OwnerDashboardScreen extends StatefulWidget {
 }
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
-  String _selectedPeriod = '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
+  String _selectedPeriod =
+      '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
   DateTime? _customFrom;
   DateTime? _customTo;
 
@@ -224,13 +225,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     final outletScopeCubit = context.watch<OutletScopeCubit?>();
-    String storeName = 'MyShop';
-    bool hasMultipleStores = false;
-
-    if (authState is AuthenticatedState) {
-      storeName = authState.currentStore.storeName;
-      hasMultipleStores = authState.availableStores.length > 1;
-    }
+    final String storeName = authState is AuthenticatedState
+        ? authState.currentStore.storeName
+        : '';
+    final bool hasMultipleStores =
+        authState is AuthenticatedState && authState.availableStores.length > 1;
 
     final body = BlocConsumer<OwnerBloc, OwnerState>(
       listenWhen: (prev, curr) =>
@@ -291,34 +290,44 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                InkWell(
-                                  onTap: hasMultipleStores
-                                      ? () => StoreSwitcherDialog.show(context)
-                                      : null,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        '${storeName.toUpperCase()} WORKSPACE',
-                                        style: const TextStyle(
-                                          fontFamily: AppTextStyles.fontBody,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.8,
-                                          color: AppColors.mutedText,
+                                Flexible(
+                                  child: InkWell(
+                                    onTap: hasMultipleStores
+                                        ? () =>
+                                              StoreSwitcherDialog.show(context)
+                                        : null,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            storeName.isNotEmpty
+                                                ? '${storeName.toUpperCase()} WORKSPACE'
+                                                : 'WORKSPACE',
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontFamily:
+                                                  AppTextStyles.fontBody,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.8,
+                                              color: AppColors.mutedText,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      if (hasMultipleStores) ...[
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          Icons.expand_more,
-                                          size: 14,
-                                          color: AppColors.mutedText,
-                                        ),
+                                        if (hasMultipleStores) ...[
+                                          const SizedBox(width: 4),
+                                          const Icon(
+                                            Icons.expand_more,
+                                            size: 14,
+                                            color: AppColors.mutedText,
+                                          ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
+                                const SizedBox(width: 8),
                                 _PeriodSelectorPill(
                                   selectedPeriod: _selectedPeriod,
                                   customFrom: _customFrom,
@@ -345,74 +354,66 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       ),
                     ),
 
-                      // 1b. Inline Custom Date Selector (if period is 'custom')
-                      if (_selectedPeriod == 'custom')
-                        SliverToBoxAdapter(
-                          child: _buildCustomDateSelector(),
-                        ),
+                    // 1b. Inline Custom Date Selector (if period is 'custom')
+                    if (_selectedPeriod == 'custom')
+                      SliverToBoxAdapter(child: _buildCustomDateSelector()),
 
-                      // 2. Two Large Money Cards
-                      SliverToBoxAdapter(child: _buildMoneyCards(metrics)),
+                    // 2. Two Large Money Cards
+                    SliverToBoxAdapter(child: _buildMoneyCards(metrics)),
 
-                      // 3. Compact 3-Chip Operational Row
+                    // 3. Compact 3-Chip Operational Row
+                    SliverToBoxAdapter(child: _buildOperationalChips(metrics)),
+
+                    // 4. Sales by Date Trend Chart
+                    if (metrics.cash.isNotEmpty)
                       SliverToBoxAdapter(
-                        child: _buildOperationalChips(metrics),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                          child: _SalesTrendChart(
+                            cash: metrics.cash,
+                            selectedPeriod: _selectedPeriod,
+                          ),
+                        ),
                       ),
 
-                      // 4. Sales by Date Trend Chart
-                      if (metrics.cash.isNotEmpty)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                            child: _SalesTrendChart(
-                              cash: metrics.cash,
-                              selectedPeriod: _selectedPeriod,
-                            ),
+                    // 5. Money in & expenses Net Cash-Flow Chart
+                    if (metrics.cash.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                          child: _CashFlowChart(cash: metrics.cash),
+                        ),
+                      ),
+
+                    // 6. How Orders are Moving Donut Chart
+                    if (allOrders.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                          child: _OrdersMovingDonutChart(allOrders: allOrders),
+                        ),
+                      ),
+
+                    // 7. Sales by Service Horizontal Bar Chart
+                    if (metrics.serviceMix.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                          child: _SalesByServiceChart(
+                            serviceMix: metrics.serviceMix,
                           ),
                         ),
+                      ),
 
-                      // 5. Money in & expenses Net Cash-Flow Chart
-                      if (metrics.cash.isNotEmpty)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                            child: _CashFlowChart(
-                              cash: metrics.cash,
-                            ),
-                          ),
-                        ),
-
-                      // 6. How Orders are Moving Donut Chart
-                      if (allOrders.isNotEmpty)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                            child: _OrdersMovingDonutChart(
-                              allOrders: allOrders,
-                            ),
-                          ),
-                        ),
-
-                      // 7. Sales by Service Horizontal Bar Chart
-                      if (metrics.serviceMix.isNotEmpty)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                            child: _SalesByServiceChart(
-                              serviceMix: metrics.serviceMix,
-                            ),
-                          ),
-                        ),
-
-                      const SliverToBoxAdapter(child: SizedBox(height: 28)),
-                    ],
-                  ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 28)),
+                  ],
                 ),
               ),
-            ],
-          );
-        },
-      );
+            ),
+          ],
+        );
+      },
+    );
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -809,6 +810,147 @@ class _PeriodSelectorPill extends StatelessWidget {
   }
 }
 
+String _monthAbbr(String m) {
+  final lower = m.toLowerCase();
+  if (lower.startsWith('jan')) return 'Jan';
+  if (lower.startsWith('feb')) return 'Feb';
+  if (lower.startsWith('mar')) return 'Mar';
+  if (lower.startsWith('apr')) return 'Apr';
+  if (lower.startsWith('may')) return 'May';
+  if (lower.startsWith('jun')) return 'Jun';
+  if (lower.startsWith('jul')) return 'Jul';
+  if (lower.startsWith('aug')) return 'Aug';
+  if (lower.startsWith('sep')) return 'Sep';
+  if (lower.startsWith('oct')) return 'Oct';
+  if (lower.startsWith('nov')) return 'Nov';
+  if (lower.startsWith('dec')) return 'Dec';
+  return m.length > 3 ? m.substring(0, 3) : m;
+}
+
+String _formatChartLabel(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return '';
+
+  // Date ranges: "1 Sept 2026–6 Sept 2026", "1 Sep 2026 - 6 Sep 2026", "01 Sept - 06 Sept"
+  final rangeRegex = RegExp(
+    r'^0?(\d{1,2})\s+([A-Za-z]+)(?:\s+\d{2,4})?\s*[\-–—]\s*0?(\d{1,2})\s+([A-Za-z]+)(?:\s+\d{2,4})?$',
+  );
+  final rangeMatch = rangeRegex.firstMatch(trimmed);
+  if (rangeMatch != null) {
+    final d1 = rangeMatch.group(1)!;
+    final m1 = _monthAbbr(rangeMatch.group(2)!);
+    final d2 = rangeMatch.group(3)!;
+    final m2 = _monthAbbr(rangeMatch.group(4)!);
+    if (m1.toLowerCase() == m2.toLowerCase()) {
+      return '$d1–$d2 $m1';
+    } else {
+      return '$d1 $m1–$d2 $m2';
+    }
+  }
+
+  // Short range: "1–6 Sept", "1-6 September 2026"
+  final shortRangeRegex = RegExp(
+    r'^0?(\d{1,2})\s*[\-–—]\s*0?(\d{1,2})\s+([A-Za-z]+)(?:\s+\d{2,4})?$',
+  );
+  final shortRangeMatch = shortRangeRegex.firstMatch(trimmed);
+  if (shortRangeMatch != null) {
+    final d1 = shortRangeMatch.group(1)!;
+    final d2 = shortRangeMatch.group(2)!;
+    final m = _monthAbbr(shortRangeMatch.group(3)!);
+    return '$d1–$d2 $m';
+  }
+
+  // Single date with month: "1 Sept 2026", "28 September", "01 Sep"
+  final singleDateRegex = RegExp(r'^0?(\d{1,2})\s+([A-Za-z]+)(?:\s+\d{2,4})?$');
+  final singleDateMatch = singleDateRegex.firstMatch(trimmed);
+  if (singleDateMatch != null) {
+    final d = singleDateMatch.group(1)!;
+    final m = _monthAbbr(singleDateMatch.group(2)!);
+    return '$d $m';
+  }
+
+  // ISO date: "2026-09-01"
+  final isoMatch = RegExp(r'^\d{4}-(\d{2})-(\d{2})$').firstMatch(trimmed);
+  if (isoMatch != null) {
+    final monthNum = int.tryParse(isoMatch.group(1)!) ?? 0;
+    final dayNum = int.tryParse(isoMatch.group(2)!) ?? 0;
+    const months = [
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    if (monthNum >= 1 && monthNum <= 12) {
+      return '$dayNum ${months[monthNum]}';
+    }
+  }
+
+  // Full weekday names: "Monday" -> "Mon"
+  const fullDays = {
+    'monday': 'Mon',
+    'tuesday': 'Tue',
+    'wednesday': 'Wed',
+    'thursday': 'Thu',
+    'friday': 'Fri',
+    'saturday': 'Sat',
+    'sunday': 'Sun',
+  };
+  if (fullDays.containsKey(trimmed.toLowerCase())) {
+    return fullDays[trimmed.toLowerCase()]!;
+  }
+
+  // Month alone: "September 2026" or "September"
+  final monthRegex = RegExp(r'^([A-Za-z]+)(?:\s+\d{2,4})?$');
+  final monthMatch = monthRegex.firstMatch(trimmed);
+  if (monthMatch != null) {
+    final mStr = monthMatch.group(1)!;
+    final m = _monthAbbr(mStr);
+    const validMonths = [
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec',
+    ];
+    if (validMonths.contains(m.toLowerCase())) {
+      return m;
+    }
+  }
+
+  if (trimmed.length <= 8) return trimmed;
+  return '${trimmed.substring(0, 7)}…';
+}
+
+bool _shouldShowChartLabel(int idx, int totalCount) {
+  if (totalCount <= 7) return true;
+  final step = (totalCount / 4).ceil();
+  if (idx == 0 || idx == totalCount - 1) return true;
+  return idx % step == 0 && (totalCount - 1 - idx) >= (step / 2);
+}
+
+@visibleForTesting
+String formatChartLabel(String raw) => _formatChartLabel(raw);
+
+@visibleForTesting
+bool shouldShowChartLabel(int idx, int totalCount) =>
+    _shouldShowChartLabel(idx, totalCount);
+
 class _SalesTrendChart extends StatelessWidget {
   final List<CashPoint> cash;
   final String selectedPeriod;
@@ -840,8 +982,6 @@ class _SalesTrendChart extends StatelessWidget {
       spots.add(FlSpot(i.toDouble(), y));
     }
     if (maxY == 0) maxY = 100;
-
-    final xInterval = (cash.length / 4).ceil().toDouble();
 
     return AppCard(
       padding: const EdgeInsets.all(16),
@@ -934,7 +1074,10 @@ class _SalesTrendChart extends StatelessWidget {
                         }
                         String label;
                         if (value >= 1000) {
-                          label = '₹${(value / 1000).toStringAsFixed(1)}k';
+                          final inK = value / 1000;
+                          label = inK % 1 == 0
+                              ? '₹${inK.toInt()}k'
+                              : '₹${inK.toStringAsFixed(1)}k';
                         } else {
                           label = '₹${value.toInt()}';
                         }
@@ -951,29 +1094,29 @@ class _SalesTrendChart extends StatelessWidget {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 26,
-                      interval: xInterval > 0 ? xInterval : 1,
+                      reservedSize: 28,
+                      interval: 1,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= cash.length) {
+                        if (value != idx.toDouble() ||
+                            idx < 0 ||
+                            idx >= cash.length) {
+                          return const SizedBox.shrink();
+                        }
+                        if (!_shouldShowChartLabel(idx, cash.length)) {
                           return const SizedBox.shrink();
                         }
                         return SideTitleWidget(
                           meta: meta,
-                          fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
-                          child: SizedBox(
-                            width: 56,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                cash[idx].label,
-                                maxLines: 1,
-                                softWrap: false,
-                                style: const TextStyle(
-                                  fontSize: 10.5,
-                                  color: AppColors.mutedText,
-                                ),
-                              ),
+                          space: 6,
+                          child: Text(
+                            _formatChartLabel(cash[idx].label),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.mutedText,
                             ),
                           ),
                         );
@@ -1023,8 +1166,11 @@ class _SalesTrendChart extends StatelessWidget {
                         final valPaise = idx < cash.length
                             ? cash[idx].income
                             : 0;
+                        final period = idx < cash.length
+                            ? _formatChartLabel(cash[idx].label)
+                            : '';
                         return LineTooltipItem(
-                          CurrencyFormatter.format(valPaise),
+                          '$period\nCollected: ${CurrencyFormatter.format(valPaise)}',
                           const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -1066,7 +1212,18 @@ class _CashFlowChart extends StatelessWidget {
     }
     if (maxVal == 0) maxVal = 100;
 
-    final xInterval = (cash.length / 4).ceil().toDouble();
+    final double rodWidth;
+    final double barsSpace;
+    if (cash.length <= 5) {
+      rodWidth = 11.0;
+      barsSpace = 4.0;
+    } else if (cash.length <= 8) {
+      rodWidth = 8.0;
+      barsSpace = 3.0;
+    } else {
+      rodWidth = 5.0;
+      barsSpace = 2.0;
+    }
 
     final groups = <BarChartGroupData>[];
     for (int i = 0; i < cash.length; i++) {
@@ -1075,18 +1232,33 @@ class _CashFlowChart extends StatelessWidget {
       groups.add(
         BarChartGroupData(
           x: i,
+          barsSpace: barsSpace,
           barRods: [
             BarChartRodData(
               toY: inc,
               color: AppColors.primary,
-              width: 8,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+              width: rodWidth,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(3),
+              ),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxVal * 1.15,
+                color: AppColors.border.withValues(alpha: 0.35),
+              ),
             ),
             BarChartRodData(
               toY: exp,
               color: AppColors.warning,
-              width: 8,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+              width: rodWidth,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(3),
+              ),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxVal * 1.15,
+                color: AppColors.border.withValues(alpha: 0.35),
+              ),
             ),
           ],
         ),
@@ -1228,7 +1400,10 @@ class _CashFlowChart extends StatelessWidget {
                         }
                         String label;
                         if (value >= 1000) {
-                          label = '₹${(value / 1000).toStringAsFixed(1)}k';
+                          final inK = value / 1000;
+                          label = inK % 1 == 0
+                              ? '₹${inK.toInt()}k'
+                              : '₹${inK.toStringAsFixed(1)}k';
                         } else {
                           label = '₹${value.toInt()}';
                         }
@@ -1245,29 +1420,29 @@ class _CashFlowChart extends StatelessWidget {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 26,
-                      interval: xInterval > 0 ? xInterval : 1,
+                      reservedSize: 28,
+                      interval: 1,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= cash.length) {
+                        if (value != idx.toDouble() ||
+                            idx < 0 ||
+                            idx >= cash.length) {
+                          return const SizedBox.shrink();
+                        }
+                        if (!_shouldShowChartLabel(idx, cash.length)) {
                           return const SizedBox.shrink();
                         }
                         return SideTitleWidget(
                           meta: meta,
-                          fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
-                          child: SizedBox(
-                            width: 56,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                cash[idx].label,
-                                maxLines: 1,
-                                softWrap: false,
-                                style: const TextStyle(
-                                  fontSize: 10.5,
-                                  color: AppColors.mutedText,
-                                ),
-                              ),
+                          space: 6,
+                          child: Text(
+                            _formatChartLabel(cash[idx].label),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.mutedText,
                             ),
                           ),
                         );
@@ -1286,8 +1461,11 @@ class _CashFlowChart extends StatelessWidget {
                           ? cash[groupIndex].income
                           : cash[groupIndex].expenses;
                       final label = isIncome ? 'Collected' : 'Expenses';
+                      final period = groupIndex < cash.length
+                          ? _formatChartLabel(cash[groupIndex].label)
+                          : '';
                       return BarTooltipItem(
-                        '$label: ${CurrencyFormatter.format(valPaise)}',
+                        '$period\n$label: ${CurrencyFormatter.format(valPaise)}',
                         const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,

@@ -588,11 +588,7 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
     }
 
     context.read<OwnerBloc>().add(
-      UpdateStaffEvent(
-        employeeId: widget.member.id,
-        name: name,
-        phone: phone,
-      ),
+      UpdateStaffEvent(employeeId: widget.member.id, name: name, phone: phone),
     );
     Navigator.pop(context);
   }

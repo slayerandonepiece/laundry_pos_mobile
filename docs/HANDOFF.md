@@ -239,7 +239,7 @@ now itself historical, superseded by 28 September above.
   cold start, orders list and outlet switching all pass; the setup screen
   rows, a never-opened outlet and the employee flow were not seen. Details
   in the plan doc §8. Build command: `flutter build ios --simulator --debug
-  --flavor dev --dart-define=ENV=dev` (bundle `com.myshop.myshop.dev`).
+  --flavor dev --dart-define=ENV=dev` (bundle `com.reddygona.lpos.dev`).
 - Superseded branch `claude/nifty-newton-8w8fhh` and the merged
   `chore/backend-and-setup` branches (both repos) are for the user to delete
   on GitHub (session git proxy refuses remote deletes).

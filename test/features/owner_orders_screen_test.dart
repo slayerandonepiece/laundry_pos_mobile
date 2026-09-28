@@ -176,8 +176,9 @@ void main() {
       final ordersBloc = OrdersBloc(ordersRepository: mockOrdersRepo);
       final cartBloc = CartBloc(posRepository: mockPosRepo);
       final authBloc = MockAuthBloc();
-      final outletScopeCubit = OutletScopeCubit(localCache: cache ?? FakeLocalCache())
-        ..hydrate();
+      final outletScopeCubit = OutletScopeCubit(
+        localCache: cache ?? FakeLocalCache(),
+      )..hydrate();
 
       return MultiRepositoryProvider(
         providers: [
@@ -411,35 +412,34 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Persistent Clear button resets filters to default',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 1600);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('Persistent Clear button resets filters to default', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(createScreen());
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(createScreen());
+      await tester.pumpAndSettle();
 
-        // The Clear button is always visible
-        final clearBtn = find.text('Clear');
-        expect(clearBtn, findsOneWidget);
+      // The Clear button is always visible
+      final clearBtn = find.text('Clear');
+      expect(clearBtn, findsOneWidget);
 
-        // Apply a quick filter
-        await tester.tap(find.text('Late'));
-        await tester.pumpAndSettle();
-        expect(find.text('ORD-101'), findsNothing);
+      // Apply a quick filter
+      await tester.tap(find.text('Late'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORD-101'), findsNothing);
 
-        // Tap Clear button
-        await tester.tap(clearBtn);
-        await tester.pumpAndSettle();
+      // Tap Clear button
+      await tester.tap(clearBtn);
+      await tester.pumpAndSettle();
 
-        // Both orders visible again
-        expect(find.text('ORD-101'), findsOneWidget);
-        expect(find.text('ORD-102'), findsOneWidget);
-      },
-    );
+      // Both orders visible again
+      expect(find.text('ORD-101'), findsOneWidget);
+      expect(find.text('ORD-102'), findsOneWidget);
+    });
 
     testWidgets(
       'Period selector supports This quarter and Custom dates with inline pickers',
@@ -496,28 +496,22 @@ void main() {
       },
     );
 
-    test(
-      'LoadOrderDetailEvent emits cached order AND stale-cache warning when network refresh fails',
-      () async {
-        final cache = FakeLocalCache()
-          ..cachedOrdersJson = [fakeOrders.first.toJson()];
-        final repo = OrdersRepository(
-          apiClient: FailingApiClient(),
-          localCache: cache,
-        );
-        final bloc = OrdersBloc(ordersRepository: repo);
-        addTearDown(bloc.close);
+    test('LoadOrderDetailEvent emits cached order AND stale-cache warning when network refresh fails', () async {
+      final cache = FakeLocalCache()
+        ..cachedOrdersJson = [fakeOrders.first.toJson()];
+      final repo = OrdersRepository(
+        apiClient: FailingApiClient(),
+        localCache: cache,
+      );
+      final bloc = OrdersBloc(ordersRepository: repo);
+      addTearDown(bloc.close);
 
-        bloc.add(LoadOrderDetailEvent('ORD-101'));
-        await Future<void>.delayed(const Duration(milliseconds: 50));
+      bloc.add(LoadOrderDetailEvent('ORD-101'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-        expect(bloc.state.isLoading, isFalse);
-        expect(bloc.state.selectedOrder?.id, 'ORD-101');
-        expect(
-          bloc.state.error,
-          'Could not refresh — showing the saved copy',
-        );
-      },
-    );
+      expect(bloc.state.isLoading, isFalse);
+      expect(bloc.state.selectedOrder?.id, 'ORD-101');
+      expect(bloc.state.error, 'Could not refresh — showing the saved copy');
+    });
   });
 }

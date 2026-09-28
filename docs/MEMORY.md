@@ -31,7 +31,7 @@ machine-local and do **not** reach cloud sessions — this file does.
 - Test against the local backend: the app's default `ENV=dev` already points
   to `127.0.0.1:3000` (iOS sim) / `10.0.2.2:3000` (Android emu); run the
   backend with `npm run dev` in `../laundry_pos`. iOS builds need
-  `--flavor dev` (bundle `com.myshop.myshop.dev`). Tell test agents
+  `--flavor dev` (bundle `com.reddygona.lpos.dev`). Tell test agents
   whether signing out is allowed.
 - Update this file, `docs/HANDOFF.md` and the relevant plan doc at the end of
   every session, and mention artifacts and discussions.

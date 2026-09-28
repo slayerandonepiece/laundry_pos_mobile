@@ -2,13 +2,18 @@ import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:myshop/core/constants/app_environment.dart';
+import 'package:myshop/core/gate/app_gate_service.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/firebase_service.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
 import 'package:myshop/core/sync/app_resume_sync.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/theme/app_theme.dart';
+import 'package:myshop/features/maintenance/presentation/maintenance_screen.dart';
+import 'package:upgrader/upgrader.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
@@ -19,12 +24,14 @@ import 'package:myshop/features/auth/presentation/reset_password_screen.dart';
 import 'package:myshop/features/auth/presentation/splash_screen.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
+import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
+import 'package:myshop/features/pos/bloc/cart_state.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/features/shell/presentation/main_navigation_shell.dart';
@@ -33,6 +40,9 @@ import 'package:myshop/shared/widgets/blocked_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase (Crashlytics, Analytics, Cloud Messaging, Remote Config)
+  await FirebaseService.initialize();
 
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
@@ -101,10 +111,18 @@ class MyShopApp extends StatefulWidget {
   State<MyShopApp> createState() => _MyShopAppState();
 }
 
-class _MyShopAppState extends State<MyShopApp> {
+class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _rescoping = false;
+  late bool _splashAnimationCompleted = WidgetsBinding.instance.runtimeType
+      .toString()
+      .contains('Test');
+
+  bool _isMaintenanceMode = false;
+  bool _isIosForceUpdateRequired = false;
+  GateDecision? _deferredGateDecision;
+  late final Upgrader _upgrader;
 
   late final AuthBloc _authBloc;
   late final OutletScopeCubit _outletScopeCubit;
@@ -139,8 +157,7 @@ class _MyShopAppState extends State<MyShopApp> {
         return;
       }
       final fresh = await widget.authRepository.refreshOutletContext();
-      if (fresh == null ||
-          fresh.any((o) => o['id']?.toString() == previous)) {
+      if (fresh == null || fresh.any((o) => o['id']?.toString() == previous)) {
         _authBloc.add(AccessForbiddenEvent());
         return;
       }
@@ -162,9 +179,142 @@ class _MyShopAppState extends State<MyShopApp> {
     }
   }
 
+  Future<void> _evaluateStartupGate() async {
+    final decision = await AppGateService.evaluateGate();
+    if (!mounted) return;
+    _applyGateDecision(decision);
+  }
+
+  void _applyGateDecision(GateDecision decision) {
+    switch (decision) {
+      case GateDecision.maintenance:
+        if (!_isMaintenanceMode) {
+          setState(() => _isMaintenanceMode = true);
+        }
+        break;
+      case GateDecision.androidForceUpdate:
+        AppGateService.performAndroidForceUpdateIfNeeded();
+        break;
+      case GateDecision.iosForceUpdate:
+        if (!_isIosForceUpdateRequired) {
+          setState(() => _isIosForceUpdateRequired = true);
+        }
+        break;
+      case GateDecision.proceed:
+        if (_isMaintenanceMode || _isIosForceUpdateRequired) {
+          setState(() {
+            _isMaintenanceMode = false;
+            _isIosForceUpdateRequired = false;
+          });
+        }
+        break;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _handleAppResume();
+    }
+  }
+
+  Future<void> _handleAppResume() async {
+    await FirebaseService.refreshRemoteConfig();
+    final decision = await AppGateService.evaluateGate();
+    if (!mounted) return;
+
+    if (decision == GateDecision.proceed) {
+      _deferredGateDecision = null;
+      if (_isMaintenanceMode || _isIosForceUpdateRequired) {
+        setState(() {
+          _isMaintenanceMode = false;
+          _isIosForceUpdateRequired = false;
+        });
+      }
+      return;
+    }
+
+    // A blocking condition (maintenance or force-update) was detected!
+    final midTx = AppGateService.isMidTransaction(
+      cartState: _cartBloc.state,
+      ordersState: _ordersBloc.state,
+    );
+
+    if (midTx) {
+      AppLogger.log(
+        'APP_GATE',
+        'Resume gate triggered $decision while mid-transaction; deferring until safe screen.',
+      );
+      _deferredGateDecision = decision;
+    } else {
+      _deferredGateDecision = null;
+      _applyGateDecision(decision);
+    }
+  }
+
+  void _checkDeferredGate() {
+    if (_deferredGateDecision == null) return;
+    final midTx = AppGateService.isMidTransaction(
+      cartState: _cartBloc.state,
+      ordersState: _ordersBloc.state,
+    );
+    if (!midTx) {
+      final decision = _deferredGateDecision!;
+      _deferredGateDecision = null;
+      AppLogger.log(
+        'APP_GATE',
+        'Transaction concluded; applying deferred gate decision: $decision',
+      );
+      _applyGateDecision(decision);
+    }
+  }
+
+  Future<void> _handleCheckAgain() async {
+    await FirebaseService.refreshRemoteConfig();
+    final decision = await AppGateService.evaluateGate();
+    if (!mounted) return;
+    if (decision == GateDecision.proceed) {
+      setState(() {
+        _isMaintenanceMode = false;
+        _isIosForceUpdateRequired = false;
+        _deferredGateDecision = null;
+      });
+    } else {
+      _applyGateDecision(decision);
+      _messengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Maintenance is still in progress. Please check again shortly.',
+          ),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Widget _wrapWithUpgradeAlertIfNeeded(Widget child) {
+    if (_isIosForceUpdateRequired) {
+      return UpgradeAlert(
+        upgrader: _upgrader,
+        navigatorKey: _navigatorKey,
+        barrierDismissible: false,
+        shouldPopScope: () => false,
+        showIgnore: false,
+        showLater: false,
+        child: child,
+      );
+    }
+    return child;
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _upgrader = AppGateService.createUpgrader();
+    _evaluateStartupGate();
+
     ConnectivityService.instance.start();
     _appResumeSync = AppResumeSync();
 
@@ -214,6 +364,7 @@ class _MyShopAppState extends State<MyShopApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _appResumeSync.dispose();
     ConnectivityService.instance.dispose();
     _authBloc.close();
@@ -248,13 +399,26 @@ class _MyShopAppState extends State<MyShopApp> {
         child: MaterialApp(
           navigatorKey: _navigatorKey,
           scaffoldMessengerKey: _messengerKey,
-          title: 'MyShop',
+          title: AppEnvironmentConfig.appName,
           debugShowCheckedModeBanner: false,
           theme: AppTheme.theme,
-          home: MultiBlocListener(
-            listeners: [
-              BlocListener<AuthBloc, AuthState>(
-                listener: (context, state) {
+          home: _isMaintenanceMode
+              ? MaintenanceScreen(
+                  message: FirebaseService.maintenanceMessage,
+                  eta: FirebaseService.maintenanceEta,
+                  onCheckAgain: _handleCheckAgain,
+                )
+              : _wrapWithUpgradeAlertIfNeeded(
+                  MultiBlocListener(
+                    listeners: [
+                      BlocListener<CartBloc, CartState>(
+                        listener: (context, state) => _checkDeferredGate(),
+                      ),
+                      BlocListener<OrdersBloc, OrdersState>(
+                        listener: (context, state) => _checkDeferredGate(),
+                      ),
+                      BlocListener<AuthBloc, AuthState>(
+                        listener: (context, state) {
                   if (state is UnauthenticatedState) {
                     _outletScopeCubit.reset();
                     Navigator.of(context).popUntil((route) => route.isFirst);
@@ -309,95 +473,109 @@ class _MyShopAppState extends State<MyShopApp> {
             ],
             child: BlocBuilder<AuthBloc, AuthState>(
               builder: (context, state) {
-              if (state is AuthInitialState ||
-                  (state is AuthLoadingState && state.isInitialCheck)) {
-                return const SplashScreen();
-              }
+                final showSplash =
+                    !_splashAnimationCompleted ||
+                    state is AuthInitialState ||
+                    (state is AuthLoadingState && state.isInitialCheck);
 
-              if (state is MustChangePasswordState ||
-                  (state is AuthLoadingState &&
-                      state.message == 'Updating password...')) {
-                return const ResetPasswordScreen();
-              }
+                if (showSplash) {
+                  return SplashScreen(
+                    onAnimationComplete: () {
+                      if (mounted && !_splashAnimationCompleted) {
+                        setState(() {
+                          _splashAnimationCompleted = true;
+                        });
+                      }
+                    },
+                  );
+                }
 
-              if (state is AccessBlockedState) {
-                return BlockedScreen(
-                  reason: state.reason,
-                  isOwner: state.isOwner,
-                  paidThroughDate: state.paidThroughDate,
-                  ownerPhone: state.ownerPhone,
-                  onRetry: () {
-                    _authBloc.add(CheckAuthStatusEvent());
-                  },
-                  onSignOut: () {
-                    _authBloc.add(LogoutRequestedEvent());
-                  },
-                  pendingCount: widget.localCache.getTotalPendingCount(),
-                );
-              }
+                if (state is MustChangePasswordState ||
+                    (state is AuthLoadingState &&
+                        state.message == 'Updating password...')) {
+                  return const ResetPasswordScreen();
+                }
 
-              if (state is AuthenticatedState) {
-                return BlocBuilder<OutletScopeCubit, OutletScope>(
-                  builder: (context, scope) {
-                    if (scope.missingCache) {
-                      // SessionRevokedEvent was just dispatched from the
-                      // listener above; show a brief transitional splash
-                      // rather than guessing an outlet.
-                      return const SplashScreen();
-                    }
+                if (state is AccessBlockedState) {
+                  return BlockedScreen(
+                    reason: state.reason,
+                    isOwner: state.isOwner,
+                    paidThroughDate: state.paidThroughDate,
+                    ownerPhone: state.ownerPhone,
+                    onRetry: () {
+                      _authBloc.add(CheckAuthStatusEvent());
+                    },
+                    onSignOut: () {
+                      _authBloc.add(LogoutRequestedEvent());
+                    },
+                    pendingCount: widget.localCache.getTotalPendingCount(),
+                  );
+                }
 
-                    if (scope.blockedNoOutlet) {
-                      return BlockedScreen(
-                        reason: 'no_outlet_assigned',
-                        isOwner: false,
-                        onRetry: () {
-                          _authBloc.add(CheckAuthStatusEvent());
-                        },
-                        onSignOut: () {
-                          _authBloc.add(LogoutRequestedEvent());
-                        },
-                        pendingCount: widget.localCache.getTotalPendingCount(),
-                      );
-                    }
+                if (state is AuthenticatedState) {
+                  return BlocBuilder<OutletScopeCubit, OutletScope>(
+                    builder: (context, scope) {
+                      if (scope.missingCache) {
+                        // SessionRevokedEvent was just dispatched from the
+                        // listener above; show a brief transitional splash
+                        // rather than guessing an outlet.
+                        return const SplashScreen(animate: false);
+                      }
 
-                    if (scope.requiresSelection) {
-                      return OutletRequiredScreen(
-                        outlets: scope.allowed,
-                        onSelected: (outletId) {
-                          _outletScopeCubit.select(outletId);
-                        },
-                      );
-                    }
+                      if (scope.blockedNoOutlet) {
+                        return BlockedScreen(
+                          reason: 'no_outlet_assigned',
+                          isOwner: false,
+                          onRetry: () {
+                            _authBloc.add(CheckAuthStatusEvent());
+                          },
+                          onSignOut: () {
+                            _authBloc.add(LogoutRequestedEvent());
+                          },
+                          pendingCount: widget.localCache
+                              .getTotalPendingCount(),
+                        );
+                      }
 
-                    if (_needsSetup(state)) {
-                      return BootstrapScreen(
-                        // A new scope (outlet switch) restarts the setup.
-                        key: ValueKey(
-                          scope.allOutlets ? 'all' : scope.activeOutletId,
-                        ),
-                        authState: state,
-                        authRepository: widget.authRepository,
-                        posRepository: widget.posRepository,
-                        ordersRepository: widget.ordersRepository,
-                        ownerRepository: widget.ownerRepository,
-                        localCache: widget.localCache,
-                        onCompleted: () {
-                          _authBloc.add(BootstrapCompletedEvent());
-                        },
-                      );
-                    }
-                    return const MainNavigationShell();
-                  },
-                );
-              }
+                      if (scope.requiresSelection) {
+                        return OutletRequiredScreen(
+                          outlets: scope.allowed,
+                          onSelected: (outletId) {
+                            _outletScopeCubit.select(outletId);
+                          },
+                        );
+                      }
 
-              // Default: UnauthenticatedState or AuthLoadingState (when signing in)
-              return const LoginScreen();
+                      if (_needsSetup(state)) {
+                        return BootstrapScreen(
+                          // A new scope (outlet switch) restarts the setup.
+                          key: ValueKey(
+                            scope.allOutlets ? 'all' : scope.activeOutletId,
+                          ),
+                          authState: state,
+                          authRepository: widget.authRepository,
+                          posRepository: widget.posRepository,
+                          ordersRepository: widget.ordersRepository,
+                          ownerRepository: widget.ownerRepository,
+                          localCache: widget.localCache,
+                          onCompleted: () {
+                            _authBloc.add(BootstrapCompletedEvent());
+                          },
+                        );
+                      }
+                      return const MainNavigationShell();
+                    },
+                  );
+                }
+
+                // Default: UnauthenticatedState or AuthLoadingState (when signing in)
+                return const LoginScreen();
               },
             ),
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

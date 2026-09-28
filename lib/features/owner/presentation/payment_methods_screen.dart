@@ -40,12 +40,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
         onConfirm: () {
           final bloc = context.read<OwnerBloc>();
           Navigator.of(context).pop();
-          bloc.add(
-            TogglePaymentMethodEvent(
-              id: method.id,
-              active: false,
-            ),
-          );
+          bloc.add(TogglePaymentMethodEvent(id: method.id, active: false));
         },
         onCancel: () {
           Navigator.of(context).pop();

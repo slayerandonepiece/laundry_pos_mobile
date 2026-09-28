@@ -124,16 +124,13 @@ void main() {
       },
     );
 
-    test(
-      'Owner cold start with nothing cached defaults to All outlets, no re-auth',
-      () async {
-        await localCache.setCachedStoreDetails({'role': 'OWNER'});
-        cubit.hydrate();
+    test('Owner cold start with nothing cached defaults to All outlets, no re-auth', () async {
+      await localCache.setCachedStoreDetails({'role': 'OWNER'});
+      cubit.hydrate();
 
-        expect(cubit.state.missingCache, isFalse);
-        expect(cubit.state.allOutlets, isTrue);
-      },
-    );
+      expect(cubit.state.missingCache, isFalse);
+      expect(cubit.state.allOutlets, isTrue);
+    });
 
     test('reset() clears state back to empty (logout)', () async {
       await localCache.setAllowedOutletsForStore('store_a', oneOutlet);
@@ -158,18 +155,21 @@ void main() {
       cubit.adoptFromLogin(isOwner: false);
     }
 
-    test('an employee who picked an outlet skips the picker next sign-in', () async {
-      await signInEmployee('u1');
-      expect(cubit.state.requiresSelection, isTrue);
-      cubit.select('outlet_2');
+    test(
+      'an employee who picked an outlet skips the picker next sign-in',
+      () async {
+        await signInEmployee('u1');
+        expect(cubit.state.requiresSelection, isTrue);
+        cubit.select('outlet_2');
 
-      await localCache.clear(); // logout
-      expect(localCache.getActiveOutletId(), isNull);
+        await localCache.clear(); // logout
+        expect(localCache.getActiveOutletId(), isNull);
 
-      await signInEmployee('u1');
-      expect(cubit.state.requiresSelection, isFalse);
-      expect(cubit.state.activeOutletId, 'outlet_2');
-    });
+        await signInEmployee('u1');
+        expect(cubit.state.requiresSelection, isFalse);
+        expect(cubit.state.activeOutletId, 'outlet_2');
+      },
+    );
 
     test('the choice is per user and ignored once no longer allowed', () async {
       await signInEmployee('u1');

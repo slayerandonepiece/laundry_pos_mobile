@@ -155,7 +155,10 @@ void main() {
               child: Builder(
                 builder: (context) => ElevatedButton(
                   onPressed: () {
-                    RecordPaymentDialog.show(context, order: order ?? testOrder);
+                    RecordPaymentDialog.show(
+                      context,
+                      order: order ?? testOrder,
+                    );
                   },
                   child: const Text('Open Record Dialog'),
                 ),
@@ -178,7 +181,10 @@ void main() {
         expect(find.text('EL-350 · Ramesh Patel'), findsOneWidget);
 
         // Submit button starts disabled (empty amount, no method)
-        final submitFinder = find.widgetWithText(PrimaryButton, 'Record payment');
+        final submitFinder = find.widgetWithText(
+          PrimaryButton,
+          'Record payment',
+        );
         expect(submitFinder, findsOneWidget);
         expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNull);
 
@@ -196,14 +202,20 @@ void main() {
         // Enter amount > balanceDue (35000 paise = 350 rupees)
         await tester.enterText(find.byType(TextField), '400');
         await tester.pumpAndSettle();
-        expect(find.textContaining('Amount cannot exceed balance'), findsOneWidget);
+        expect(
+          find.textContaining('Amount cannot exceed balance'),
+          findsOneWidget,
+        );
         expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNull);
 
         // Enter valid partial amount (₹150)
         await tester.enterText(find.byType(TextField), '150');
         await tester.pumpAndSettle();
         expect(find.text('Amount must be greater than zero'), findsNothing);
-        expect(find.textContaining('Amount cannot exceed balance'), findsNothing);
+        expect(
+          find.textContaining('Amount cannot exceed balance'),
+          findsNothing,
+        );
         expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNotNull);
 
         // Submit
@@ -248,7 +260,10 @@ void main() {
         await tester.tap(find.text('Upi'));
         await tester.pumpAndSettle();
 
-        final submitFinder = find.widgetWithText(PrimaryButton, 'Record payment');
+        final submitFinder = find.widgetWithText(
+          PrimaryButton,
+          'Record payment',
+        );
         expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNotNull);
 
         await tester.tap(submitFinder);

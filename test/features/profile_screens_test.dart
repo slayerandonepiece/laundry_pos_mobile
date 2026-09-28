@@ -274,11 +274,7 @@ void main() {
         expect(fakeRepo.lastToggledPaymentMethod!['active'], isFalse);
 
         fakeRepo.paymentMethods = [
-          StorePaymentMethod(
-            id: 'pm-3',
-            code: 'COD',
-            name: 'Pay on delivery',
-          ),
+          StorePaymentMethod(id: 'pm-3', code: 'COD', name: 'Pay on delivery'),
         ];
         await tester.tap(find.byIcon(Icons.refresh_rounded));
         await pumpAsync(tester);

@@ -119,23 +119,22 @@ void main() {
           BlocProvider<CartBloc>.value(value: cartBloc),
           BlocProvider<OutletScopeCubit>.value(value: outletCubit),
         ],
-        child: const MaterialApp(
-          home: CheckoutScreen(),
-        ),
+        child: const MaterialApp(home: CheckoutScreen()),
       );
     }
 
-    testWidgets('Renders resolved outlet name when outletId is set in CartState', (
-      tester,
-    ) async {
-      cartBloc.add(ResetSaleEvent(outletId: 'outlet_a'));
-      cartBloc.add(AddItemToCartEvent(product: dummyProduct, quantity: 1));
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pump();
+    testWidgets(
+      'Renders resolved outlet name when outletId is set in CartState',
+      (tester) async {
+        cartBloc.add(ResetSaleEvent(outletId: 'outlet_a'));
+        cartBloc.add(AddItemToCartEvent(product: dummyProduct, quantity: 1));
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
 
-      expect(find.text('Chinnapanahalli Outlet'), findsOneWidget);
-      expect(find.byIcon(Icons.storefront_outlined), findsOneWidget);
-    });
+        expect(find.text('Chinnapanahalli Outlet'), findsOneWidget);
+        expect(find.byIcon(Icons.storefront_outlined), findsOneWidget);
+      },
+    );
 
     testWidgets('Omits outlet row when outletId is null in CartState', (
       tester,
@@ -149,55 +148,63 @@ void main() {
       expect(find.byIcon(Icons.storefront_outlined), findsNothing);
     });
 
-    testWidgets('Renders only store payment methods without hardcoded Pay on delivery row', (
-      tester,
-    ) async {
-      cartBloc.emit(
-        cartBloc.state.copyWith(
-          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
-          paymentMethods: [
-            StorePaymentMethod(id: 'pm_cash', name: 'Cash', active: true),
-            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
-            StorePaymentMethod(id: 'pm_card', name: 'Debit Card', active: true),
-          ],
-        ),
-      );
+    testWidgets(
+      'Renders only store payment methods without hardcoded Pay on delivery row',
+      (tester) async {
+        cartBloc.emit(
+          cartBloc.state.copyWith(
+            items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+            paymentMethods: [
+              StorePaymentMethod(id: 'pm_cash', name: 'Cash', active: true),
+              StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+              StorePaymentMethod(
+                id: 'pm_card',
+                name: 'Debit Card',
+                active: true,
+              ),
+            ],
+          ),
+        );
 
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pump();
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
 
-      expect(find.text('Cash'), findsOneWidget);
-      expect(find.text('UPI'), findsOneWidget);
-      expect(find.text('Debit Card'), findsOneWidget);
-      expect(find.text('Pay on delivery'), findsNothing);
-    });
+        expect(find.text('Cash'), findsOneWidget);
+        expect(find.text('UPI'), findsOneWidget);
+        expect(find.text('Debit Card'), findsOneWidget);
+        expect(find.text('Pay on delivery'), findsNothing);
+      },
+    );
 
-    testWidgets('Empty payment methods shows warning message and omits prepaid choices', (
-      tester,
-    ) async {
-      cartBloc.emit(
-        cartBloc.state.copyWith(
-          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
-          paymentMethods: [],
-        ),
-      );
+    testWidgets(
+      'Empty payment methods shows warning message and omits prepaid choices',
+      (tester) async {
+        cartBloc.emit(
+          cartBloc.state.copyWith(
+            items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+            paymentMethods: [],
+          ),
+        );
 
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pump();
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
 
-      expect(
-        find.text(
-          'No payment methods are enabled. Ask the owner to enable one in Profile → Payment methods.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('Cash'), findsNothing);
-      expect(find.text('UPI'), findsNothing);
-      expect(find.text('Pay on delivery'), findsNothing);
+        expect(
+          find.text(
+            'No payment methods are enabled. Ask the owner to enable one in Profile → Payment methods.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Cash'), findsNothing);
+        expect(find.text('UPI'), findsNothing);
+        expect(find.text('Pay on delivery'), findsNothing);
 
-      final submitButton = tester.widget<PrimaryButton>(find.byType(PrimaryButton));
-      expect(submitButton.onPressed, isNull);
-    });
+        final submitButton = tester.widget<PrimaryButton>(
+          find.byType(PrimaryButton),
+        );
+        expect(submitButton.onPressed, isNull);
+      },
+    );
 
     testWidgets('Submit button disabled until payment method is selected', (
       tester,
@@ -238,125 +245,136 @@ void main() {
       expect(fakeRepo.lastPassedOutletId, equals('outlet_a'));
     });
 
-    testWidgets('Selecting Cash On Delivery method updates button label and submits delivery choice', (
-      tester,
-    ) async {
-      cartBloc.emit(
-        cartBloc.state.copyWith(
-          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
-          paymentMethods: [
-            StorePaymentMethod(id: 'pm_cod', code: 'COD', name: 'Cash On Delivery', active: true),
-          ],
-          outletId: 'outlet_a',
-        ),
-      );
+    testWidgets(
+      'Selecting Cash On Delivery method updates button label and submits delivery choice',
+      (tester) async {
+        cartBloc.emit(
+          cartBloc.state.copyWith(
+            items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+            paymentMethods: [
+              StorePaymentMethod(
+                id: 'pm_cod',
+                code: 'COD',
+                name: 'Cash On Delivery',
+                active: true,
+              ),
+            ],
+            outletId: 'outlet_a',
+          ),
+        );
 
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pump();
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
 
-      final submitButtonFinder = find.byType(PrimaryButton);
+        final submitButtonFinder = find.byType(PrimaryButton);
 
-      // Tap Cash On Delivery
-      await tester.tap(find.text('Cash On Delivery'));
-      await tester.pump();
+        // Tap Cash On Delivery
+        await tester.tap(find.text('Cash On Delivery'));
+        await tester.pump();
 
-      expect(find.text('Place order · Pay on delivery'), findsOneWidget);
+        expect(find.text('Place order · Pay on delivery'), findsOneWidget);
 
-      final button = tester.widget<PrimaryButton>(submitButtonFinder);
-      expect(button.onPressed, isNotNull);
+        final button = tester.widget<PrimaryButton>(submitButtonFinder);
+        expect(button.onPressed, isNotNull);
 
-      await tester.tap(submitButtonFinder);
-      await tester.pump();
+        await tester.tap(submitButtonFinder);
+        await tester.pump();
 
-      expect(fakeRepo.submitCalled, isTrue);
-      expect(fakeRepo.lastPassedMethodName, isNull); // delivery sends no payment method name
-      expect(fakeRepo.lastPassedOutletId, equals('outlet_a'));
-    });
+        expect(fakeRepo.submitCalled, isTrue);
+        expect(
+          fakeRepo.lastPassedMethodName,
+          isNull,
+        ); // delivery sends no payment method name
+        expect(fakeRepo.lastPassedOutletId, equals('outlet_a'));
+      },
+    );
 
-    testWidgets('Due date defaults to today and is sent in order submission when unchanged', (
-      tester,
-    ) async {
-      final today = DateTime.now();
-      final expectedFormatted = DateFormatter.formatDate(today);
-      final expectedIso = DateFormatter.toIsoDateString(today);
+    testWidgets(
+      'Due date defaults to today and is sent in order submission when unchanged',
+      (tester) async {
+        final today = DateTime.now();
+        final expectedFormatted = DateFormatter.formatDate(today);
+        final expectedIso = DateFormatter.toIsoDateString(today);
 
-      cartBloc.emit(
-        cartBloc.state.copyWith(
-          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
-          paymentMethods: [
-            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
-          ],
-        ),
-      );
+        cartBloc.emit(
+          cartBloc.state.copyWith(
+            items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+            paymentMethods: [
+              StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+            ],
+          ),
+        );
 
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pump();
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
 
-      // UI displays today's date near order summary
-      expect(find.text('Due date: $expectedFormatted'), findsOneWidget);
+        // UI displays today's date near order summary
+        expect(find.text('Due date: $expectedFormatted'), findsOneWidget);
 
-      // Select UPI and place order
-      await tester.tap(find.text('UPI'));
-      await tester.pump();
+        // Select UPI and place order
+        await tester.tap(find.text('UPI'));
+        await tester.pump();
 
-      await tester.tap(find.byType(PrimaryButton));
-      await tester.pump();
+        await tester.tap(find.byType(PrimaryButton));
+        await tester.pump();
 
-      expect(fakeRepo.submitCalled, isTrue);
-      expect(fakeRepo.lastPassedDueDate, equals(expectedIso));
-      expect(fakeRepo.lastPassedNotes, equals(''));
-    });
+        expect(fakeRepo.submitCalled, isTrue);
+        expect(fakeRepo.lastPassedDueDate, equals(expectedIso));
+        expect(fakeRepo.lastPassedNotes, equals(''));
+      },
+    );
 
-    testWidgets('Picking a future date is accepted and reflected in dispatched event', (
-      tester,
-    ) async {
-      cartBloc.emit(
-        cartBloc.state.copyWith(
-          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
-          paymentMethods: [
-            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
-          ],
-        ),
-      );
+    testWidgets(
+      'Picking a future date is accepted and reflected in dispatched event',
+      (tester) async {
+        cartBloc.emit(
+          cartBloc.state.copyWith(
+            items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+            paymentMethods: [
+              StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+            ],
+          ),
+        );
 
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pump();
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
 
-      // Open date picker
-      await tester.tap(find.byKey(const Key('checkout_due_date_picker')));
-      await tester.pumpAndSettle();
+        // Open date picker
+        await tester.tap(find.byKey(const Key('checkout_due_date_picker')));
+        await tester.pumpAndSettle();
 
-      // Advance to next month to ensure future date
-      await tester.tap(find.byIcon(Icons.chevron_right));
-      await tester.pumpAndSettle();
+        // Advance to next month to ensure future date
+        await tester.tap(find.byIcon(Icons.chevron_right));
+        await tester.pumpAndSettle();
 
-      // Tap day 15
-      await tester.tap(find.text('15'));
-      await tester.pumpAndSettle();
+        // Tap day 15
+        await tester.tap(find.text('15'));
+        await tester.pumpAndSettle();
 
-      // Confirm dialog
-      await tester.tap(find.text('OK'));
-      await tester.pumpAndSettle();
+        // Confirm dialog
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
 
-      // Calculate expected date
-      final now = DateTime.now();
-      final nextMonth = DateTime(now.year, now.month + 1, 15);
-      final expectedFormatted = DateFormatter.formatDate(nextMonth);
-      final expectedIso = DateFormatter.toIsoDateString(nextMonth);
+        // Calculate expected date
+        final now = DateTime.now();
+        final nextMonth = DateTime(now.year, now.month + 1, 15);
+        final expectedFormatted = DateFormatter.formatDate(nextMonth);
+        final expectedIso = DateFormatter.toIsoDateString(nextMonth);
 
-      expect(find.text('Due date: $expectedFormatted'), findsOneWidget);
-      expect(find.text('Due date cannot be in the past'), findsNothing);
+        expect(find.text('Due date: $expectedFormatted'), findsOneWidget);
+        expect(find.text('Due date cannot be in the past'), findsNothing);
 
-      // Submit
-      await tester.tap(find.text('UPI'));
-      await tester.pump();
+        // Submit
+        await tester.tap(find.text('UPI'));
+        await tester.pump();
 
-      await tester.tap(find.byType(PrimaryButton));
-      await tester.pump();
+        await tester.tap(find.byType(PrimaryButton));
+        await tester.pump();
 
-      expect(fakeRepo.submitCalled, isTrue);
-      expect(fakeRepo.lastPassedDueDate, equals(expectedIso));
-    });
+        expect(fakeRepo.submitCalled, isTrue);
+        expect(fakeRepo.lastPassedDueDate, equals(expectedIso));
+      },
+    );
 
     testWidgets('Picking a past date is rejected with an inline error', (
       tester,
@@ -399,43 +417,44 @@ void main() {
       expect(find.text('Due date: $expectedTodayFormatted'), findsOneWidget);
     });
 
-    testWidgets('Notes text is optional and passed through to order-creation event when filled', (
-      tester,
-    ) async {
-      cartBloc.emit(
-        cartBloc.state.copyWith(
-          items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
-          paymentMethods: [
-            StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
-          ],
-        ),
-      );
+    testWidgets(
+      'Notes text is optional and passed through to order-creation event when filled',
+      (tester) async {
+        cartBloc.emit(
+          cartBloc.state.copyWith(
+            items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+            paymentMethods: [
+              StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+            ],
+          ),
+        );
 
-      await tester.pumpWidget(createWidgetUnderTest());
-      await tester.pump();
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
 
-      // Notes field exists and is optional
-      expect(find.byKey(const Key('checkout_notes_field')), findsOneWidget);
+        // Notes field exists and is optional
+        expect(find.byKey(const Key('checkout_notes_field')), findsOneWidget);
 
-      // Enter notes
-      await tester.enterText(
-        find.byKey(const Key('checkout_notes_field')),
-        'Handle delicate fabric with gentle detergent',
-      );
-      await tester.pump();
+        // Enter notes
+        await tester.enterText(
+          find.byKey(const Key('checkout_notes_field')),
+          'Handle delicate fabric with gentle detergent',
+        );
+        await tester.pump();
 
-      // Submit with UPI
-      await tester.tap(find.text('UPI'));
-      await tester.pump();
+        // Submit with UPI
+        await tester.tap(find.text('UPI'));
+        await tester.pump();
 
-      await tester.tap(find.byType(PrimaryButton));
-      await tester.pump();
+        await tester.tap(find.byType(PrimaryButton));
+        await tester.pump();
 
-      expect(fakeRepo.submitCalled, isTrue);
-      expect(
-        fakeRepo.lastPassedNotes,
-        equals('Handle delicate fabric with gentle detergent'),
-      );
-    });
+        expect(fakeRepo.submitCalled, isTrue);
+        expect(
+          fakeRepo.lastPassedNotes,
+          equals('Handle delicate fabric with gentle detergent'),
+        );
+      },
+    );
   });
 }

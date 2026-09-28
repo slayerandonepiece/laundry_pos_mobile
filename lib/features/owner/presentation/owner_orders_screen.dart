@@ -35,7 +35,8 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
   final TextEditingController _searchController = TextEditingController();
   SyncStatus? _lastSyncStatus;
 
-  String _selectedPeriod = '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
+  String _selectedPeriod =
+      '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
   DateTime? _customFrom;
   DateTime? _customTo;
   String _activeQuickFilter =
@@ -301,15 +302,16 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
         if (_customFrom == null || _customTo == null) {
           final start30d = todayStart.subtract(const Duration(days: 29));
           final isLast30d =
-              !orderDate.isBefore(start30d) && orderDate.isBefore(tomorrowStart);
+              !orderDate.isBefore(start30d) &&
+              orderDate.isBefore(tomorrowStart);
           final isThisMonth =
               orderDate.year == todayStart.year &&
               orderDate.month == todayStart.month;
           return isLast30d || isThisMonth;
         }
         final fromDate = _startOfDay(_customFrom!);
-        final toDateTomorrow =
-            _startOfDay(_customTo!).add(const Duration(days: 1));
+        final toDateTomorrow = _startOfDay(_customTo!)
+            .add(const Duration(days: 1));
         return !orderDate.isBefore(fromDate) &&
             orderDate.isBefore(toDateTomorrow);
       default:
@@ -981,8 +983,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                   ? const EmptyState(
                       icon: Icons.receipt_long_outlined,
                       title: "Can't load orders",
-                      subtitle:
-                          "You're offline or the server can't be reached. Pull down to try again.",
+                      subtitle: "You're offline or the server can't be reached. Pull down to try again.",
                     )
                   : EmptyState(
                       icon: Icons.receipt_long_outlined,
@@ -1018,8 +1019,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                   : EmptyState(
                       icon: Icons.search_off_outlined,
                       title: 'No orders match your filters',
-                      subtitle:
-                          'Try changing your date range, search query, or status filters.',
+                      subtitle: 'Try changing your date range, search query, or status filters.',
                       actionLabel: 'Clear filters',
                       onAction: _clearAllFilters,
                     ),

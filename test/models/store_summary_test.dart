@@ -76,7 +76,10 @@ void main() {
       expect(status.isWarning, isTrue);
       expect(status.badgeLabel, 'Trial ending');
       expect(status.title, 'Trial ending');
-      expect(status.subtitle, 'Please keep payment updated. Trial ends on 2026-10-02.');
+      expect(
+        status.subtitle,
+        'Please keep payment updated. Trial ends on 2026-10-02.',
+      );
     });
 
     test('resolvePlanStatus: SUBSCRIPTION_ENDING returns warning tone, "Renews soon" badge, and paidThroughDate', () {
@@ -92,25 +95,32 @@ void main() {
       expect(status.isWarning, isTrue);
       expect(status.badgeLabel, 'Renews soon');
       expect(status.title, 'Your plan renews soon');
-      expect(status.subtitle, 'Please keep payment updated. Renews on 2026-10-05.');
-    });
-
-    test('resolvePlanStatus: RESTRICTED returns unavailable tone and no badge', () {
-      final store = StoreSummary(
-        storeId: 's1',
-        storeName: 'Test Store',
-        role: 'OWNER',
-        subscriptionState: 'RESTRICTED',
+      expect(
+        status.subtitle,
+        'Please keep payment updated. Renews on 2026-10-05.',
       );
-
-      final status = resolvePlanStatus(store);
-      expect(status.isUnavailable, isTrue);
-      expect(status.badgeLabel, isNull);
     });
+
+    test(
+      'resolvePlanStatus: RESTRICTED returns unavailable tone and no badge',
+      () {
+        final store = StoreSummary(
+          storeId: 's1',
+          storeName: 'Test Store',
+          role: 'OWNER',
+          subscriptionState: 'RESTRICTED',
+        );
+
+        final status = resolvePlanStatus(store);
+        expect(status.isUnavailable, isTrue);
+        expect(status.badgeLabel, isNull);
+      },
+    );
 
     test('resolvePlanStatus: ACTIVE falls back to paidThroughDate logic', () {
       final farDate = DateTime.now().add(const Duration(days: 20));
-      final farDateStr = '${farDate.year}-${farDate.month.toString().padLeft(2, '0')}-${farDate.day.toString().padLeft(2, '0')}';
+      final farDateStr =
+          '${farDate.year}-${farDate.month.toString().padLeft(2, '0')}-${farDate.day.toString().padLeft(2, '0')}';
       final storeActiveFar = StoreSummary(
         storeId: 's1',
         storeName: 'Test Store',
@@ -126,7 +136,8 @@ void main() {
       expect(statusFar.subtitle, 'Renews on $farDateStr');
 
       final nearDate = DateTime.now().add(const Duration(days: 2));
-      final nearDateStr = '${nearDate.year}-${nearDate.month.toString().padLeft(2, '0')}-${nearDate.day.toString().padLeft(2, '0')}';
+      final nearDateStr =
+          '${nearDate.year}-${nearDate.month.toString().padLeft(2, '0')}-${nearDate.day.toString().padLeft(2, '0')}';
       final storeActiveNear = StoreSummary(
         storeId: 's1',
         storeName: 'Test Store',
@@ -143,7 +154,8 @@ void main() {
 
     test('resolvePlanStatus: null subscriptionState falls back to paidThroughDate logic', () {
       final farDate = DateTime.now().add(const Duration(days: 20));
-      final farDateStr = '${farDate.year}-${farDate.month.toString().padLeft(2, '0')}-${farDate.day.toString().padLeft(2, '0')}';
+      final farDateStr =
+          '${farDate.year}-${farDate.month.toString().padLeft(2, '0')}-${farDate.day.toString().padLeft(2, '0')}';
       final storeNullFar = StoreSummary(
         storeId: 's1',
         storeName: 'Test Store',

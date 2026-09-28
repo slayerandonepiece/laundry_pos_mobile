@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "MyShop (Dev)",
+      "name": "KlenPOS (Dev)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "debug",
@@ -13,7 +13,7 @@
       ]
     },
     {
-      "name": "MyShop (Stage)",
+      "name": "KlenPOS (Stage)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "debug",
@@ -24,7 +24,7 @@
       ]
     },
     {
-      "name": "MyShop (Prod)",
+      "name": "KlenPOS (Prod)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "debug",
@@ -35,7 +35,7 @@
       ]
     },
     {
-      "name": "MyShop (Dev - Profile)",
+      "name": "KlenPOS (Dev - Profile)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
@@ -46,7 +46,7 @@
       ]
     },
     {
-      "name": "MyShop (Stage - Profile)",
+      "name": "KlenPOS (Stage - Profile)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
@@ -57,7 +57,7 @@
       ]
     },
     {
-      "name": "MyShop (Prod - Profile)",
+      "name": "KlenPOS (Prod - Profile)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
@@ -68,7 +68,7 @@
       ]
     },
     {
-      "name": "MyShop (Prod - Release)",
+      "name": "KlenPOS (Prod - Release)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "release",

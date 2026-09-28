@@ -138,10 +138,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     Emitter<OwnerState> emit,
   ) async {
     emit(
-      state.copyWith(
-        loading: _addLoading(OwnerSection.expenses),
-        error: null,
-      ),
+      state.copyWith(loading: _addLoading(OwnerSection.expenses), error: null),
     );
     try {
       await ownerRepository.createExpense(
@@ -178,10 +175,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     Emitter<OwnerState> emit,
   ) async {
     emit(
-      state.copyWith(
-        loading: _addLoading(OwnerSection.expenses),
-        error: null,
-      ),
+      state.copyWith(loading: _addLoading(OwnerSection.expenses), error: null),
     );
     try {
       await ownerRepository.markExpensePaid(event.expenseId);
@@ -217,10 +211,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         if (!event.refresh) return;
       } else {
         emit(
-          state.copyWith(
-            loading: _addLoading(OwnerSection.staff),
-            error: null,
-          ),
+          state.copyWith(loading: _addLoading(OwnerSection.staff), error: null),
         );
       }
       try {
@@ -255,12 +246,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     AddStaffEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(
-      state.copyWith(
-        loading: _addLoading(OwnerSection.staff),
-        error: null,
-      ),
-    );
+    emit(state.copyWith(loading: _addLoading(OwnerSection.staff), error: null));
     try {
       await ownerRepository.createStaff(
         name: event.name,
@@ -298,12 +284,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     ToggleStaffActiveEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(
-      state.copyWith(
-        loading: _addLoading(OwnerSection.staff),
-        error: null,
-      ),
-    );
+    emit(state.copyWith(loading: _addLoading(OwnerSection.staff), error: null));
     try {
       await ownerRepository.toggleStaffActive(event.employeeId);
       final updated = await ownerRepository.listStaff();
@@ -329,12 +310,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     UpdateStaffEvent event,
     Emitter<OwnerState> emit,
   ) async {
-    emit(
-      state.copyWith(
-        loading: _addLoading(OwnerSection.staff),
-        error: null,
-      ),
-    );
+    emit(state.copyWith(loading: _addLoading(OwnerSection.staff), error: null));
     try {
       await ownerRepository.updateStaff(
         employeeId: event.employeeId,
@@ -488,10 +464,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     Emitter<OwnerState> emit,
   ) async {
     emit(
-      state.copyWith(
-        loading: _addLoading(OwnerSection.profile),
-        error: null,
-      ),
+      state.copyWith(loading: _addLoading(OwnerSection.profile), error: null),
     );
     try {
       final profile = await ownerRepository.updateStoreProfile(
@@ -526,10 +499,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     Emitter<OwnerState> emit,
   ) async {
     emit(
-      state.copyWith(
-        loading: _addLoading(OwnerSection.profile),
-        error: null,
-      ),
+      state.copyWith(loading: _addLoading(OwnerSection.profile), error: null),
     );
     try {
       await ownerRepository.changePassword(

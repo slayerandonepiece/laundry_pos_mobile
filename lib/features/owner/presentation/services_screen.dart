@@ -85,9 +85,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
       MaterialPageRoute(
         builder: (_) => RepositoryProvider.value(
           value: repo,
-          child: ServiceFormScreen(
-            onSaved: () => _loadServices(refresh: true),
-          ),
+          child: ServiceFormScreen(onSaved: () => _loadServices(refresh: true)),
         ),
       ),
     );
@@ -270,7 +268,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                                             color: Color(0x10000000),
                                             blurRadius: 3,
                                             offset: Offset(0, 1),
-                                          )
+                                          ),
                                         ]
                                       : null,
                                 ),
@@ -305,7 +303,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                                             color: Color(0x10000000),
                                             blurRadius: 3,
                                             offset: Offset(0, 1),
-                                          )
+                                          ),
                                         ]
                                       : null,
                                 ),
@@ -343,45 +341,39 @@ class _ServicesScreenState extends State<ServicesScreen> {
                             ],
                           )
                         : _isGridView
-                            ? GridView.builder(
-                                padding:
-                                    const EdgeInsets.fromLTRB(20, 6, 20, 24),
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                        ? GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 2,
                                   crossAxisSpacing: 12,
                                   mainAxisSpacing: 12,
                                   childAspectRatio: 1.15,
                                 ),
-                                itemCount: filtered.length,
-                                itemBuilder: (context, index) {
-                                  final product = filtered[index];
-                                  return _ServiceGridCard(
-                                    product: product,
-                                    onEdit: () => _showEditServiceDialog(
-                                      context,
-                                      product,
-                                    ),
-                                  );
-                                },
-                              )
-                            : ListView.separated(
-                                padding:
-                                    const EdgeInsets.fromLTRB(20, 6, 20, 24),
-                                itemCount: filtered.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 12),
-                                itemBuilder: (context, index) {
-                                  final product = filtered[index];
-                                  return _ServiceCard(
-                                    product: product,
-                                    onEdit: () => _showEditServiceDialog(
-                                      context,
-                                      product,
-                                    ),
-                                  );
-                                },
-                              ),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final product = filtered[index];
+                              return _ServiceGridCard(
+                                product: product,
+                                onEdit: () =>
+                                    _showEditServiceDialog(context, product),
+                              );
+                            },
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final product = filtered[index];
+                              return _ServiceCard(
+                                product: product,
+                                onEdit: () =>
+                                    _showEditServiceDialog(context, product),
+                              );
+                            },
+                          ),
                   ),
                 ),
               ],

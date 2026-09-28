@@ -183,11 +183,7 @@ void main() {
 
     test('RecordPaymentEvent calls repository, updates order, and preserves status', () async {
       ordersBloc.add(
-        RecordPaymentEvent(
-          orderCode: 'EL-101',
-          amount: 5000,
-          method: 'UPI',
-        ),
+        RecordPaymentEvent(orderCode: 'EL-101', amount: 5000, method: 'UPI'),
       );
 
       final state = await ordersBloc.stream.firstWhere(

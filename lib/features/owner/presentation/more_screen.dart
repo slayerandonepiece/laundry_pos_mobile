@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -29,15 +30,14 @@ class MoreScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    String storeName = 'MyShop';
-    String ownerSubtitle = 'Owner';
-    bool hasMultipleStores = false;
-
-    if (authState is AuthenticatedState) {
-      storeName = authState.currentStore.storeName;
-      ownerSubtitle = '${authState.user.displayName} · Owner';
-      hasMultipleStores = authState.availableStores.length > 1;
-    }
+    final String storeName = authState is AuthenticatedState
+        ? authState.currentStore.storeName
+        : '';
+    final String ownerSubtitle = authState is AuthenticatedState
+        ? '${authState.user.displayName} · Owner'
+        : 'Owner';
+    final bool hasMultipleStores =
+        authState is AuthenticatedState && authState.availableStores.length > 1;
 
     final initials = _getInitials(storeName);
     final planBadge = _buildPlanStatusBadge(authState);
@@ -143,192 +143,194 @@ class MoreScreen extends StatelessWidget {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
               children: [
-              // STORE SECTION
-              const SectionHeader(title: 'STORE'),
-              const SizedBox(height: 8),
+                // STORE SECTION
+                const SectionHeader(title: 'STORE'),
+                const SizedBox(height: 8),
 
-              AppCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.inventory_2_outlined,
-                      title: 'Services',
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: AppColors.faintText,
-                        size: 20,
-                      ),
-                      onTap: () => Navigator.push(
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _buildMenuItem(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const ServicesScreen(),
+                        icon: Icons.inventory_2_outlined,
+                        title: 'Services',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
                         ),
-                      ),
-                    ),
-                    const Divider(color: AppColors.border, height: 1),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.receipt_long_outlined,
-                      title: 'Expenses',
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (unpaidExpenses > 0) ...[
-                            StatusPill(
-                              label: '$unpaidExpenses unpaid',
-                              variant: PillVariant.warning,
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          const Icon(
-                            Icons.chevron_right,
-                            color: AppColors.faintText,
-                            size: 20,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ServicesScreen(),
                           ),
-                        ],
-                      ),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ExpensesScreen(),
                         ),
                       ),
-                    ),
-                    const Divider(color: AppColors.border, height: 1),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.people_outline,
-                      title: 'Staff',
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: AppColors.faintText,
-                        size: 20,
-                      ),
-                      onTap: () => Navigator.push(
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
                         context,
-                        MaterialPageRoute(builder: (_) => const StaffScreen()),
-                      ),
-                    ),
-                    const Divider(color: AppColors.border, height: 1),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.payments_outlined,
-                      title: 'Payment methods',
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: AppColors.faintText,
-                        size: 20,
-                      ),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const PaymentMethodsScreen(),
+                        icon: Icons.receipt_long_outlined,
+                        title: 'Expenses',
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (unpaidExpenses > 0) ...[
+                              StatusPill(
+                                label: '$unpaidExpenses unpaid',
+                                variant: PillVariant.warning,
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            const Icon(
+                              Icons.chevron_right,
+                              color: AppColors.faintText,
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ExpensesScreen(),
+                          ),
                         ),
                       ),
-                    ),
-                    const Divider(color: AppColors.border, height: 1),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.storefront_outlined,
-                      title: 'Store profile',
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: AppColors.faintText,
-                        size: 20,
-                      ),
-                      onTap: () => Navigator.push(
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const StoreProfileScreen(),
+                        icon: Icons.people_outline,
+                        title: 'Staff',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const StaffScreen(),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.payments_outlined,
+                        title: 'Payment methods',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PaymentMethodsScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.storefront_outlined,
+                        title: 'Store profile',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const StoreProfileScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // ACCOUNT SECTION
-              const SectionHeader(title: 'ACCOUNT'),
-              const SizedBox(height: 8),
+                // ACCOUNT SECTION
+                const SectionHeader(title: 'ACCOUNT'),
+                const SizedBox(height: 8),
 
-              AppCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.person_outline,
-                      title: 'Your details',
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: AppColors.faintText,
-                        size: 20,
-                      ),
-                      onTap: () => Navigator.push(
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _buildMenuItem(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const OwnerProfileScreen(),
+                        icon: Icons.person_outline,
+                        title: 'Your details',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const OwnerProfileScreen(),
+                          ),
                         ),
                       ),
-                    ),
-                    const Divider(color: AppColors.border, height: 1),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.workspace_premium_outlined,
-                      title: 'Subscription',
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: AppColors.faintText,
-                        size: 20,
-                      ),
-                      onTap: () => Navigator.push(
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const SubscriptionScreen(),
+                        icon: Icons.workspace_premium_outlined,
+                        title: 'Subscription',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SubscriptionScreen(),
+                          ),
                         ),
                       ),
-                    ),
-                    const Divider(color: AppColors.border, height: 1),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.lock_outline,
-                      title: 'Change password',
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: AppColors.faintText,
-                        size: 20,
-                      ),
-                      onTap: () => Navigator.push(
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const ChangePasswordScreen(),
+                        icon: Icons.lock_outline,
+                        title: 'Change password',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ChangePasswordScreen(),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // Sign Out Button
-              AppCard(
-                padding: EdgeInsets.zero,
-                child: _buildMenuItem(
-                  context,
-                  icon: Icons.logout,
-                  iconColor: AppColors.danger,
-                  title: 'Sign out',
-                  titleColor: AppColors.danger,
-                  onTap: () => _confirmSignOut(context),
+                // Sign Out Button
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: _buildMenuItem(
+                    context,
+                    icon: Icons.logout,
+                    iconColor: AppColors.danger,
+                    title: 'Sign out',
+                    titleColor: AppColors.danger,
+                    onTap: () => _confirmSignOut(context),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -399,10 +401,12 @@ class MoreScreen extends StatelessWidget {
   }
 
   String _getInitials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'S';
+    final parts = trimmed.split(RegExp(r'\s+'));
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+    return trimmed.substring(0, trimmed.length >= 2 ? 2 : 1).toUpperCase();
   }
 }

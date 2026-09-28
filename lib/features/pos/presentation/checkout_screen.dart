@@ -132,8 +132,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         bottom: BorderSide(color: AppColors.border, width: 1),
                       ),
                     ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -376,8 +378,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             )
                           else
                             ...state.paymentMethods.map((method) {
-                              final isSelected =
-                                  _selectedMethodId == method.id;
+                              final isSelected = _selectedMethodId == method.id;
                               final codeUpper = method.code.toUpperCase();
                               final IconData icon;
                               if (codeUpper == 'UPI') {

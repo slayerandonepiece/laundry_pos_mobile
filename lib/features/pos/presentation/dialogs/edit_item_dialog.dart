@@ -155,148 +155,151 @@ class _EditItemDialogState extends State<EditItemDialog> {
                   ),
                 ),
               ] else ...[
-              Text('QUANTITY', style: AppTextStyles.label),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    iconSize: 28,
-                    icon: const Icon(
-                      Icons.remove_circle_outline,
-                      color: AppColors.primary,
+                Text('QUANTITY', style: AppTextStyles.label),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      iconSize: 28,
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: AppColors.primary,
+                      ),
+                      onPressed: _quantity > 1
+                          ? () {
+                              setState(() {
+                                _quantity -= 1;
+                                _weightController.text = _quantity
+                                    .toInt()
+                                    .toString();
+                              });
+                            }
+                          : null,
                     ),
-                    onPressed: _quantity > 1
-                        ? () {
-                            setState(() {
-                              _quantity -= 1;
-                              _weightController.text = _quantity
-                                  .toInt()
-                                  .toString();
-                            });
-                          }
-                        : null,
-                  ),
-                  const SizedBox(width: 18),
-                  Text(
-                    '${_quantity.toInt()} pcs',
-                    style: AppTextStyles.moneyLarge.copyWith(fontSize: 26),
-                  ),
-                  const SizedBox(width: 18),
-                  IconButton(
-                    iconSize: 28,
-                    icon: const Icon(
-                      Icons.add_circle,
-                      color: AppColors.primary,
+                    const SizedBox(width: 18),
+                    Text(
+                      '${_quantity.toInt()} pcs',
+                      style: AppTextStyles.moneyLarge.copyWith(fontSize: 26),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _quantity += 1;
-                        _weightController.text = _quantity.toInt().toString();
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: 18),
-
-            // Line total inset
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.inset,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: AppColors.border),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Line total',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.mutedText,
+                    const SizedBox(width: 18),
+                    IconButton(
+                      iconSize: 28,
+                      icon: const Icon(
+                        Icons.add_circle,
+                        color: AppColors.primary,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _quantity += 1;
+                          _weightController.text = _quantity.toInt().toString();
+                        });
+                      },
                     ),
-                  ),
-                  Text(
-                    CurrencyFormatter.format(lineTotal),
-                    style: AppTextStyles.moneyMedium.copyWith(fontSize: 18),
-                  ),
-                ],
-              ),
-            ),
+                  ],
+                ),
+              ],
 
-            const SizedBox(height: 14),
+              const SizedBox(height: 18),
 
-            // Remove from sale destructive option
-            InkWell(
-              onTap: () {
-                Navigator.of(context).pop();
-                widget.onRemove();
-              },
-              borderRadius: BorderRadius.circular(11),
-              child: Container(
+              // Line total inset
+              Container(
                 decoration: BoxDecoration(
-                  color: AppColors.dangerBg,
+                  color: AppColors.inset,
                   borderRadius: BorderRadius.circular(11),
-                  border: Border.all(color: AppColors.dangerBorder),
+                  border: Border.all(color: AppColors.border),
                 ),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 15,
+                  horizontal: 14,
                   vertical: 13,
                 ),
-                child: const Row(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(
-                      Icons.delete_outline,
-                      size: 20,
-                      color: AppColors.danger,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Remove from sale',
+                    const Text(
+                      'Line total',
                       style: TextStyle(
-                        fontFamily: AppTextStyles.fontBody,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.danger,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.mutedText,
                       ),
+                    ),
+                    Text(
+                      CurrencyFormatter.format(lineTotal),
+                      style: AppTextStyles.moneyMedium.copyWith(fontSize: 18),
                     ),
                   ],
                 ),
               ),
-            ),
 
-            const SizedBox(height: 22),
+              const SizedBox(height: 14),
 
-            Row(
-              children: [
-                Expanded(
-                  child: SecondaryButton(
-                    label: 'Cancel',
-                    height: 48,
-                    onPressed: () => Navigator.of(context).pop(),
+              // Remove from sale destructive option
+              InkWell(
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onRemove();
+                },
+                borderRadius: BorderRadius.circular(11),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.dangerBg,
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(color: AppColors.dangerBorder),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 13,
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: AppColors.danger,
+                      ),
+                      SizedBox(width: 12),
+                      Text(
+                        'Remove from sale',
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fontBody,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: PrimaryButton(
-                    label: 'Update',
-                    height: 48,
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      widget.onUpdateQuantity(_quantity);
-                    },
+              ),
+
+              const SizedBox(height: 22),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: SecondaryButton(
+                      label: 'Cancel',
+                      height: 48,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: PrimaryButton(
+                      label: 'Update',
+                      height: 48,
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        widget.onUpdateQuantity(_quantity);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

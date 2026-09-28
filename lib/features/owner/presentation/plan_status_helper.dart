@@ -3,12 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../auth/data/models/user_model.dart';
 
-enum PlanStatusTone {
-  neutral,
-  warning,
-  success,
-  unavailable,
-}
+enum PlanStatusTone { neutral, warning, success, unavailable }
 
 class PlanStatusInfo {
   final PlanStatusTone tone;

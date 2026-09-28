@@ -238,38 +238,35 @@ void main() {
       expect(raw.bodyBytes, equals(Uint8List.fromList(mockBytes)));
     });
 
-    test(
-      'AuthInterceptor omits X-Outlet-Id for kNoOutletHeader and respects explicit override',
-      () async {
-        bool? hasOutletHeader;
-        String? recordedOutletHeader;
+    test('AuthInterceptor omits X-Outlet-Id for kNoOutletHeader and respects explicit override', () async {
+      bool? hasOutletHeader;
+      String? recordedOutletHeader;
 
-        final mockDio = createMockDio((options) async {
-          hasOutletHeader = options.headers.containsKey('X-Outlet-Id');
-          recordedOutletHeader = options.headers['X-Outlet-Id'] as String?;
-          return mockJsonResponse({'ok': true});
-        });
+      final mockDio = createMockDio((options) async {
+        hasOutletHeader = options.headers.containsKey('X-Outlet-Id');
+        recordedOutletHeader = options.headers['X-Outlet-Id'] as String?;
+        return mockJsonResponse({'ok': true});
+      });
 
-        final apiClient = ApiClient(
-          dio: mockDio,
-          secureStorage: TestSecureStorage(token: 'tok'),
-          localCache: TestLocalCache(storeId: 's1', outletId: 'o1'),
-        );
+      final apiClient = ApiClient(
+        dio: mockDio,
+        secureStorage: TestSecureStorage(token: 'tok'),
+        localCache: TestLocalCache(storeId: 's1', outletId: 'o1'),
+      );
 
-        await apiClient.get(
-          'https://example.com/api/v1/test',
-          headers: {'X-Outlet-Id': kNoOutletHeader},
-        );
-        expect(hasOutletHeader, isFalse);
-        expect(recordedOutletHeader, isNull);
+      await apiClient.get(
+        'https://example.com/api/v1/test',
+        headers: {'X-Outlet-Id': kNoOutletHeader},
+      );
+      expect(hasOutletHeader, isFalse);
+      expect(recordedOutletHeader, isNull);
 
-        await apiClient.get(
-          'https://example.com/api/v1/test',
-          headers: {'X-Outlet-Id': 'o2'},
-        );
-        expect(hasOutletHeader, isTrue);
-        expect(recordedOutletHeader, equals('o2'));
-      },
-    );
+      await apiClient.get(
+        'https://example.com/api/v1/test',
+        headers: {'X-Outlet-Id': 'o2'},
+      );
+      expect(hasOutletHeader, isTrue);
+      expect(recordedOutletHeader, equals('o2'));
+    });
   });
 }

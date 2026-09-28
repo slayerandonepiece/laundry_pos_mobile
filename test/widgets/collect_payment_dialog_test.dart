@@ -144,8 +144,18 @@ void main() {
       mockRepo = MockCollectOrdersRepository();
       ordersBloc = OrdersBloc(ordersRepository: mockRepo);
       fakePosRepo = FakeDialogPosRepository([
-        StorePaymentMethod(id: 'pm_cash', name: 'Cash', type: 'Cash', active: true),
-        StorePaymentMethod(id: 'pm_upi', name: 'Upi', type: 'UPI', active: true),
+        StorePaymentMethod(
+          id: 'pm_cash',
+          name: 'Cash',
+          type: 'Cash',
+          active: true,
+        ),
+        StorePaymentMethod(
+          id: 'pm_upi',
+          name: 'Upi',
+          type: 'UPI',
+          active: true,
+        ),
       ]);
     });
 
@@ -207,7 +217,9 @@ void main() {
         expect(submitBtn.onPressed, isNotNull);
 
         // Tap Collect & deliver
-        await tester.tap(find.widgetWithText(PrimaryButton, 'Collect & deliver'));
+        await tester.tap(
+          find.widgetWithText(PrimaryButton, 'Collect & deliver'),
+        );
         await tester.runAsync(() async {
           await ordersBloc.stream.firstWhere(
             (s) => s.actionSuccessMessage != null,
@@ -228,7 +240,11 @@ void main() {
       tester,
     ) async {
       fakePosRepo.cachedMethods = [
-        StorePaymentMethod.fromJson({'id': 'pm_c', 'name': 'Card', 'enabled': true}),
+        StorePaymentMethod.fromJson({
+          'id': 'pm_c',
+          'name': 'Card',
+          'enabled': true,
+        }),
       ];
       await tester.pumpWidget(createTestDialog());
 
