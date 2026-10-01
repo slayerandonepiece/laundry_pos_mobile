@@ -7,9 +7,9 @@ cloud, so everything needed to continue is in this file and the docs it links.
 ## Current status — 1 October 2026 (stage release 1.0.4+6 prep)
 
 Supersedes the status sections below for anything they conflict with. Branch
-`release/stage-1.0.4` (from `main`) carries all of it. `flutter analyze`
-clean, `flutter test` **800/800**. Backend (separate repo, separate branch of
-the same name): `tsc` clean, 118/118 integration tests on a disposable local
+`feat/dashboard-filters-and-sync-hardening` (from `main`) carries all of it. `flutter analyze`
+clean, `flutter test` **800/800**. Backend (separate repo, branch `feat/outlet-access-hardening`):
+`tsc` clean, 118/118 integration tests on a disposable local
 Postgres. Device passes ran against a local sandbox only, never the shared DB.
 
 ### Done in this batch

@@ -9,7 +9,7 @@ rebrand + Firebase + gating" for the full rebrand scope.
 
 ## Current status — 1 October 2026
 
-Release **1.0.4+6** is prepared for **stage** (branch `release/stage-1.0.4`): `flutter analyze` clean, 800 tests pass. Done since 27 September: per-card dashboard period filters (7 days / current month / previous month / custom), drill-down tiles and Recent orders, Orders Work/Payment filters and employee quick filters, staff outlet assignment, sync/auth hardening (resume guard, backfill, dead-letter banner, cursor resume), backend outlet/invoice access fixes. The open task list is the **Pending list** in `docs/HANDOFF.md` (expense edit/delete, on-device verification passes, backend hardening leftovers, store listing). Release notes: `docs/RELEASE-NOTES-1.0.4.md`.
+Release **1.0.4+6** is prepared for **stage** (branch `feat/dashboard-filters-and-sync-hardening`): `flutter analyze` clean, 800 tests pass. Done since 27 September: per-card dashboard period filters (7 days / current month / previous month / custom), drill-down tiles and Recent orders, Orders Work/Payment filters and employee quick filters, staff outlet assignment, sync/auth hardening (resume guard, backfill, dead-letter banner, cursor resume), backend outlet/invoice access fixes. The open task list is the **Pending list** in `docs/HANDOFF.md` (expense edit/delete, on-device verification passes, backend hardening leftovers, store listing). Release notes: `docs/RELEASE-NOTES-1.0.4.md`.
 
 ## Status — 27 September 2026
 

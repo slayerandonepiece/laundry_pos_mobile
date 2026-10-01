@@ -1,7 +1,7 @@
 # KlenPOS 1.0.4 (build 6) — stage release notes
 
 Target: **stage** flavor / Neon stage branch. Previous build: 1.0.3+5.
-Backend changes ship in the `laundry_pos` repo (branch `release/stage-1.0.4`); **deploy the backend first**.
+Backend changes ship in the `laundry_pos` repo (branch `feat/outlet-access-hardening`); **deploy the backend first**.
 
 ## What's new (for testers)
 
