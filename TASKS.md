@@ -15,7 +15,7 @@ Release **1.0.4+6** is prepared for **stage** (branch `feat/dashboard-filters-an
 
 The mobile HTTP API exists. Main `cdfc121` includes the merged offline-ID/outlet/local-first work. Historical F1–F8 details below are not a current test-count or exact navigation specification: owner navigation currently has Dashboard / Orders / More, employees use Orders without an owner bottom bar.
 
-Current workspace fixes and verification: `docs/HANDOFF.md`. Manual device status: `docs/E2E-MANUAL-TEST.md`; remaining scripts: `docs/MANUAL-TEST-CASES.md`. New web enhancement backlog: `docs/WEB-MOBILE-FEATURE-GAPS.md` (68 pending checks; offline behavior must be preserved).
+Current workspace fixes and verification: `docs/HANDOFF.md`. Manual device status: `docs/E2E-MANUAL-TEST.md`; remaining scripts: `docs/MANUAL-TEST-CASES.md`. New web enhancement backlog: `docs/WEB-MOBILE-FEATURE-GAPS.md` (60 open checks as of 1 Oct; offline behavior must be preserved).
 
 Checkout now uses enabled store payment methods, including configured COD; do not use the older hardcoded Cash/UPI/pay-later description as a requirement. Full web parity remains pending.
 

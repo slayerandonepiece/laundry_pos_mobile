@@ -47,7 +47,10 @@ Postgres. Device passes ran against a local sandbox only, never the shared DB.
 | 2 | Device verification | Dashboard chips + custom range, Delivered/Due-today drill-down, Recent orders, pull-to-refresh, Part-paid filter combos, offline-then-sync pass, 401/403 propagation |
 | 3 | Switcher | Outlet menu may linger over "Setting things up" after a switch (seen once); employee landed in Lake not Main (likely saved last-used outlet) |
 | 4 | Backend | Login throttle is per warm instance; session cookie id is a cuid; `billing_pending` not enforced server-side; idempotency unique keys global, not per tenant |
-| 5 | Release | Deploy backend before stage mobile (employee-list change); `SESSION_SECRET` must be set in production (user manages it) |
+| 5 | Release | Both 1.0.4 PRs are **merged to `main` but not deployed**: backend `staging` is 58 commits behind `main`, so stage still runs the old backend (including the old invoice-PDF access check). Deploy the backend before the stage mobile build (employee-list change); `SESSION_SECRET` must be set in production (user manages it) |
+| 8 | Parity gaps carried over | See "Parity gaps" under the 28 Sep status: no partial-access mode for `RESTRICTED` (a blocked 403 still shows `BlockedScreen`), no staff password reset, no all-outlet per-branch cards or "Needs attention" list, looser slab-limit validation, no session/subscription refresh on resume, billing card lacks plan/deposit/annual fee, trial/renewal banner fix never independently re-verified |
+| 9 | Firebase and gating | Remote Config keys not created in the dev/stage/prod consoles; `AppGateService.isMidTransaction` not device-verified; Android `in_app_update` untested (needs a Play listing) |
+| 10 | Backend/API gaps for the web team | No `/api/v1/outlets` route; no announcements endpoint; an employee omitting the outlet on rollups falls back silently instead of getting 403 |
 | 6 | Store gating | No App Store listing yet, so `ios_app_store_id` and force-update stay dormant |
 | 7 | Data | Neon has only a stage branch given to us; two old test employees ("Test Emp Single", "Test Emp Multi") remain there |
 
@@ -202,8 +205,9 @@ local `.wiki/raw/notes/2026-09-28-web-mobile-parity-audit-and-fixes.md`
   password-reset (pure mobile gap — `PUT /api/v1/employees/{id}` already
   accepts a password field server-side).
 - Dashboard missing: all-outlet per-branch cards, "Needs attention" combined
-  overdue/due-today list, recent-orders list, general empty state, "Last 14
-  days" trend default.
+  overdue/due-today list, general empty state. **Updated 1 Oct:** the
+  recent-orders list and tile drill-down now exist, and the "Last 14 days"
+  default is superseded by the month-to-date default.
 - No read-only outlet/branch directory on mobile at all (distinct from the
   outlet-scope switcher) — largely blocked by no `/api/v1/outlets` route
   server-side (mobile only ever gets bare `allowedOutlets[]`: id/code/name/
@@ -247,7 +251,7 @@ now itself historical, superseded by 28 September above.
 - Mobile `main` is `cdfc121d2f34bdc301c05f95a6feb0ad3b876c13`, Merge pull request #1 from `slayerandonepiece/frontend/offline-id` (26 September). Offline-ID phases, bootstrap/local-first flow, outlet handling and consistency fixes from that branch are merged. The older “pushed, not merged” statements below are historical.
 - User authorized including all current mobile changes from Claude/Gemini/GPT on `feat/workspace-improvements`. This batch remains separate from `laundry_pos`; no backend changes are committed here.
 - Claude chat reviewed: **Pending mobile app test cases** (local mobile project). Its latest commit/push attempt stopped at a session limit. Git inspection confirms today's files were still uncommitted on main before this batch. Visible conversations are context, not independent proof of their test claims.
-- GPT authored `docs/WEB-MOBILE-FEATURE-GAPS.md`: feature-by-feature source audit with 68 pending acceptance checks, including eight offline regression checks. This is a plan/checklist, not implemented web parity. GPT made no application-code changes during that audit.
+- GPT authored `docs/WEB-MOBILE-FEATURE-GAPS.md`: feature-by-feature source audit with 68 pending acceptance checks (60 open, 8 ticked as of 1 Oct 2026), including eight offline regression checks. This is a plan/checklist, not implemented web parity. GPT made no application-code changes during that audit.
 
 ### Changes included from the working tree
 
