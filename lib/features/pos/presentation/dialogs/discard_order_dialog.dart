@@ -69,7 +69,7 @@ class DiscardOrderDialog extends StatelessWidget {
                 Expanded(
                   child: SecondaryButton(
                     label: 'Keep going',
-                    height: 48,
+                    height: AppButtonHeight.inline,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
@@ -77,7 +77,7 @@ class DiscardOrderDialog extends StatelessWidget {
                 Expanded(
                   child: PrimaryButton(
                     label: 'Discard',
-                    height: 48,
+                    height: AppButtonHeight.inline,
                     backgroundColor: AppColors.danger,
                     onPressed: () {
                       Navigator.of(context).pop();

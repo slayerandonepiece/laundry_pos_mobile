@@ -56,7 +56,7 @@ class StoreSummary {
   final String storeId;
   final String storeName;
   final String role; // 'OWNER' | 'EMPLOYEE'
-  final String? blockedReason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed'
+  final String? blockedReason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed' | 'billing_pending'
   final String? paidThroughDate;
   final String? trialEndsAt;
   final String? subscriptionState;

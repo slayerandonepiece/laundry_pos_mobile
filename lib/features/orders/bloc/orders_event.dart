@@ -13,6 +13,23 @@ class FilterOrdersEvent extends OrdersEvent {
   FilterOrdersEvent(this.filter);
 }
 
+/// Payment status: 'all' | 'paid' | 'unpaid' | 'partial'.
+class PaymentFilterEvent extends OrdersEvent {
+  final String filter;
+
+  PaymentFilterEvent(this.filter);
+}
+
+/// Delivery date scope: 'any' | 'due_today' | 'late'.
+class DueFilterEvent extends OrdersEvent {
+  final String filter;
+
+  DueFilterEvent(this.filter);
+}
+
+/// Back to the plain list: no search, chip 'all', any payment, any date.
+class ClearOrderFiltersEvent extends OrdersEvent {}
+
 class SearchOrdersEvent extends OrdersEvent {
   final String query;
 

@@ -153,5 +153,96 @@ void main() {
       expect(find.textContaining("haven't synced yet"), findsNothing);
       expect(find.byIcon(Icons.cloud_upload_rounded), findsNothing);
     });
+
+    group('billing_pending (F4)', () {
+      testWidgets(
+        'Owner copy, web dashboard notice, Retry button, and no Complete payment button',
+        (tester) async {
+          bool retried = false;
+          await tester.pumpWidget(
+            createTestApp(
+              BlockedScreen(
+                reason: 'billing_pending',
+                isOwner: true,
+                onRetry: () => retried = true,
+                onSignOut: () {},
+              ),
+            ),
+          );
+
+          expect(find.text('Billing not completed'), findsOneWidget);
+          expect(
+            find.text('Complete payment to start using your organization.'),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Complete payment on the KlenPOS web dashboard'),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Ask your owner to complete billing.'),
+            findsNothing,
+          );
+          expect(
+            find.widgetWithText(PrimaryButton, 'Complete payment'),
+            findsNothing,
+          );
+
+          final retryBtn = find.widgetWithText(PrimaryButton, 'Retry');
+          expect(retryBtn, findsOneWidget);
+
+          await tester.tap(retryBtn);
+          await tester.pump();
+          expect(retried, isTrue);
+        },
+      );
+
+      testWidgets(
+        'Employee copy, no complete payment button, no call owner button, and Retry button',
+        (tester) async {
+          bool retried = false;
+          await tester.pumpWidget(
+            createTestApp(
+              BlockedScreen(
+                reason: 'billing_pending',
+                isOwner: false,
+                ownerPhone: '9876543210',
+                onRetry: () => retried = true,
+                onSignOut: () {},
+              ),
+            ),
+          );
+
+          expect(find.text('Billing not completed'), findsOneWidget);
+          expect(
+            find.text('Ask your owner to complete billing.'),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Complete payment to start using your organization.'),
+            findsNothing,
+          );
+          expect(
+            find.text('Complete payment on the KlenPOS web dashboard'),
+            findsNothing,
+          );
+          expect(
+            find.widgetWithText(PrimaryButton, 'Complete payment'),
+            findsNothing,
+          );
+          expect(
+            find.widgetWithText(PrimaryButton, 'Call store owner'),
+            findsNothing,
+          );
+
+          final retryBtn = find.widgetWithText(PrimaryButton, 'Retry');
+          expect(retryBtn, findsOneWidget);
+
+          await tester.tap(retryBtn);
+          await tester.pump();
+          expect(retried, isTrue);
+        },
+      );
+    });
   });
 }

@@ -1,6 +1,7 @@
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
@@ -60,8 +61,14 @@ class PosRepository {
       throw Exception('No network connection and no cached products available');
     }
 
+    var startedSync = false;
     try {
-      SyncManager.instance.startSync('Fetching latest from cloud...');
+      final cached = _localCache.getCachedProducts();
+      final hasCache = cached != null && cached.isNotEmpty;
+      if (!hasCache) {
+        startedSync = true;
+        SyncManager.instance.startSync('Fetching latest from cloud...');
+      }
       final response = await _apiClient.get(ApiEndpoints.products);
       if (response is List) {
         final products = response
@@ -73,7 +80,11 @@ class PosRepository {
         SyncManager.instance.completeSync();
         return products;
       }
+      throw ApiException('Unexpected products response');
     } catch (e) {
+      if (e is ApiException && (e.statusCode == 401 || e.statusCode == 403)) {
+        rethrow;
+      }
       // Offline fallback: try reading cached products. But only report the
       // banner as "Offline" if we're actually offline — a bare catch here
       // used to unconditionally call setOffline() even for a genuine online
@@ -97,8 +108,11 @@ class PosRepository {
         return products;
       }
       rethrow;
+    } finally {
+      if (startedSync && SyncManager.instance.value.isSyncing) {
+        SyncManager.instance.setError('Could not refresh catalogue');
+      }
     }
-    return [];
   }
 
   /// Fetches active store payment choices (e.g. Cash, UPI) with local fallback
@@ -130,7 +144,10 @@ class PosRepository {
         );
         return allMethods.where((m) => m.active).toList();
       }
-    } catch (_) {
+    } catch (e) {
+      if (e is ApiException && (e.statusCode == 401 || e.statusCode == 403)) {
+        rethrow;
+      }
       final cached = _localCache.getCachedPaymentMethods();
       if (cached != null) {
         return cached

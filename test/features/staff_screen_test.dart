@@ -33,12 +33,16 @@ class FakeOwnerRepository extends OwnerRepository {
     required String phone,
     required String password,
     String? idempotencyKey,
+    List<String>? outletIds,
+    String? defaultOutletId,
   }) async {
     lastCreatedStaff = {
       'name': name,
       'phone': phone,
       'password': password,
       'idempotencyKey': idempotencyKey,
+      'outletIds': outletIds,
+      'defaultOutletId': defaultOutletId,
     };
     final newMember = StaffMember(
       id: 'emp-${DateTime.now().millisecondsSinceEpoch}',
@@ -55,8 +59,16 @@ class FakeOwnerRepository extends OwnerRepository {
     required String employeeId,
     required String name,
     required String phone,
+    List<String>? outletIds,
+    String? defaultOutletId,
   }) async {
-    lastUpdatedStaff = {'employeeId': employeeId, 'name': name, 'phone': phone};
+    lastUpdatedStaff = {
+      'employeeId': employeeId,
+      'name': name,
+      'phone': phone,
+      'outletIds': outletIds,
+      'defaultOutletId': defaultOutletId,
+    };
     final index = staff.indexWhere((m) => m.id == employeeId);
     if (index >= 0) {
       final updated = staff[index].copyWith(name: name, phone: phone);
@@ -137,11 +149,11 @@ void main() {
       );
 
       expect(find.text('Ramesh Kumar'), findsOneWidget);
-      expect(find.text('9876500002 · Employee'), findsOneWidget);
+      expect(find.text('9876500002'), findsOneWidget);
       expect(find.text('Priya Sharma'), findsOneWidget);
-      expect(find.text('9876500005 · Employee'), findsOneWidget);
+      expect(find.text('9876500005'), findsOneWidget);
       expect(find.text('Suresh Raina'), findsOneWidget);
-      expect(find.text('9876500006 · Employee'), findsOneWidget);
+      expect(find.text('9876500006'), findsOneWidget);
 
       expect(
         find.text('Deactivated employees cannot sign in until reactivated.'),
@@ -232,7 +244,7 @@ void main() {
 
         // Verify screen displays updated data
         expect(find.text('Ramesh K'), findsOneWidget);
-        expect(find.text('9876500003 · Employee'), findsOneWidget);
+        expect(find.text('9876500003'), findsOneWidget);
       },
     );
 
@@ -285,7 +297,7 @@ void main() {
 
       // Verify new member is displayed
       expect(find.text('Anil Verma'), findsOneWidget);
-      expect(find.text('9876500004 · Employee'), findsOneWidget);
+      expect(find.text('9876500004'), findsOneWidget);
       expect(find.text('4 members'), findsOneWidget);
     });
 

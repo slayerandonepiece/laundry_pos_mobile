@@ -1,6 +1,8 @@
+import 'package:myshop/features/orders/presentation/orders_drill_down.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
@@ -28,10 +30,34 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   final ValueNotifier<int> _dashboardResetSignal = ValueNotifier<int>(0);
   final ValueNotifier<int> _ordersResetSignal = ValueNotifier<int>(0);
 
+  /// A view the dashboard asks the Orders tab to open; the tab applies it and
+  /// clears it.
+  final ValueNotifier<OrdersDrillDown?> _ordersDrillDown =
+      ValueNotifier<OrdersDrillDown?>(null);
+
+  /// The dashboard's own default request (current month to date, daily
+  /// buckets, keyed to the outlet scope), same shape as the dashboard screen
+  /// sends.
+  LoadDashboardEvent _defaultDashboardEvent(OutletScope scope) {
+    final now = DateTime.now();
+    final scopeKey = scope.allOutlets
+        ? 'all'
+        : (scope.activeOutletId ?? 'none');
+    return LoadDashboardEvent(
+      from: DateFormatter.toIsoDateString(DateTime(now.year, now.month, 1)),
+      to: DateFormatter.toIsoDateString(now),
+      granularity: 'day',
+      refresh: true,
+      isDefaultPeriod: true,
+      requestKey: 'mtd|$scopeKey',
+    );
+  }
+
   @override
   void dispose() {
     _dashboardResetSignal.dispose();
     _ordersResetSignal.dispose();
+    _ordersDrillDown.dispose();
     super.dispose();
   }
 
@@ -48,14 +74,19 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         ? [
             OwnerDashboardScreen(
               resetSignal: _dashboardResetSignal,
-              onOrdersTabPressed: () {
+              onOpenOrders: (filter) {
                 if (_currentIndex == 0) {
                   _dashboardResetSignal.value++;
                 }
+                _ordersDrillDown.value = filter;
                 setState(() => _currentIndex = 1);
+                context.read<OrdersBloc>().add(LoadOrdersEvent());
               },
             ),
-            OwnerOrdersScreen(resetSignal: _ordersResetSignal),
+            OwnerOrdersScreen(
+              resetSignal: _ordersResetSignal,
+              drillDown: _ordersDrillDown,
+            ),
             const MoreScreen(),
           ]
         : [const OrdersListScreen()];
@@ -77,7 +108,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             context.read<OrdersBloc>().add(LoadOrdersEvent());
             try {
               context.read<OwnerBloc>().add(LoadExpensesEvent(refresh: true));
-              context.read<OwnerBloc>().add(LoadDashboardEvent(refresh: true));
+              context.read<OwnerBloc>().add(
+                _defaultDashboardEvent(context.read<OutletScopeCubit>().state),
+              );
             } catch (_) {}
           },
         ),

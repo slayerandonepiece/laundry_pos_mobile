@@ -12,7 +12,7 @@ class ApiException implements Exception {
 /// Authentication and Authorization exception (401 and 403)
 class AuthException extends ApiException {
   final String code; // 'UNAUTHENTICATED' | 'FORBIDDEN'
-  final String? reason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed'
+  final String? reason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed' | 'billing_pending'
   final String? paidThroughDate;
 
   AuthException({

@@ -1,3 +1,4 @@
+import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -95,17 +96,10 @@ class ProfileScreen extends StatelessWidget {
                 style: AppTextStyles.hint,
               ),
               const SizedBox(height: 22),
-              ElevatedButton(
+              PrimaryButton(
+                label: 'OK',
+                height: AppButtonHeight.inline,
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                  backgroundColor: AppColors.primary,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                ),
-                child: const Text('OK', style: AppTextStyles.button),
               ),
             ],
           ),
@@ -168,29 +162,20 @@ class ProfileScreen extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton(
+                            child: SecondaryButton(
+                              label: 'Cancel',
+                              height: AppButtonHeight.inline,
                               onPressed: isSyncing
                                   ? null
                                   : () =>
                                         Navigator.of(dialogContext).pop(false),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(48),
-                                side: const BorderSide(
-                                  color: AppColors.controlBorder,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(9),
-                                ),
-                              ),
-                              child: const Text(
-                                'Cancel',
-                                style: AppTextStyles.buttonSecondary,
-                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: ElevatedButton(
+                            child: PrimaryButton(
+                              label: isSyncing ? 'Syncing…' : 'Sync now',
+                              height: AppButtonHeight.inline,
                               onPressed: isSyncing
                                   ? null
                                   : () async {
@@ -217,38 +202,8 @@ class ProfileScreen extends StatelessWidget {
                                         }
                                       }
                                     },
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(48),
-                                backgroundColor: AppColors.primary,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(9),
-                                ),
-                              ),
-                              child: isSyncing
-                                  ? const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Syncing…',
-                                          style: AppTextStyles.button,
-                                        ),
-                                      ],
-                                    )
-                                  : const Text(
-                                      'Sync now',
-                                      style: AppTextStyles.button,
-                                    ),
+                              isLoading: isSyncing,
+                              loadingLabel: 'Syncing…',
                             ),
                           ),
                         ],
@@ -318,28 +273,19 @@ class ProfileScreen extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton(
+                            child: SecondaryButton(
+                              label: 'Cancel',
+                              height: AppButtonHeight.inline,
                               onPressed: isLoggingOut
                                   ? null
                                   : () => Navigator.of(dialogContext).pop(),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(48),
-                                side: const BorderSide(
-                                  color: AppColors.controlBorder,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(9),
-                                ),
-                              ),
-                              child: const Text(
-                                'Cancel',
-                                style: AppTextStyles.buttonSecondary,
-                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: ElevatedButton(
+                            child: PrimaryButton(
+                              label: 'Log out',
+                              height: AppButtonHeight.inline,
                               onPressed: isLoggingOut
                                   ? null
                                   : () async {
@@ -362,27 +308,8 @@ class ProfileScreen extends StatelessWidget {
                                         }
                                       }
                                     },
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(48),
-                                backgroundColor: AppColors.danger,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(9),
-                                ),
-                              ),
-                              child: isLoggingOut
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Log out',
-                                      style: AppTextStyles.button,
-                                    ),
+                              backgroundColor: AppColors.danger,
+                              isLoading: isLoggingOut,
                             ),
                           ),
                         ],

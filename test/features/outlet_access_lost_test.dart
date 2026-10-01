@@ -207,7 +207,7 @@ class SpyAuthRepository extends AuthRepository {
   }
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({bool involuntary = false}) async {
     logoutCalls++;
   }
 }
@@ -261,6 +261,7 @@ class StubOwnerRepository implements OwnerRepository {
   Future<DashboardMetrics> getDashboardMetrics({
     String? from,
     String? to,
+    String? granularity,
   }) async => DashboardMetrics();
 
   @override

@@ -209,6 +209,29 @@ void main() {
       },
     );
 
+    testWidgets('Shows an empty state when there are no services yet', (
+      tester,
+    ) async {
+      fakePosRepo.products = [];
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('No services yet'), findsOneWidget);
+    });
+
+    testWidgets('Says nothing matched when a search finds no service', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, 'zzz-none');
+      await tester.pumpAndSettle();
+
+      expect(find.text('No services found'), findsOneWidget);
+      expect(find.text('No services yet'), findsNothing);
+    });
+
     testWidgets(
       'Search filters service list case-insensitively by name and category',
       (tester) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -20,6 +22,8 @@ import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
+import 'package:myshop/features/orders/presentation/orders_drill_down.dart';
+import 'package:myshop/shared/widgets/period_filter.dart';
 
 class _NoOpSyncEngine extends SyncEngine {
   _NoOpSyncEngine({
@@ -38,19 +42,53 @@ class FakeDashboardOwnerRepository implements OwnerRepository {
   DashboardMetrics metrics;
   bool shouldThrow = false;
 
+  /// Every getDashboardMetrics call, in order.
+  final List<({String? from, String? to, String? granularity})> requests = [];
+
+  /// When set, getDashboardMetrics waits on it before answering — lets a test
+  /// observe the screen while a response is still pending.
+  Completer<void>? gate;
+
   FakeDashboardOwnerRepository({required this.metrics});
 
   @override
   Future<DashboardMetrics> getDashboardMetrics({
     String? from,
     String? to,
+    String? granularity,
   }) async {
+    requests.add((from: from, to: to, granularity: granularity));
+    if (gate != null) await gate!.future;
     if (shouldThrow) throw Exception('Network error');
     return metrics;
   }
 
+  /// Every per-card getPeriodMetrics call, in order.
+  final List<({String from, String to, String granularity})> periodRequests =
+      [];
+
+  /// What a per-card request answers with; defaults to [metrics].
+  DashboardMetrics? periodMetrics;
+  bool periodShouldThrow = false;
+  Completer<void>? periodGate;
+
   @override
-  DashboardMetrics? getCachedDashboardMetricsSync() => null;
+  Future<DashboardMetrics> getPeriodMetrics({
+    required String from,
+    required String to,
+    required String granularity,
+  }) async {
+    periodRequests.add((from: from, to: to, granularity: granularity));
+    if (periodGate != null) await periodGate!.future;
+    if (periodShouldThrow) throw Exception('Network error');
+    return periodMetrics ?? metrics;
+  }
+
+  /// What "on the phone" holds for the default period; null = nothing cached.
+  DashboardMetrics? cachedDefault;
+
+  @override
+  DashboardMetrics? getCachedDashboardMetricsSync() => cachedDefault;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -61,6 +99,10 @@ class MockOrdersRepository implements OrdersRepository {
 
   @override
   List<Order> getCachedOrdersList() => cachedOrders;
+
+  @override
+  bool hasCachedOrders({String? outletId, bool? allOutlets}) =>
+      cachedOrders.isNotEmpty;
 
   @override
   Future<bool> processPendingSyncQueue() async => true;
@@ -175,7 +217,7 @@ void main() {
       authBloc = MockAuthBloc();
     });
 
-    Widget buildTestWidget() {
+    Widget buildTestWidget({ThemeData? theme}) {
       return MultiRepositoryProvider(
         providers: [
           RepositoryProvider<OrdersRepository>.value(value: mockOrdersRepo),
@@ -186,10 +228,16 @@ void main() {
             BlocProvider<OrdersBloc>.value(value: ordersBloc),
             BlocProvider<AuthBloc>.value(value: authBloc),
           ],
-          child: const MaterialApp(home: OwnerDashboardScreen()),
+          child: MaterialApp(theme: theme, home: const OwnerDashboardScreen()),
         ),
       );
     }
+
+    const filterDate = ValueKey('filter-salesByDate');
+    const filterService = ValueKey('filter-salesByService');
+
+    Finder inFilter(Key filter, String text) =>
+        find.descendant(of: find.byKey(filter), matching: find.text(text));
 
     Future<void> pumpDashboard(WidgetTester tester) async {
       await tester.runAsync(() async {
@@ -206,6 +254,22 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
 
+        // No order on the phone falls in the last 30 days, so the headline
+        // falls back to the dashboard reply's own figures (the fixture dates
+        // are fixed, so pin them well outside any window).
+        mockOrdersRepo.cachedOrders = [
+          for (final o in mockOrdersRepo.cachedOrders)
+            Order(
+              id: o.id,
+              name: o.name,
+              phone: o.phone,
+              date: '2020-01-01',
+              due: o.due,
+              status: o.status,
+              lines: o.lines,
+              payments: o.payments,
+            ),
+        ];
         await tester.pumpWidget(buildTestWidget());
         await pumpDashboard(tester);
 
@@ -233,19 +297,72 @@ void main() {
           (todayCardContainer.decoration as BoxDecoration).color,
           AppColors.primary,
         );
-        expect(todayValueText.style?.fontSize, 28);
-        expect(todayValueText.style?.fontWeight, FontWeight.w500);
+        expect(todayValueText.style?.fontSize, 22);
+        expect(todayValueText.style?.fontWeight, FontWeight.w600);
 
-        // Card 2: "Sales this month" (default period is now '30d')
+        // Card 2: "Sales this month" (month-to-date from the default reply, independent of the
+        // page's month-to-date default period)
         expect(find.text('Sales this month'), findsOneWidget);
-        expect(find.text('₹1,200'), findsOneWidget);
+        // Also shown as the "Collected" figure of the cash card below.
+        expect(find.text('₹1,200'), findsWidgets);
         expect(find.text('5 orders'), findsOneWidget);
 
         // Assert period sales value is styled with AppColors.text (not accent)
-        final periodValueText = tester.widget<Text>(find.text('₹1,200'));
+        final periodValueText = tester.widget<Text>(find.text('₹1,200').first);
         expect(periodValueText.style?.color, AppColors.text);
-        expect(periodValueText.style?.fontSize, 28);
-        expect(periodValueText.style?.fontWeight, FontWeight.w500);
+        expect(periodValueText.style?.fontSize, 22);
+        expect(periodValueText.style?.fontWeight, FontWeight.w600);
+      },
+    );
+
+    testWidgets(
+      '1b. "Sales this month" shows the server reply, not a sum of the orders cached on the phone',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        String iso(int daysAgo) {
+          final d = DateTime.now().subtract(Duration(days: daysAgo));
+          return '${d.year.toString().padLeft(4, '0')}-'
+              '${d.month.toString().padLeft(2, '0')}-'
+              '${d.day.toString().padLeft(2, '0')}';
+        }
+
+        Order order(String id, int daysAgo, int amount) => Order(
+          id: id,
+          name: id,
+          phone: '9000000000',
+          date: iso(daysAgo),
+          due: iso(daysAgo),
+          status: 'Delivered',
+          lines: [
+            OrderLine(
+              productId: 'p',
+              name: 'Wash',
+              quantity: 1,
+              unit: 'PIECE',
+              amount: amount,
+            ),
+          ],
+          payments: [],
+        );
+
+        // Cached orders on the phone; the headline ignores them.
+        mockOrdersRepo.cachedOrders = [
+          order('IN-1', 0, 30000),
+          order('IN-2', 29, 25000),
+          order('OUT-1', 45, 99900),
+        ];
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        expect(find.text('Sales this month'), findsOneWidget);
+        // The cached orders (₹550 over 2 orders in the last 30 days) must not
+        // replace the server's month-to-date figures.
+        expect(find.text('₹550'), findsNothing);
+        expect(find.text('5 orders'), findsOneWidget);
       },
     );
 
@@ -272,7 +389,7 @@ void main() {
     });
 
     testWidgets(
-      '3. Period selector pill displays current selection and changes on selection',
+      '3. Each period-filtered card has its own chips; the page has none',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -282,26 +399,19 @@ void main() {
         await tester.pumpWidget(buildTestWidget());
         await pumpDashboard(tester);
 
-        // Initial period defaults to '30d', rendered as 'This month'
-        expect(find.text('This month'), findsOneWidget);
-
-        // Tap period pill to open menu
-        await tester.tap(find.text('This month'));
-        await tester.pumpAndSettle();
-
-        // PopupMenu shows all 3 options
-        expect(find.text('Today'), findsWidgets);
-        expect(find.text('This week'), findsOneWidget);
-
-        // Tap 'Today'
-        await tester.tap(find.text('Today').last);
-        await pumpDashboard(tester);
-
-        // Pill label updates to 'Today'
-        expect(find.text('Today'), findsOneWidget);
-
-        // Card 2 title updates to 'Sales yesterday'
-        expect(find.text('Sales yesterday'), findsOneWidget);
+        // Sales by date and Sales by service — nothing else.
+        expect(find.text('7 days'), findsNWidgets(2));
+        expect(find.text(PeriodRange.currentMonthLabel()), findsNWidgets(2));
+        expect(find.text(PeriodRange.previousMonthLabel()), findsNWidgets(2));
+        // The old rolling 30 / 90 day chips are gone.
+        expect(find.text('30 Days'), findsNothing);
+        expect(find.text('90 Days'), findsNothing);
+        expect(find.byIcon(Icons.calendar_today_outlined), findsNWidgets(2));
+        expect(find.byKey(filterDate), findsOneWidget);
+        expect(find.byKey(filterService), findsOneWidget);
+        // The money cards stay fixed.
+        expect(find.text('Sales today'), findsOneWidget);
+        expect(find.text('Sales this month'), findsOneWidget);
       },
     );
 
@@ -329,8 +439,11 @@ void main() {
         ownerBloc.add(LoadDashboardEvent());
         await pumpDashboard(tester);
 
-        expect(find.text('Sales by date'), findsNothing);
+        // The card stays so its filter does; it says there is nothing.
+        expect(find.text('Sales by date'), findsOneWidget);
         expect(find.byType(LineChart), findsNothing);
+        // Both cards read the same (now empty) page data.
+        expect(find.text('No sales in this period'), findsNWidgets(2));
       },
     );
 
@@ -354,9 +467,18 @@ void main() {
           of: find.text('How orders are moving'),
           matching: find.byType(AppCard),
         );
-        expect(find.text('Pending'), findsOneWidget);
-        expect(find.text('In progress'), findsOneWidget);
-        expect(find.text('Ready'), findsOneWidget);
+        expect(
+          find.descendant(of: donutCard, matching: find.text('Pending')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: donutCard, matching: find.text('In progress')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: donutCard, matching: find.text('Ready')),
+          findsOneWidget,
+        );
         expect(
           find.descendant(of: donutCard, matching: find.text('Delivered')),
           findsOneWidget,
@@ -458,7 +580,10 @@ void main() {
         ownerBloc.add(LoadDashboardEvent());
         await pumpDashboard(tester);
 
-        expect(find.text('Sales by service'), findsNothing);
+        expect(find.text('Sales by service'), findsOneWidget);
+        expect(find.text('Wash & Fold'), findsNothing);
+        // Both cards read the same (now empty) page data.
+        expect(find.text('No sales in this period'), findsNWidgets(2));
       },
     );
 
@@ -473,13 +598,10 @@ void main() {
         await tester.pumpWidget(buildTestWidget());
         await pumpDashboard(tester);
 
-        // Neither section header nor "View all" exists
+        // The old "Orders to finish" list is gone; only the Recent orders
+        // card lists orders now.
         expect(find.text('Orders to finish'), findsNothing);
-        expect(find.text('View all'), findsNothing);
-
-        // Order cards are not present on dashboard
-        expect(find.text('Bob Jones'), findsNothing);
-        expect(find.text('Alice Smith'), findsNothing);
+        expect(find.text('Recent orders'), findsOneWidget);
       },
     );
 
@@ -572,7 +694,7 @@ void main() {
     );
 
     testWidgets(
-      '11. "Collected vs expenses — this month" net cash-flow chart renders net total, received/spent, and grouped BarChart',
+      '11. "Collected vs expenses" card shows Collected / Spent / Net and the spent-vs-kept split',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -582,66 +704,155 @@ void main() {
         await tester.pumpWidget(buildTestWidget());
         await pumpDashboard(tester);
 
-        expect(find.text('Collected vs expenses — this month'), findsOneWidget);
-        expect(find.text('payments collected this month'), findsOneWidget);
-        expect(find.byType(BarChart), findsOneWidget);
+        expect(find.text('Collected vs expenses'), findsOneWidget);
+        // The fixture has no range series, so it falls back to the
+        // calendar-month series and says so.
+        expect(find.text('This month'), findsOneWidget);
 
-        // cash fixture: income: 300+500+400 = 1200 (₹1,200), expenses: 100+200+150 = 450 (₹450), net = 750 (₹750)
+        // cash fixture: income 300+500+400 = 1200, expenses 100+200+150 = 450,
+        // net = 750; spent 450/1200 = 38%, kept 62%.
+        expect(find.text('Spent'), findsOneWidget);
+        expect(find.text('Net'), findsOneWidget);
         expect(find.text('₹750'), findsOneWidget);
-        expect(find.text('₹1,200 received'), findsOneWidget);
-        expect(find.text('₹450 spent'), findsOneWidget);
+        expect(find.text('₹450'), findsOneWidget);
+        expect(find.text('Spent ₹450 · 38%'), findsOneWidget);
+        expect(find.text('Kept ₹750 · 62%'), findsOneWidget);
 
-        final barChart = tester.widget<BarChart>(find.byType(BarChart));
-        expect(barChart.data.barGroups.length, 3);
-        expect(barChart.data.barGroups.first.barRods.length, 2);
-        expect(
-          barChart.data.barGroups.first.barRods[0].color,
-          AppColors.primary,
+        // Split bar paints at full width with both segments visible, and the
+        // two labels sit at opposite ends of the card.
+        final spentLabel = tester.getRect(find.text('Spent ₹450 · 38%'));
+        final keptLabel = tester.getRect(find.text('Kept ₹750 · 62%'));
+        expect(keptLabel.left - spentLabel.right, greaterThan(50));
+        final bar = find.byWidgetPredicate(
+          (w) => w is SizedBox && w.height == 12 && w.width == double.infinity,
         );
-        expect(
-          barChart.data.barGroups.first.barRods[1].color,
-          AppColors.warning,
+        expect(tester.getSize(bar).width, greaterThan(100));
+        final segments = find.descendant(
+          of: bar,
+          matching: find.byType(ColoredBox),
         );
+        expect(segments, findsNWidgets(2));
+        for (var i = 0; i < 2; i++) {
+          expect(tester.getSize(segments.at(i)).height, 12);
+          expect(tester.getSize(segments.at(i)).width, greaterThan(0));
+        }
       },
     );
 
     testWidgets(
-      '12. Selecting "This quarter" and "Custom dates" in period selector pill',
+      '11b. Collected vs expenses follows the range series and names the selected period',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
 
+        fakeOwnerRepo.metrics = DashboardMetrics(
+          todaySales: 1000,
+          periodSales: 5000,
+          bars: [DashboardBar(label: '23 Sep', amount: 1000)],
+          cash: [CashPoint(label: 'Sep', income: 999900, expenses: 111100)],
+          cashRange: [
+            CashPoint(label: '23 Sep', income: 20000, expenses: 5000),
+            CashPoint(label: '24 Sep', income: 10000, expenses: 5000),
+          ],
+        );
+
         await tester.pumpWidget(buildTestWidget());
         await pumpDashboard(tester);
+        // Default period: the current month (month-to-date).
+        expect(find.text(PeriodRange.currentMonthLabel()), findsWidgets);
+        // Totals come from cashRange (₹300 collected, ₹100 spent), not `cash`.
+        expect(find.text('Spent ₹100 · 33%'), findsOneWidget);
+        expect(find.text('Kept ₹200 · 67%'), findsOneWidget);
+        expect(find.text('₹9,999'), findsNothing);
 
-        // Tap period selector pill
-        await tester.tap(find.text('This month'));
-        await tester.pumpAndSettle();
-
-        // Check options
-        expect(find.text('This quarter'), findsOneWidget);
-        expect(find.text('Custom dates'), findsOneWidget);
-
-        // Tap This quarter
-        await tester.tap(find.text('This quarter'));
+        // A card's own filter never moves it.
+        await tester.tap(inFilter(filterDate, '7 days'));
         await pumpDashboard(tester);
-
-        expect(find.text('This quarter'), findsOneWidget);
-        expect(find.text('Sales this quarter'), findsOneWidget);
-
-        // Tap period selector pill again and select Custom dates
-        await tester.tap(find.text('This quarter'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Custom dates'));
-        await pumpDashboard(tester);
-
-        // Inline From / To selector appears
-        expect(find.text('FROM'), findsOneWidget);
-        expect(find.text('TO'), findsOneWidget);
+        expect(find.text('Last 30 days'), findsNothing);
+        expect(find.text(PeriodRange.currentMonthLabel()), findsWidgets);
+        expect(find.text('Spent ₹100 · 33%'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      '11c. Collected vs expenses says so when spending exceeds collections',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        fakeOwnerRepo.metrics = DashboardMetrics(
+          todaySales: 1000,
+          cashRange: [
+            CashPoint(label: '23 Sep', income: 10000, expenses: 25000),
+          ],
+        );
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+        // ₹100 collected against ₹250 spent: 40% covered, 60% still to cover.
+        expect(find.text('Covered ₹100 · 40%'), findsOneWidget);
+        expect(find.text('Yet to cover ₹150 · 60%'), findsOneWidget);
+        expect(find.text('-₹150'), findsOneWidget);
+        // The bar must actually paint: full card width, 12px tall.
+        final bar = find.byWidgetPredicate(
+          (w) => w is SizedBox && w.height == 12 && w.width == double.infinity,
+        );
+        expect(bar, findsOneWidget);
+        expect(tester.getSize(bar).width, greaterThan(100));
+        expect(tester.getSize(bar).height, 12);
+      },
+    );
+
+    testWidgets(
+      '11d. Collected vs expenses renders when money came in and nothing was spent',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        fakeOwnerRepo.metrics = DashboardMetrics(
+          todaySales: 1000,
+          cashRange: [CashPoint(label: '23 Sep', income: 10000, expenses: 0)],
+        );
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+        expect(tester.takeException(), isNull);
+        expect(find.text('Spent ₹0 · 0%'), findsOneWidget);
+        expect(find.text('Kept ₹100 · 100%'), findsOneWidget);
+      },
+    );
+
+    testWidgets('12. A card\'s calendar button opens its own From / To row', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(buildTestWidget());
+      await pumpDashboard(tester);
+      expect(find.text('FROM'), findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(filterDate),
+          matching: find.byIcon(Icons.calendar_today_outlined),
+        ),
+      );
+      await pumpDashboard(tester);
+
+      // Only that card opened one; nothing requested until both are picked.
+      expect(find.text('FROM'), findsOneWidget);
+      expect(find.text('TO'), findsOneWidget);
+      expect(fakeOwnerRepo.periodRequests, isEmpty);
+    });
 
     testWidgets(
       '13. Dashboard alone shows its own load error SnackBar when route is current',
@@ -705,29 +916,36 @@ void main() {
 
     group('Chart Label Formatting & Visibility Tests', () {
       test('formats verbose weekly date ranges into clean compact strings', () {
-        expect(formatChartLabel('1 Sept 2026–6 Sept 2026'), equals('1–6 Sep'));
+        expect(formatChartLabel('1 Sept 2026–6 Sept 2026'), equals('1–6\nSep'));
         expect(
           formatChartLabel('7 Sept 2026 - 12 Sept 2026'),
-          equals('7–12 Sep'),
+          equals('7–12\nSep'),
         );
         expect(
           formatChartLabel('13 September 2026–18 September 2026'),
-          equals('13–18 Sep'),
+          equals('13–18\nSep'),
         );
         expect(
           formatChartLabel('28 Aug 2026–3 Sep 2026'),
-          equals('28 Aug–3 Sep'),
+          equals('28 Aug -\n3 Sep'),
         );
+        expect(formatChartLabel('Aug 30 - Sep 05'), equals('Aug 30 -\nSep 05'));
       });
 
       test('formats single dates and weekdays cleanly', () {
-        expect(formatChartLabel('1 Sept 2026'), equals('1 Sep'));
-        expect(formatChartLabel('28 September'), equals('28 Sep'));
-        expect(formatChartLabel('2026-09-15'), equals('15 Sep'));
+        expect(formatChartLabel('22 Sep'), equals('22\nSep'));
+        expect(formatChartLabel('1 Sept 2026'), equals('1\nSep'));
+        expect(formatChartLabel('28 September'), equals('28\nSep'));
+        expect(formatChartLabel('2026-09-15'), equals('15\nSep'));
         expect(formatChartLabel('Monday'), equals('Mon'));
         expect(formatChartLabel('Mon'), equals('Mon'));
         expect(formatChartLabel('September 2026'), equals('Sep'));
         expect(formatChartLabel(''), equals(''));
+      });
+
+      test('formats 1 Sep–3 Sep into 01 Sep -\\n03 Sep and 22 Sep into 22\\nSep (F3)', () {
+        expect(formatChartLabel('1 Sep–3 Sep'), equals('01 Sep -\n03 Sep'));
+        expect(formatChartLabel('22 Sep'), equals('22\nSep'));
       });
 
       test('shouldShowChartLabel samples cleanly based on count', () {
@@ -745,5 +963,669 @@ void main() {
         expect(shouldShowChartLabel(1, 30), isFalse);
       });
     });
+
+    group('DashboardMetrics bars parsing tests (F2)', () {
+      test(
+        'fromJson without bars falls back gracefully and preserves cash',
+        () {
+          final json = {
+            'todaySales': 1000,
+            'cash': [
+              {'label': 'Week 1', 'income': 500, 'expenses': 200},
+            ],
+          };
+          final metrics = DashboardMetrics.fromJson(json);
+          expect(metrics.bars, isEmpty);
+          expect(metrics.cash.length, 1);
+          expect(metrics.cash.first.income, 500);
+
+          final outJson = metrics.toJson();
+          expect(outJson['bars'], isEmpty);
+        },
+      );
+
+      test('fromJson with bars parses bars correctly', () {
+        final json = {
+          'todaySales': 1000,
+          'bars': [
+            {'label': '1 Sep', 'amount': 15000},
+            {'label': '2 Sep', 'amount': 25000},
+          ],
+        };
+        final metrics = DashboardMetrics.fromJson(json);
+        expect(metrics.bars.length, 2);
+        expect(metrics.bars[0].label, '1 Sep');
+        expect(metrics.bars[0].amount, 15000);
+        expect(metrics.bars[1].label, '2 Sep');
+        expect(metrics.bars[1].amount, 25000);
+
+        final outJson = metrics.toJson();
+        expect(outJson['bars'], isNotNull);
+        expect((outJson['bars'] as List).length, 2);
+      });
+    });
+
+    testWidgets('Chart shows the bars labels for a 7-day fixture (F2)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final sevenDayBars = [
+        DashboardBar(label: '1 Sep', amount: 10000),
+        DashboardBar(label: '2 Sep', amount: 20000),
+        DashboardBar(label: '3 Sep', amount: 15000),
+        DashboardBar(label: '4 Sep', amount: 30000),
+        DashboardBar(label: '5 Sep', amount: 25000),
+        DashboardBar(label: '6 Sep', amount: 35000),
+        DashboardBar(label: '7 Sep', amount: 40000),
+      ];
+
+      fakeOwnerRepo.metrics = DashboardMetrics(
+        todaySales: 40000,
+        todayCount: 5,
+        periodSales: 175000,
+        periodOrders: 20,
+        bars: sevenDayBars,
+        cash: [CashPoint(label: 'Mon', income: 30000, expenses: 10000)],
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await pumpDashboard(tester);
+
+      expect(find.text('Sales by date'), findsOneWidget);
+      // For <= 7 points, all points are shown formatted: "1\nSep", "2\nSep", etc.
+      expect(find.text('1\nSep'), findsOneWidget);
+      expect(find.text('7\nSep'), findsOneWidget);
+    });
+
+    group('Chart axis fixes', () {
+      testWidgets('y-axis shows the ₹0 baseline', (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        fakeOwnerRepo.metrics = DashboardMetrics(
+          todaySales: 30000,
+          periodSales: 90000,
+          bars: [
+            DashboardBar(label: '1 Sep', amount: 30000),
+            DashboardBar(label: '2 Sep', amount: 60000),
+            DashboardBar(label: '3 Sep', amount: 90000),
+          ],
+        );
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        expect(find.text('₹0'), findsWidgets);
+      });
+
+      testWidgets('sales line does not overshoot below the baseline', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        fakeOwnerRepo.metrics = DashboardMetrics(
+          todaySales: 4000,
+          periodSales: 9500,
+          bars: [0, 40, 0, 30, 12, 0, 13]
+              .asMap()
+              .entries
+              .map(
+                (e) => DashboardBar(
+                  label: '${e.key + 1} Sep',
+                  amount: e.value * 100,
+                ),
+              )
+              .toList(),
+        );
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        final chart = tester.widget<LineChart>(find.byType(LineChart));
+        expect(chart.data.lineBarsData, isNotEmpty);
+        for (final bar in chart.data.lineBarsData) {
+          expect(bar.preventCurveOverShooting, isTrue);
+        }
+      });
+
+      testWidgets(
+        '7 and 12 point charts render on a narrow phone without errors',
+        (tester) async {
+          tester.view.physicalSize = const Size(360 * 3, 800 * 3);
+          tester.view.devicePixelRatio = 3.0;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+
+          for (final count in [7, 12]) {
+            fakeOwnerRepo.metrics = DashboardMetrics(
+              todaySales: 10000,
+              bars: List.generate(
+                count,
+                (i) =>
+                    DashboardBar(label: '${i + 1} Sep', amount: (i + 1) * 3000),
+              ),
+              cash: List.generate(
+                count,
+                (i) => CashPoint(
+                  label: '${i + 1} Sep',
+                  income: 8000,
+                  expenses: 3000,
+                ),
+              ),
+            );
+            await tester.pumpWidget(buildTestWidget());
+            await pumpDashboard(tester);
+            expect(tester.takeException(), isNull, reason: '$count points');
+          }
+        },
+      );
+    });
+
+    testWidgets(
+      '12b. Orders donut is larger and its legend shows share per stage',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        final donut = find.ancestor(
+          of: find.byType(PieChart),
+          matching: find.byType(SizedBox),
+        );
+        final size = tester.getSize(donut.first);
+        expect(size.width, greaterThanOrEqualTo(120));
+        expect(size.height, greaterThanOrEqualTo(120));
+        // Every legend row now ends with a percentage.
+        expect(find.textContaining('%'), findsWidgets);
+      },
+    );
+
+    group('Drill-down and recent orders', () {
+      Future<List<OrdersDrillDown?>> pumpWithCallback(
+        WidgetTester tester,
+      ) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final asked = <OrdersDrillDown?>[];
+        await tester.pumpWidget(
+          MultiRepositoryProvider(
+            providers: [
+              RepositoryProvider<OrdersRepository>.value(value: mockOrdersRepo),
+            ],
+            child: MultiBlocProvider(
+              providers: [
+                BlocProvider<OwnerBloc>.value(value: ownerBloc),
+                BlocProvider<OrdersBloc>.value(
+                  value: MockOrdersBloc(mockOrdersRepo.cachedOrders),
+                ),
+                BlocProvider<AuthBloc>.value(value: authBloc),
+              ],
+              child: MaterialApp(
+                home: OwnerDashboardScreen(onOpenOrders: asked.add),
+              ),
+            ),
+          ),
+        );
+        await pumpDashboard(tester);
+        return asked;
+      }
+
+      testWidgets('each count tile asks for its own view of the orders', (
+        tester,
+      ) async {
+        final asked = await pumpWithCallback(tester);
+
+        // The tiles sit above the charts, so the first match is the tile
+        // ("Delivered" also appears in the donut legend and on a pill).
+        await tester.tap(find.text('Open orders').first);
+        await tester.tap(find.text('Delivered').first);
+        await tester.tap(find.text('Due today').first);
+
+        expect(asked, [
+          OrdersDrillDown.open,
+          OrdersDrillDown.deliveredToday,
+          OrdersDrillDown.dueToday,
+        ]);
+      });
+
+      testWidgets(
+        'Recent orders lists the newest first and View all opens the plain list',
+        (tester) async {
+          final asked = await pumpWithCallback(tester);
+
+          expect(find.text('Recent orders'), findsOneWidget);
+          double y(String name) => tester.getTopLeft(find.text(name)).dy;
+          // Fixture dates: Alice/David 12 Sep, Bob 10 Sep, Charlie 8 Sep.
+          expect(y('Alice Smith'), lessThan(y('Bob Jones')));
+          expect(y('David Later'), lessThan(y('Bob Jones')));
+          expect(y('Bob Jones'), lessThan(y('Charlie Delivered')));
+
+          await tester.tap(find.text('View all'));
+          expect(asked, [null]);
+        },
+      );
+
+      testWidgets('Recent orders shows at most five rows', (tester) async {
+        mockOrdersRepo.cachedOrders = [
+          for (var i = 1; i <= 8; i++)
+            Order(
+              id: 'ORD-$i',
+              name: 'Customer $i',
+              phone: '9876543210',
+              date: '2026-09-${10 + i}',
+              due: '2026-09-25',
+              status: 'Pending',
+              lines: [],
+              payments: [],
+            ),
+        ];
+        await pumpWithCallback(tester);
+
+        expect(find.textContaining('Customer '), findsNWidgets(5));
+        // The five newest: 18 down to 14 Sep.
+        expect(find.text('Customer 8'), findsOneWidget);
+        expect(find.text('Customer 4'), findsOneWidget);
+        expect(find.text('Customer 3'), findsNothing);
+      });
+
+      testWidgets('no orders on the phone means no Recent orders card', (
+        tester,
+      ) async {
+        mockOrdersRepo.cachedOrders = [];
+        await pumpWithCallback(tester);
+        expect(find.text('Recent orders'), findsNothing);
+      });
+    });
+
+    group('Per-card period filters', () {
+      String isoDay(DateTime d) =>
+          '${d.year.toString().padLeft(4, '0')}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+
+      // The screen reads the clock while the test runs, so around midnight the
+      // expected day may be either side of it: accept the day computed before
+      // the test body or the one computed now.
+      final testStart = DateTime.now();
+      Matcher daysAgo(int days) => anyOf(
+        isoDay(testStart.subtract(Duration(days: days))),
+        isoDay(DateTime.now().subtract(Duration(days: days))),
+      );
+
+      // First day of the month [back] months before this one.
+      Matcher monthStart(int back) => anyOf(
+        isoDay(DateTime(testStart.year, testStart.month - back, 1)),
+        isoDay(DateTime(DateTime.now().year, DateTime.now().month - back, 1)),
+      );
+
+      Future<void> bigPhone(WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+      }
+
+      testWidgets(
+        'with the default period cached, opening makes no request at all',
+        (tester) async {
+          await bigPhone(tester);
+          fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+          await tester.pumpWidget(buildTestWidget());
+          await pumpDashboard(tester);
+
+          expect(fakeOwnerRepo.requests, isEmpty);
+          expect(fakeOwnerRepo.periodRequests, isEmpty);
+        },
+      );
+
+      testWidgets('opening the page asks for the month-to-date daily request once', (
+        tester,
+      ) async {
+        await bigPhone(tester);
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        expect(fakeOwnerRepo.requests.length, 1);
+        final first = fakeOwnerRepo.requests.first;
+        expect(first.granularity, 'day');
+        expect(first.from, monthStart(0));
+        expect(first.to, daysAgo(0));
+        expect(fakeOwnerRepo.periodRequests, isEmpty);
+      });
+
+      testWidgets(
+        'one chip tap makes exactly one request and leaves the page and the other card alone',
+        (tester) async {
+          await bigPhone(tester);
+          fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+          fakeOwnerRepo.periodMetrics = DashboardMetrics(
+            bars: [DashboardBar(label: '23 Sep', amount: 4000)],
+            serviceMix: [ServiceMixItem(label: 'Only Ironing', amount: 4000)],
+          );
+          await tester.pumpWidget(buildTestWidget());
+          await pumpDashboard(tester);
+
+          await tester.tap(inFilter(filterDate, '7 days'));
+          await pumpDashboard(tester);
+
+          expect(fakeOwnerRepo.periodRequests.length, 1);
+          expect(fakeOwnerRepo.periodRequests.single.granularity, 'day');
+          expect(fakeOwnerRepo.periodRequests.single.from, daysAgo(6));
+          // The page itself was not asked again ...
+          expect(fakeOwnerRepo.requests, isEmpty);
+          // ... the other card still shows the page's services ...
+          expect(find.text('Wash & Fold'), findsOneWidget);
+          expect(find.text('Only Ironing'), findsNothing);
+          // ... and the money cards did not change label.
+          expect(find.text('Sales this month'), findsOneWidget);
+        },
+      );
+
+      testWidgets('each preset sends a daily request for its own dates', (
+        tester,
+      ) async {
+        await bigPhone(tester);
+        fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        await tester.tap(
+          inFilter(filterService, PeriodRange.previousMonthLabel()),
+        );
+        await pumpDashboard(tester);
+        expect(fakeOwnerRepo.periodRequests.last.granularity, 'day');
+        expect(fakeOwnerRepo.periodRequests.last.from, monthStart(1));
+        // The last day of last month is the day before this month starts.
+        expect(
+          fakeOwnerRepo.periodRequests.last.to,
+          isoDay(
+            DateTime(DateTime.now().year, DateTime.now().month, 1)
+                .subtract(const Duration(days: 1)),
+          ),
+        );
+
+        await tester.tap(inFilter(filterService, '7 days'));
+        await pumpDashboard(tester);
+        expect(fakeOwnerRepo.periodRequests.last.granularity, 'day');
+        expect(fakeOwnerRepo.periodRequests.last.from, daysAgo(6));
+      });
+
+      testWidgets(
+        'back to the current month needs no request: the page already holds it',
+        (tester) async {
+          await bigPhone(tester);
+          fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+          await tester.pumpWidget(buildTestWidget());
+          await pumpDashboard(tester);
+
+          await tester.tap(inFilter(filterDate, '7 days'));
+          await pumpDashboard(tester);
+          expect(fakeOwnerRepo.periodRequests.length, 1);
+
+          await tester.tap(
+            inFilter(filterDate, PeriodRange.currentMonthLabel()),
+          );
+          await pumpDashboard(tester);
+          expect(fakeOwnerRepo.periodRequests.length, 1);
+          expect(find.byType(LineChart), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'only the changed card shows a spinner while its period loads',
+        (tester) async {
+          await bigPhone(tester);
+          fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+          await tester.pumpWidget(buildTestWidget());
+          await pumpDashboard(tester);
+
+          double opacity() =>
+              tester.widget<SliverOpacity>(find.byType(SliverOpacity)).opacity;
+
+          fakeOwnerRepo.periodGate = Completer<void>();
+          await tester.tap(inFilter(filterDate, '7 days'));
+          await tester.pump();
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+
+          expect(find.byType(LineChart), findsNothing);
+          expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          // No page-wide dimming, and the other cards are untouched.
+          expect(opacity(), 1.0);
+          expect(find.text('Collected vs expenses'), findsOneWidget);
+          expect(find.text('Wash & Fold'), findsOneWidget);
+
+          fakeOwnerRepo.periodGate!.complete();
+          fakeOwnerRepo.periodGate = null;
+          await pumpDashboard(tester);
+          expect(find.byType(LineChart), findsOneWidget);
+          expect(find.byType(CircularProgressIndicator), findsNothing);
+        },
+      );
+
+      testWidgets('a failed period says so and Retry asks again', (
+        tester,
+      ) async {
+        await bigPhone(tester);
+        fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        fakeOwnerRepo.periodShouldThrow = true;
+        await tester.tap(inFilter(filterService, '7 days'));
+        await pumpDashboard(tester);
+        expect(find.text('Could not load this period'), findsOneWidget);
+        // Never the month-to-date figures under a 7-day label.
+        expect(find.text('Wash & Fold'), findsNothing);
+
+        fakeOwnerRepo.periodShouldThrow = false;
+        await tester.tap(find.text('Retry'));
+        await pumpDashboard(tester);
+        expect(fakeOwnerRepo.periodRequests.length, 2);
+        expect(find.text('Could not load this period'), findsNothing);
+        expect(find.text('Wash & Fold'), findsOneWidget);
+      });
+
+      testWidgets('an outlet switch resets both cards to the default', (
+        tester,
+      ) async {
+        await bigPhone(tester);
+        fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+        final signal = ValueNotifier<int>(0);
+        await tester.pumpWidget(
+          MultiRepositoryProvider(
+            providers: [
+              RepositoryProvider<OrdersRepository>.value(value: mockOrdersRepo),
+            ],
+            child: MultiBlocProvider(
+              providers: [
+                BlocProvider<OwnerBloc>.value(value: ownerBloc),
+                BlocProvider<OrdersBloc>.value(value: ordersBloc),
+                BlocProvider<AuthBloc>.value(value: authBloc),
+              ],
+              child: MaterialApp(
+                home: OwnerDashboardScreen(resetSignal: signal),
+              ),
+            ),
+          ),
+        );
+        await pumpDashboard(tester);
+
+        await tester.tap(inFilter(filterDate, '7 days'));
+        await pumpDashboard(tester);
+        expect(ownerBloc.state.cards, isNotEmpty);
+
+        // Leaving the tab uses the same reset an outlet switch does.
+        signal.value++;
+        await pumpDashboard(tester);
+        expect(ownerBloc.state.cards, isEmpty);
+        final chip = tester.widget<PeriodFilter>(find.byKey(filterDate));
+        expect(chip.value, PeriodRange.thisMonth);
+      });
+    });
+
+    group('Refresh, single-point chart and narrow large-text screens', () {
+      Future<void> phone(
+        WidgetTester tester, {
+        Size size = const Size(800, 1600),
+        double textScale = 1,
+      }) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      }
+
+      testWidgets(
+        'Refresh reloads a card that is on a non-default period too',
+        (tester) async {
+          await phone(tester);
+          fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+          await tester.pumpWidget(buildTestWidget());
+          await pumpDashboard(tester);
+
+          await tester.tap(inFilter(filterDate, '7 days'));
+          await pumpDashboard(tester);
+          expect(fakeOwnerRepo.periodRequests.length, 1);
+
+          await tester.tap(find.byTooltip('Refresh'));
+          await pumpDashboard(tester);
+          // The page reloaded, and so did the 7-day card (only that one).
+          expect(fakeOwnerRepo.requests, isNotEmpty);
+          expect(fakeOwnerRepo.periodRequests.length, 2);
+          expect(
+            fakeOwnerRepo.periodRequests.last.granularity,
+            fakeOwnerRepo.periodRequests.first.granularity,
+          );
+        },
+      );
+
+      testWidgets('a one-point sales trend draws without errors', (
+        tester,
+      ) async {
+        await phone(tester);
+        fakeOwnerRepo.cachedDefault = DashboardMetrics(
+          bars: [DashboardBar(label: '23 Sep', amount: 4000)],
+          serviceMix: [ServiceMixItem(label: 'Only Ironing', amount: 4000)],
+        );
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        final chart = tester.widget<LineChart>(find.byType(LineChart));
+        expect(chart.data.lineBarsData.single.spots.length, 1);
+        expect(chart.data.maxX, greaterThan(chart.data.minX));
+        expect(tester.takeException(), isNull);
+      });
+
+      for (final dark in [false, true]) {
+        testWidgets(
+          '320x568 at 1.5x text (${dark ? 'dark' : 'light'}): every card, '
+          'per-card filter and Recent orders lay out without overflow',
+          (tester) async {
+            await phone(tester, size: const Size(320, 568), textScale: 1.5);
+            fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+            await tester.pumpWidget(
+              buildTestWidget(
+                theme: dark ? ThemeData.dark() : ThemeData.light(),
+              ),
+            );
+            await pumpDashboard(tester);
+            expect(tester.takeException(), isNull);
+
+            // Walk down the whole page, then open a per-card range.
+            final scroll = find
+                .descendant(
+                  of: find.byType(CustomScrollView),
+                  matching: find.byType(Scrollable),
+                )
+                .first;
+            var openedRange = false;
+            for (var i = 0; i < 12; i++) {
+              await tester.drag(scroll, const Offset(0, -300));
+              await tester.pumpAndSettle();
+              expect(tester.takeException(), isNull);
+              final seven = inFilter(filterService, '7 days');
+              if (!openedRange && seven.evaluate().isNotEmpty) {
+                await tester.ensureVisible(seven);
+                await tester.pumpAndSettle();
+                await tester.tap(seven);
+                await pumpDashboard(tester);
+                expect(tester.takeException(), isNull);
+                openedRange = true;
+              }
+            }
+            expect(openedRange, isTrue);
+            expect(find.text('Recent orders'), findsOneWidget);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    });
+
+    group('Bloc: failed page load', () {
+      test('with nothing cached, a failed load for a new outlet drops the old outlet\'s figures and is no longer "stale"', () async {
+        final repo = FakeDashboardOwnerRepository(
+          metrics: DashboardMetrics(todaySales: 5000),
+        );
+        final bloc = OwnerBloc(ownerRepository: repo);
+
+        bloc.add(LoadDashboardEvent(requestKey: 'outlet-a'));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(bloc.state.dashboardKey, 'outlet-a');
+        expect(bloc.state.metrics.todaySales, 5000);
+
+        repo.shouldThrow = true;
+        bloc.add(LoadDashboardEvent(requestKey: 'outlet-b', refresh: true));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        // The screen compares this key with the selection: equal means it
+        // stops dimming; the old outlet's ₹50 is not shown under outlet B.
+        expect(bloc.state.dashboardKey, 'outlet-b');
+        expect(bloc.state.metrics.todaySales, 0);
+        expect(bloc.state.error, isNotNull);
+        await bloc.close();
+      });
+
+      test(
+        'a failed refresh of the same selection keeps its figures',
+        () async {
+          final repo = FakeDashboardOwnerRepository(
+            metrics: DashboardMetrics(todaySales: 5000),
+          );
+          final bloc = OwnerBloc(ownerRepository: repo);
+          bloc.add(LoadDashboardEvent(requestKey: 'outlet-a'));
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+
+          repo.shouldThrow = true;
+          bloc.add(LoadDashboardEvent(requestKey: 'outlet-a', refresh: true));
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+
+          expect(bloc.state.metrics.todaySales, 5000);
+          await bloc.close();
+        },
+      );
+    });
+
+    // The stale-card-reply tests (two separate gates) live in
+    // owner_data_layer_test.dart.
   });
 }

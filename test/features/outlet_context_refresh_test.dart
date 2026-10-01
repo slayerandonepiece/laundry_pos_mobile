@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
@@ -259,8 +260,10 @@ void main() {
       expect(cache.getAllowedOutlets(), equals([outlet2]));
 
       mode = '401';
-      final on401 = await repo.refreshOutletContext();
-      expect(on401, isNull);
+      await expectLater(
+        repo.refreshOutletContext(),
+        throwsA(isA<AuthException>()),
+      );
       expect(logoutPosts, 1);
       expect(storage.token, isNull);
       expect(cache.cleared, isTrue);

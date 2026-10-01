@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/sync/connectivity_service.dart';
+import '../../core/sync/sync_engine.dart';
 import '../../core/theme/text_styles.dart';
 import '../../features/shell/bloc/outlet_scope_cubit.dart';
 
@@ -24,6 +25,7 @@ class OutletTitleSwitcher extends StatefulWidget {
 
 class _OutletTitleSwitcherState extends State<OutletTitleSwitcher> {
   bool _menuOpen = false;
+  bool _switchBusy = false;
 
   String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -72,7 +74,8 @@ class _OutletTitleSwitcherState extends State<OutletTitleSwitcher> {
       cubit.selectAllOutlets();
     }
 
-    void handleSelectOutlet(String outletId, String displayName) {
+    Future<void> handleSelectOutlet(String outletId, String displayName) async {
+      if (_switchBusy || cubit.isSwitching) return;
       final cached = cubit.hasCachedOrdersFor(
         outletId: outletId,
         allOutlets: false,
@@ -86,6 +89,50 @@ class _OutletTitleSwitcherState extends State<OutletTitleSwitcher> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+        return;
+      }
+      // An employee keeps only one outlet on the phone: send anything queued
+      // for the current outlet first, switch and sync the new one, and drop
+      // the old outlet's data only once that worked.
+      final switchingAway =
+          !scope.isOwner &&
+          scope.activeOutletId != null &&
+          scope.activeOutletId != outletId;
+      if (switchingAway) {
+        _switchBusy = true;
+        try {
+          if (cubit.hasPendingChanges) await SyncEngine.instance.trigger();
+          if (cubit.hasPendingChanges) {
+            messenger?.showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Some changes are still waiting to sync. Try again once they have.',
+                ),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+          final switched = await cubit.selectClearingPrevious(
+            outletId,
+            syncNewScope: () async {
+              await SyncEngine.instance.trigger();
+              return SyncEngine.instance.lastRunSucceeded == true;
+            },
+          );
+          if (!switched) {
+            messenger?.showSnackBar(
+              SnackBar(
+                content: Text(
+                  "Couldn't load $displayName. Staying on your current outlet.",
+                ),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        } finally {
+          _switchBusy = false;
+        }
         return;
       }
       cubit.select(outletId);
@@ -107,7 +154,9 @@ class _OutletTitleSwitcherState extends State<OutletTitleSwitcher> {
           ),
         ),
       ),
-      if (widget.showAllOutletsOption && scope.isOwner)
+      if (widget.showAllOutletsOption &&
+          scope.isOwner &&
+          scope.allowed.length > 1)
         PopupMenuItem<String>(
           value: '__all__',
           onTap: handleSelectAll,
@@ -182,24 +231,22 @@ class _OutletTitleSwitcherState extends State<OutletTitleSwitcher> {
     final cubit = context.watch<OutletScopeCubit?>();
     final scope = cubit?.state ?? const OutletScope.empty();
 
-    final hasChoice =
-        scope.allowed.length > 1 ||
-        (scope.isOwner && widget.showAllOutletsOption);
+    final hasChoice = scope.allowed.length > 1;
 
     final String outletLabel;
-    if (scope.allOutlets) {
+    if (scope.allowed.length <= 1) {
+      outletLabel = scope.allowed.isEmpty
+          ? widget.screenLabel
+          : scope.allowed.first.displayName;
+    } else if (scope.allOutlets) {
       outletLabel = 'All outlets';
-    } else if (scope.allowed.isEmpty) {
-      outletLabel = widget.screenLabel;
     } else {
       outletLabel =
           scope.allowed
               .where((o) => o.id == scope.activeOutletId)
               .map((o) => o.displayName)
               .firstOrNull ??
-          (scope.allowed.length == 1
-              ? scope.allowed.first.displayName
-              : 'Select outlet');
+          'Select outlet';
     }
 
     final topLine = (widget.subtitle != null && widget.subtitle!.isNotEmpty)

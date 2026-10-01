@@ -7,7 +7,11 @@ package name (`myshop` in `pubspec.yaml`) is intentionally unchanged — an
 internal identifier, not user-facing; see `docs/HANDOFF.md` "KlenPOS
 rebrand + Firebase + gating" for the full rebrand scope.
 
-## Current status — 27 September 2026
+## Current status — 1 October 2026
+
+Release **1.0.4+6** is prepared for **stage** (branch `feat/dashboard-filters-and-sync-hardening`): `flutter analyze` clean, 800 tests pass. Done since 27 September: per-card dashboard period filters (7 days / current month / previous month / custom), drill-down tiles and Recent orders, Orders Work/Payment filters and employee quick filters, staff outlet assignment, sync/auth hardening (resume guard, backfill, dead-letter banner, cursor resume), backend outlet/invoice access fixes. The open task list is the **Pending list** in `docs/HANDOFF.md` (expense edit/delete, on-device verification passes, backend hardening leftovers, store listing). Release notes: `docs/RELEASE-NOTES-1.0.4.md`.
+
+## Status — 27 September 2026
 
 The mobile HTTP API exists. Main `cdfc121` includes the merged offline-ID/outlet/local-first work. Historical F1–F8 details below are not a current test-count or exact navigation specification: owner navigation currently has Dashboard / Orders / More, employees use Orders without an owner bottom bar.
 

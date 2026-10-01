@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
@@ -585,7 +586,10 @@ void main() {
 
       mockConnectivity.mockOffline = false;
       mockApiClient.shouldThrow = true;
-      mockApiClient.errorToThrow = Exception('500 Internal Server Error');
+      mockApiClient.errorToThrow = ApiException(
+        'Invalid expense',
+        statusCode: 422,
+      );
 
       // Attempt 1
       await ownerRepo.processPendingOwnerActions();
@@ -729,6 +733,16 @@ void main() {
         'phone': 'bob_r',
         'active': false,
       };
+      // The replay reads the server's current status rather than trusting
+      // whatever the cache held when the edit was queued.
+      mockApiClient.responses[ApiEndpoints.employees] = [
+        {
+          'id': 'emp_42',
+          'name': 'Bob Updated',
+          'phone': 'bob_u',
+          'active': false,
+        },
+      ];
       await ownerRepo.processPendingOwnerActions();
 
       expect(mockApiClient.putUrls.last, ApiEndpoints.employeeDetail('emp_42'));
@@ -736,6 +750,161 @@ void main() {
         mockApiClient.putBodies.last,
         equals({'name': 'Bob Replay', 'phone': 'bob_r', 'active': false}),
       );
+    });
+
+    test('staff outlet assignments: sent only when given, kept through offline replay', () async {
+      await localCache.setAllowedOutletsForStore('store_1', [
+        {'id': 'o1', 'displayName': 'Main Road'},
+        {'id': 'o2', 'displayName': 'Lake View'},
+      ]);
+      await localCache.setCachedStaff([
+        {
+          'id': 'emp_7',
+          'name': 'Dev',
+          'phone': '9000000007',
+          'active': true,
+          'outlets': [
+            {'id': 'o1', 'name': 'Main Road'},
+          ],
+          'defaultOutletId': 'o1',
+        },
+      ]);
+      mockApiClient.responses[ApiEndpoints.employeeDetail('emp_7')] = {
+        'id': 'emp_7',
+        'name': 'Dev',
+        'phone': '9000000007',
+        'active': true,
+        'outlets': [
+          {'id': 'o1', 'name': 'Main Road'},
+          {'id': 'o2', 'name': 'Lake View'},
+        ],
+        'defaultOutletId': 'o2',
+      };
+
+      // Online, assignments changed: they are sent with the default.
+      mockConnectivity.mockOffline = false;
+      final saved = await ownerRepo.updateStaff(
+        employeeId: 'emp_7',
+        name: 'Dev',
+        phone: '9000000007',
+        outletIds: ['o1', 'o2'],
+        defaultOutletId: 'o2',
+      );
+      expect(mockApiClient.putBodies.last, {
+        'name': 'Dev',
+        'phone': '9000000007',
+        'active': true,
+        'outlets': ['o1', 'o2'],
+        'defaultOutletId': 'o2',
+      });
+      expect(saved.outlets!.map((o) => o.id), ['o1', 'o2']);
+      expect(saved.defaultOutletId, 'o2');
+      // The cache now carries them too.
+      expect(localCache.getCachedStaff()!.first['defaultOutletId'], 'o2');
+
+      // Offline: cache updated optimistically with names, action queued with
+      // the assignments, and the replay sends them.
+      mockApiClient.putBodies.clear();
+      mockConnectivity.mockOffline = true;
+      final offline = await ownerRepo.updateStaff(
+        employeeId: 'emp_7',
+        name: 'Dev',
+        phone: '9000000007',
+        outletIds: ['o2'],
+        defaultOutletId: 'o2',
+      );
+      expect(offline.outlets!.single.name, 'Lake View');
+      final queued = localCache.getPendingOwnerActionsQueue().last;
+      expect(queued['payload']['outlets'], ['o2']);
+      expect(queued['payload']['defaultOutletId'], 'o2');
+      expect(mockApiClient.putBodies, isEmpty);
+
+      mockConnectivity.mockOffline = false;
+      mockApiClient.responses[ApiEndpoints.employees] = [
+        {'id': 'emp_7', 'name': 'Dev', 'phone': '9000000007', 'active': true},
+      ];
+      await ownerRepo.processPendingOwnerActions();
+      expect(mockApiClient.putBodies.last['outlets'], ['o2']);
+      expect(mockApiClient.putBodies.last['defaultOutletId'], 'o2');
+    });
+
+    test(
+      'an ordinary edit never sends outlets, so assignments survive',
+      () async {
+        await localCache.setCachedStaff([
+          {
+            'id': 'emp_8',
+            'name': 'Eve',
+            'phone': '9000000008',
+            'active': true,
+            'outlets': [
+              {'id': 'o1', 'name': 'Main Road'},
+            ],
+            'defaultOutletId': 'o1',
+          },
+        ]);
+        mockApiClient.responses[ApiEndpoints.employeeDetail('emp_8')] = {
+          'id': 'emp_8',
+          'name': 'Eve R',
+          'phone': '9000000008',
+          'active': true,
+          'outlets': [
+            {'id': 'o1', 'name': 'Main Road'},
+          ],
+          'defaultOutletId': 'o1',
+        };
+
+        await ownerRepo.updateStaff(
+          employeeId: 'emp_8',
+          name: 'Eve R',
+          phone: '9000000008',
+        );
+
+        expect(mockApiClient.putBodies.last.containsKey('outlets'), isFalse);
+        expect(
+          mockApiClient.putBodies.last.containsKey('defaultOutletId'),
+          isFalse,
+        );
+
+        // Offline too: the queued action carries no assignments.
+        mockConnectivity.mockOffline = true;
+        await ownerRepo.updateStaff(
+          employeeId: 'emp_8',
+          name: 'Eve Q',
+          phone: '9000000008',
+        );
+        final queued = localCache.getPendingOwnerActionsQueue().last;
+        expect(queued['payload'].containsKey('outlets'), isFalse);
+        // ... and the cached assignments are untouched.
+        expect(localCache.getCachedStaff()!.first['outlets'], isNotEmpty);
+      },
+    );
+
+    test('createStaff sends the chosen outlets and default', () async {
+      mockApiClient.responses[ApiEndpoints.employees] = {
+        'id': 'emp_new',
+        'name': 'Newbie',
+        'phone': '9000000009',
+        'active': true,
+        'outlets': [
+          {'id': 'o1', 'name': 'Main Road'},
+          {'id': 'o2', 'name': 'Lake View'},
+        ],
+        'defaultOutletId': 'o2',
+      };
+
+      final created = await ownerRepo.createStaff(
+        name: 'Newbie',
+        phone: '9000000009',
+        password: 'password123',
+        outletIds: ['o1', 'o2'],
+        defaultOutletId: 'o2',
+      );
+
+      final body = mockApiClient.postBodies.last as Map;
+      expect(body['outlets'], ['o1', 'o2']);
+      expect(body['defaultOutletId'], 'o2');
+      expect(created.outlets!.length, 2);
     });
 
     test('set_staff_active online calls PUT, offline queues set_staff_active and replays PUT, legacy toggle_staff_active replays POST, and rewriteQueuedId rewrites employeeId', () async {
@@ -752,10 +921,7 @@ void main() {
       mockConnectivity.mockOffline = false;
       await ownerRepo.toggleStaffActive('emp_50');
       expect(mockApiClient.putUrls.last, ApiEndpoints.employeeDetail('emp_50'));
-      expect(
-        mockApiClient.putBodies.last,
-        equals({'name': 'Clara Staff', 'phone': 'clara_s', 'active': false}),
-      );
+      expect(mockApiClient.putBodies.last, equals({'active': false}));
       expect(mockApiClient.postUrls, isEmpty);
 
       // 2. Offline toggleStaffActive -> queues set_staff_active, replays as PUT
@@ -771,10 +937,7 @@ void main() {
       mockConnectivity.mockOffline = false;
       await ownerRepo.processPendingOwnerActions();
       expect(mockApiClient.putUrls.last, ApiEndpoints.employeeDetail('emp_50'));
-      expect(
-        mockApiClient.putBodies.last,
-        equals({'name': 'Clara Staff', 'phone': 'clara_s', 'active': true}),
-      );
+      expect(mockApiClient.putBodies.last, equals({'active': true}));
 
       // 3. Legacy toggle_staff_active still replays as POST
       mockApiClient.postUrls.clear();

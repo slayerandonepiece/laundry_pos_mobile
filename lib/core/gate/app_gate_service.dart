@@ -12,12 +12,7 @@ import '../logging/app_logger.dart';
 import '../network/firebase_service.dart';
 
 /// The result of evaluating app startup or resume gate conditions.
-enum GateDecision {
-  proceed,
-  maintenance,
-  androidForceUpdate,
-  iosForceUpdate,
-}
+enum GateDecision { proceed, maintenance, androidForceUpdate, iosForceUpdate }
 
 /// Custom Upgrader messages that show "Update" as the primary action.
 class ForceUpdateUpgraderMessages extends UpgraderMessages {
@@ -72,7 +67,8 @@ class IosAppStoreUpgraderStore extends UpgraderStore {
         } catch (_) {}
       }
 
-      final appStoreListingURL = iTunes.trackViewUrl(response) ??
+      final appStoreListingURL =
+          iTunes.trackViewUrl(response) ??
           'https://apps.apple.com/app/id${appStoreId.trim()}';
       final releaseNotes = iTunes.releaseNotes(response);
       final minAppVersion = iTunes.minAppVersion(response);
@@ -107,17 +103,23 @@ class AppGateService {
     String? minVersionOverride,
     String? installedVersionOverride,
   }) async {
-    final minVerStr = (minVersionOverride ?? FirebaseService.minSupportedVersion).trim();
+    final minVerStr =
+        (minVersionOverride ?? FirebaseService.minSupportedVersion).trim();
     if (minVerStr.isEmpty) return false;
 
     try {
-      final installedStr = installedVersionOverride ??
+      final installedStr =
+          installedVersionOverride ??
           (await PackageInfo.fromPlatform()).version;
       final installed = Version.parse(installedStr);
       final minVer = Version.parse(minVerStr);
       return installed < minVer;
     } catch (e) {
-      AppLogger.log('APP_GATE', 'Version compare failed (failing open): $e', error: e);
+      AppLogger.log(
+        'APP_GATE',
+        'Version compare failed (failing open): $e',
+        error: e,
+      );
       return false;
     }
   }
@@ -136,7 +138,8 @@ class AppGateService {
     String? iosAppStoreIdOverride,
     String? installedVersionOverride,
   }) async {
-    final hasFetch = hasSuccessfulFetchOverride ?? FirebaseService.hasSuccessfulFetch;
+    final hasFetch =
+        hasSuccessfulFetchOverride ?? FirebaseService.hasSuccessfulFetch;
     if (!hasFetch) {
       // Offline, timeout, or outage: fail OPEN
       return GateDecision.proceed;
@@ -157,8 +160,8 @@ class AppGateService {
         return GateDecision.androidForceUpdate;
       }
       if (!kIsWeb && Platform.isIOS) {
-        final storeId =
-            (iosAppStoreIdOverride ?? FirebaseService.iosAppStoreId).trim();
+        final storeId = (iosAppStoreIdOverride ?? FirebaseService.iosAppStoreId)
+            .trim();
         // If ios_app_store_id is empty, fail open
         if (storeId.isEmpty) {
           return GateDecision.proceed;
@@ -193,7 +196,8 @@ class AppGateService {
   /// Fails open gracefully if offline, sideloaded, or on any error.
   static Future<void> performAndroidForceUpdateIfNeeded() async {
     if (kIsWeb || !Platform.isAndroid) return;
-    if (!FirebaseService.hasSuccessfulFetch || !FirebaseService.isForceUpdateEnabled) {
+    if (!FirebaseService.hasSuccessfulFetch ||
+        !FirebaseService.isForceUpdateEnabled) {
       return;
     }
 
@@ -220,8 +224,10 @@ class AppGateService {
     String? iosAppStoreId,
     UpgraderStore? customStore,
   }) {
-    final isEnabled = forceUpdateEnabled ?? FirebaseService.isForceUpdateEnabled;
-    final minVer = (minSupportedVersion ?? FirebaseService.minSupportedVersion).trim();
+    final isEnabled =
+        forceUpdateEnabled ?? FirebaseService.isForceUpdateEnabled;
+    final minVer = (minSupportedVersion ?? FirebaseService.minSupportedVersion)
+        .trim();
     final storeId = (iosAppStoreId ?? FirebaseService.iosAppStoreId).trim();
 
     final shouldEnforce = isEnabled && minVer.isNotEmpty && storeId.isNotEmpty;

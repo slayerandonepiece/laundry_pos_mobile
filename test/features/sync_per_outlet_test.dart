@@ -298,7 +298,8 @@ void main() {
       };
 
       final ok = await ordersRepo.processPendingSyncQueue();
-      expect(ok, isTrue);
+      // Dead-lettering o1 leaves unsent data behind: not a clean push.
+      expect(ok, isFalse);
 
       // Both groups were attempted once (o1 got 403, o2 succeeded).
       expect(recordedPosts, hasLength(2));

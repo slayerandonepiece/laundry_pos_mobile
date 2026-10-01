@@ -1,10 +1,20 @@
+import 'dart:async';
+
 import 'package:myshop/core/constants/api_endpoints.dart';
+import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
+import 'package:myshop/core/sync/sync_freshness.dart';
 
 import 'models/user_model.dart';
+
+const _tag = 'AUTH_REPO';
+
+/// Key prefix of the per-store slot that keeps unsynced queues across an
+/// involuntary sign-out (see [AuthRepository.logout]).
+const String keyParkedUnsynced = 'parked_unsynced';
 
 class AuthResult {
   final User user;
@@ -62,6 +72,7 @@ class AuthRepository {
         );
         await _localCache.setActiveStoreId(active.storeId);
         await _localCache.setCachedStoreDetails(active.toJson());
+        await _restoreParkedQueues(active.storeId);
       }
 
       await _cacheOrganizationOutlets(response);
@@ -93,7 +104,13 @@ class AuthRepository {
   }
 
   /// Refreshes cached organization outlets from `/auth/status` and returns the
-  /// active store's fresh allowed outlets list, or `null` on failure.
+  /// active store's fresh allowed outlets list.
+  ///
+  /// Returns `null` when the refresh could not be completed for a reason that
+  /// says nothing about access (offline, timeout, 5xx, malformed payload): the
+  /// caller must keep the user signed in with the cached outlets. A 401 signs
+  /// the session out (involuntarily) and a 401/403 is rethrown as
+  /// [AuthException] so the caller can tell "access lost" from "flaky network".
   Future<List<Map<String, dynamic>>?> refreshOutletContext() async {
     try {
       final response = await _apiClient.get(ApiEndpoints.sessionStatus);
@@ -104,13 +121,27 @@ class AuthRepository {
       return null;
     } on AuthException catch (e) {
       if (e.code == 'UNAUTHENTICATED') {
-        await logout();
-        return null;
+        await logout(involuntary: true);
       }
-      return null;
-    } catch (_) {
+      rethrow;
+    } catch (e) {
+      AppLogger.log(_tag, 'refreshOutletContext failed', error: e);
       return null;
     }
+  }
+
+  /// True for failures that mean "could not reach / trust the server right
+  /// now" (no connection, timeout, 5xx, rate limit) as opposed to a real
+  /// answer or a malformed one.
+  bool _isReachabilityFailure(Object e) {
+    if (e is TimeoutException) return true;
+    if (e is AuthException) return false;
+    if (e is RateLimitException) return true;
+    if (e is ApiException) {
+      final code = e.statusCode;
+      return code == null || code >= 500;
+    }
+    return false;
   }
 
   /// Checks stored session token and validates status with the backend
@@ -146,6 +177,7 @@ class AuthRepository {
           );
           await _localCache.setActiveStoreId(active.storeId);
           await _localCache.setCachedStoreDetails(active.toJson());
+          await _restoreParkedQueues(active.storeId);
         }
 
         await _cacheOrganizationOutlets(response);
@@ -155,11 +187,27 @@ class AuthRepository {
       return null;
     } on AuthException catch (e) {
       if (e.code == 'UNAUTHENTICATED') {
-        await logout();
+        await logout(involuntary: true);
         return null;
       }
       rethrow;
-    } catch (_) {
+    } catch (e, st) {
+      if (!_isReachabilityFailure(e)) {
+        // Malformed/unexpected payload or a client error: never open a
+        // session we could not verify.
+        AppLogger.log(
+          _tag,
+          'checkSession failed (not offline)',
+          error: e,
+          stackTrace: st,
+        );
+        return null;
+      }
+      AppLogger.log(
+        _tag,
+        'checkSession offline/5xx, using cached session',
+        error: e,
+      );
       // Offline fallback: restore session from local cache
       final cachedUserMap = _localCache.getCachedUser();
       final cachedStoreMap = _localCache.getCachedStoreDetails();
@@ -232,7 +280,10 @@ class AuthRepository {
         return storeMap;
       }
       throw ApiException('Invalid store profile response format');
-    } catch (_) {
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      AppLogger.log(_tag, 'fetchStoreDetails failed, using cache', error: e);
       final cached =
           _localCache.getCachedStoreProfile() ??
           _localCache.getCachedStoreDetails();
@@ -243,14 +294,109 @@ class AuthRepository {
     }
   }
 
-  /// Logs out: calls API endpoint and wipes local session.
-  /// The network call is mandatory: if the API request fails, the session is preserved.
-  Future<void> logout() async {
+  /// Logs out: calls the API endpoint and wipes the local session.
+  ///
+  /// Voluntary (default, from the guarded logout dialog): a 401/403 means the
+  /// token is already dead, so the session is wiped anyway; any other failure
+  /// (offline, 5xx) rethrows and the session is preserved so the user cannot
+  /// lose unsynced data by accident.
+  ///
+  /// [involuntary] (session revoked / access changed): never throws. The
+  /// token and cache are always removed, so the app always reaches the login
+  /// screen. The unsynced queues (pending orders, owner actions, both dead
+  /// letter queues) are first parked under a per-store slot that survives
+  /// [LocalCacheService.clear]; the next sign-in to that same store restores
+  /// them so they can still sync.
+  Future<void> logout({bool involuntary = false}) async {
     final token = await _secureStorage.getToken();
+    Object? pendingError;
     if (token != null && token.isNotEmpty) {
-      await _apiClient.post(ApiEndpoints.logout);
+      try {
+        await _apiClient.post(ApiEndpoints.logout);
+      } on AuthException {
+        // Token already invalid server-side: nothing to revoke, wipe locally.
+      } catch (e) {
+        if (involuntary) {
+          AppLogger.log(_tag, 'logout request failed (involuntary)', error: e);
+        } else {
+          pendingError = e;
+        }
+      }
     }
-    await _secureStorage.deleteToken();
-    await _localCache.clear();
+    if (pendingError != null) throw pendingError;
+
+    Map<String, dynamic>? parked;
+    String? storeId;
+    if (involuntary) {
+      try {
+        storeId = _localCache.getActiveStoreId();
+        parked = {
+          'pending': _localCache.getPendingSyncQueue(),
+          'dead': _localCache.getDeadLetterQueue(),
+          'ownerPending': _localCache.getPendingOwnerActionsQueue(),
+          'ownerDead': _localCache.getDeadLetterOwnerActionsQueue(),
+        };
+      } catch (e) {
+        AppLogger.log(_tag, 'could not snapshot unsynced queues', error: e);
+      }
+    }
+    try {
+      await _secureStorage.deleteToken();
+    } finally {
+      try {
+        await _localCache.clear();
+        final slot = parked;
+        if (slot != null &&
+            storeId != null &&
+            slot.values.any((v) => (v as List).isNotEmpty)) {
+          await _localCache.put('$keyParkedUnsynced::$storeId', slot);
+        }
+      } catch (e) {
+        AppLogger.log(_tag, 'clear/park failed during logout', error: e);
+      } finally {
+        SyncFreshness.reset();
+      }
+    }
+  }
+
+  /// Puts back the queues parked by an involuntary sign-out of [storeId].
+  Future<void> _restoreParkedQueues(String storeId) async {
+    try {
+      await _restoreParkedQueuesUnsafe(storeId);
+    } catch (e) {
+      // Restoring is best effort: it must never block a sign-in.
+      AppLogger.log(_tag, 'could not restore parked queues', error: e);
+    }
+  }
+
+  Future<void> _restoreParkedQueuesUnsafe(String storeId) async {
+    final key = '$keyParkedUnsynced::$storeId';
+    final raw = _localCache.get(key);
+    if (raw is! Map) return;
+    List<Map<String, dynamic>> list(String k, List<Map<String, dynamic>> cur) {
+      final saved = raw[k];
+      if (saved is! List) return cur;
+      return [
+        ...saved.map(
+          (e) => LocalCacheService.deepCopy(e) as Map<String, dynamic>,
+        ),
+        ...cur,
+      ];
+    }
+
+    await _localCache.setPendingSyncQueue(
+      list('pending', _localCache.getPendingSyncQueue()),
+    );
+    await _localCache.setDeadLetterQueue(
+      list('dead', _localCache.getDeadLetterQueue()),
+    );
+    await _localCache.setPendingOwnerActionsQueue(
+      list('ownerPending', _localCache.getPendingOwnerActionsQueue()),
+    );
+    await _localCache.setDeadLetterOwnerActionsQueue(
+      list('ownerDead', _localCache.getDeadLetterOwnerActionsQueue()),
+    );
+    await _localCache.delete(key);
+    AppLogger.log(_tag, 'restored unsynced queues for store $storeId');
   }
 }

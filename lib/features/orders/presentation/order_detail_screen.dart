@@ -77,37 +77,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
+                    child: SecondaryButton(
+                      label: 'Skip',
+                      height: AppButtonHeight.inline,
                       onPressed: () => Navigator.of(dialogContext).pop(false),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        side: const BorderSide(color: AppColors.controlBorder),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                      ),
-                      child: const Text(
-                        'Skip',
-                        style: AppTextStyles.buttonSecondary,
-                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: ElevatedButton(
+                    child: PrimaryButton(
+                      label: 'Yes, notify',
+                      height: AppButtonHeight.inline,
                       onPressed: () => Navigator.of(dialogContext).pop(true),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        backgroundColor: AppColors.primary,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                      ),
-                      child: const Text(
-                        'Yes, notify',
-                        style: AppTextStyles.button,
-                      ),
                     ),
                   ),
                 ],
@@ -576,54 +557,99 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   ),
                 ] else ...[
                   // Settled / Delivered Flow (Screen 9f)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 15,
-                      vertical: 13,
+                  if (order.balanceDue > 0) ...[
+                    PrimaryButton(
+                      label: 'Record payment',
+                      icon: const Icon(
+                        Icons.payments_outlined,
+                        size: 19,
+                        color: Colors.white,
+                      ),
+                      onPressed: () {
+                        RecordPaymentDialog.show(context, order: order);
+                      },
                     ),
-                    decoration: BoxDecoration(
-                      color: AppColors.selectedSurface,
-                      border: Border.all(color: const Color(0xFFCDDFFC)),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'INVOICE',
-                              style: TextStyle(
-                                fontFamily: AppTextStyles.fontBody,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.mutedText,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              order.invoice?.invoiceNumber ??
-                                  'INV-${order.displayCode}',
-                              style: const TextStyle(
-                                fontFamily: AppTextStyles.fontDisplay,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          DateFormatter.formatDate(
-                            order.invoice?.issuedAt ?? DateTime.now(),
+                    const SizedBox(height: 10),
+                    AppInset(
+                      backgroundColor: AppColors.warningNoticeBg,
+                      borderColor: AppColors.warningBorder,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            size: 18,
+                            color: AppColors.warning,
                           ),
-                          style: AppTextStyles.hint,
-                        ),
-                      ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${CurrencyFormatter.format(order.balanceDue)} still due on this delivered order',
+                              style: AppTextStyles.hint.copyWith(
+                                color: AppColors.warning,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 12),
+                  ],
+                  if (order.isPaidInFull) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 15,
+                        vertical: 13,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.selectedSurface,
+                        border: Border.all(color: const Color(0xFFCDDFFC)),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'INVOICE',
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.fontBody,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.mutedText,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                order.invoice?.invoiceNumber ??
+                                    'INV-${order.displayCode}',
+                                style: const TextStyle(
+                                  fontFamily: AppTextStyles.fontDisplay,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            DateFormatter.formatDate(
+                              order.invoice?.issuedAt ?? DateTime.now(),
+                            ),
+                            style: AppTextStyles.hint,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
 
                   // 3 Action Buttons: View, WhatsApp, More
                   Row(
@@ -655,10 +681,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             final invoiceNo =
                                 order.invoice?.invoiceNumber ??
                                 'INV-${order.displayCode}';
+                            final paymentText = order.isPaidInFull
+                                ? 'Paid in full'
+                                : 'Balance due: ${CurrencyFormatter.format(order.balanceDue)}';
                             final text = Uri.encodeComponent(
                               'Hello ${order.name.isNotEmpty ? order.name : "Customer"},\n'
                               'Your laundry order ${order.displayCode} ($invoiceNo) has been completed and delivered.\n'
-                              'Total: ${CurrencyFormatter.format(order.totalAmount)} (Paid in full).\n'
+                              'Total: ${CurrencyFormatter.format(order.totalAmount)} ($paymentText).\n'
                               '${storeName.isNotEmpty ? "Thank you for choosing $storeName!" : "Thank you for your business!"}',
                             );
                             final cleanPhone = order.phone.replaceAll(
@@ -769,6 +798,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     if (normalized == 'delivered') currentIndex = 3;
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: List.generate(stages.length * 2 - 1, (index) {
         if (index.isOdd) {
           // Connecting line
@@ -778,7 +808,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             child: Container(
               height: 2,
               color: isCompleted ? AppColors.success : AppColors.border,
-              margin: const EdgeInsets.only(bottom: 22),
+              margin: const EdgeInsets.only(top: 10),
             ),
           );
         }
@@ -793,7 +823,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             (isLastStage && stageIndex == currentIndex);
         final isCurrent = stageIndex == currentIndex && !isCompleted;
 
+        // Wider than the connectors so "In Progress" stays on one line.
         return Expanded(
+          flex: 2,
           child: Column(
             children: [
               Container(

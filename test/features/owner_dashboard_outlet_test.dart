@@ -105,6 +105,7 @@ class FakeDashboardOwnerRepository implements OwnerRepository {
   Future<DashboardMetrics> getDashboardMetrics({
     String? from,
     String? to,
+    String? granularity,
   }) async {
     calls.add((from: from, to: to));
     return metrics;
@@ -229,32 +230,38 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('Switcher is shown for owner with >= 1 outlet', (tester) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets(
+      'Single outlet owner shows outlet name without picker or All outlets',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      final singleOutletCache = FakeLocalCache(
-        allowedOutlets: const [
-          {
-            'id': 'outlet_1',
-            'outletCode': 'OBLRCHN01',
-            'displayName': 'Chinnapanahalli',
-            'isDefault': true,
-            'status': 'ACTIVE',
-          },
-        ],
-      );
-      final cubit = OutletScopeCubit(localCache: singleOutletCache)..hydrate();
-      addTearDown(cubit.close);
+        final singleOutletCache = FakeLocalCache(
+          allowedOutlets: const [
+            {
+              'id': 'outlet_1',
+              'outletCode': 'OBLRCHN01',
+              'displayName': 'Chinnapanahalli',
+              'isDefault': true,
+              'status': 'ACTIVE',
+            },
+          ],
+        );
+        final cubit = OutletScopeCubit(localCache: singleOutletCache)
+          ..hydrate();
+        addTearDown(cubit.close);
 
-      await tester.pumpWidget(buildScreen(cubit));
-      await pumpDashboard(tester);
+        await tester.pumpWidget(buildScreen(cubit));
+        await pumpDashboard(tester);
 
-      expect(find.byType(OutletTitleSwitcher), findsOneWidget);
-      expect(find.text('All outlets'), findsOneWidget);
-    });
+        expect(find.byType(OutletTitleSwitcher), findsOneWidget);
+        expect(find.text('All outlets'), findsNothing);
+        expect(find.text('Chinnapanahalli'), findsOneWidget);
+        expect(find.byIcon(Icons.unfold_more), findsNothing);
+      },
+    );
 
     testWidgets('Changing outlet scope dispatches LoadDashboardEvent', (
       tester,
@@ -284,8 +291,11 @@ void main() {
       expect(cubit.state.activeOutletId, 'outlet_1');
       expect(cubit.state.allOutlets, isFalse);
       expect(ownerBloc.loadDashboardEvents.length, 1);
-      // Local-first: switching outlet reads the cache, no network call.
-      expect(fakeOwnerRepo.calls, isEmpty);
+      // Switching outlet always refreshes that outlet's data from the server
+      // (silently — the repository shows no banner when a cache exists) so it
+      // never keeps showing another outlet's numbers.
+      expect(ownerBloc.loadDashboardEvents.single.refresh, isTrue);
+      expect(fakeOwnerRepo.calls, hasLength(1));
 
       // Switch back to All outlets
       cubit.selectAllOutlets();
@@ -293,7 +303,8 @@ void main() {
 
       expect(cubit.state.allOutlets, isTrue);
       expect(ownerBloc.loadDashboardEvents.length, 2);
-      expect(fakeOwnerRepo.calls, isEmpty);
+      expect(ownerBloc.loadDashboardEvents.last.refresh, isTrue);
+      expect(fakeOwnerRepo.calls, hasLength(2));
     });
 
     testWidgets(
@@ -357,11 +368,10 @@ void main() {
         // New labels render
         expect(find.text('Open orders'), findsOneWidget);
         expect(find.text('Delivered'), findsWidgets); // chip + donut legend
-        expect(find.text('Collected vs expenses — this month'), findsOneWidget);
-        expect(find.text('payments collected this month'), findsOneWidget);
+        expect(find.text('Collected vs expenses'), findsOneWidget);
         expect(
           find.text('Collected'),
-          findsNWidgets(2), // SalesTrendChart badge + CashFlowChart legend
+          findsNWidgets(2), // SalesTrendChart badge + Collected vs expenses KPI
         );
 
         // Old labels do not render

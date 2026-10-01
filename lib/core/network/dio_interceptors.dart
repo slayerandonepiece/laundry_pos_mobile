@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../logging/app_logger.dart';
 import '../storage/local_cache.dart';
@@ -21,11 +22,9 @@ String _pathForLog(String url) {
 }
 
 String _sanitizeHeader(String key, dynamic value) {
-  if (key.toLowerCase() == 'authorization') {
-    final str = value.toString();
-    if (str.startsWith('Bearer ') && str.length > 15) {
-      return 'Bearer ${str.substring(7, 13)}...${str.substring(str.length - 4)}';
-    }
+  final lower = key.toLowerCase();
+  // Never log any part of a credential: logs are forwarded to Crashlytics.
+  if (lower == 'authorization' || lower == 'cookie' || lower == 'set-cookie') {
     return '******';
   }
   return value.toString();
@@ -33,18 +32,33 @@ String _sanitizeHeader(String key, dynamic value) {
 
 dynamic _sanitizeBody(dynamic body) {
   if (body is Map) {
-    final copy = Map<String, dynamic>.from(body);
-    for (final key in copy.keys) {
+    final copy = <String, dynamic>{};
+    body.forEach((k, v) {
+      final key = k.toString();
       final lower = key.toLowerCase();
-      if (lower.contains('password') ||
-          lower.contains('secret') ||
-          lower.contains('token')) {
-        copy[key] = '******';
-      }
-    }
+      copy[key] =
+          lower.contains('password') ||
+              lower.contains('secret') ||
+              lower.contains('token')
+          ? '******'
+          : _sanitizeBody(v);
+    });
     return copy;
   }
+  if (body is List) return body.map(_sanitizeBody).toList();
   return body;
+}
+
+/// Bodies of auth endpoints carry tokens, passwords and user PII: never log.
+bool _isAuthPath(String path) => path.contains('/auth/');
+
+/// Counts failed round trips (no connection, timeout, 5xx). Repositories
+/// swallow such failures and serve their cache, so callers that need to know
+/// whether a batch of calls really reached the server compare this counter
+/// before and after.
+class NetworkHealth {
+  NetworkHealth._();
+  static int failures = 0;
 }
 
 /// Pass as X-Outlet-Id to force the header to be OMITTED (owner, organization-wide) instead of defaulting to the active outlet.
@@ -111,10 +125,14 @@ class DioLoggingInterceptor extends Interceptor {
     this.maxBodyLength = 1000,
   });
 
+  /// Bodies are logged only in debug builds and never for auth endpoints.
+  bool _shouldLogBody(String path) =>
+      printBody && kDebugMode && !_isAuthPath(path);
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     options.extra['_startTime'] = Stopwatch()..start();
-    final url = options.uri.toString();
+    final url = _pathForLog(options.uri.toString());
     final method = options.method;
 
     AppLogger.log(_tag, '--> $method $url');
@@ -126,7 +144,7 @@ class DioLoggingInterceptor extends Interceptor {
       AppLogger.log(_tag, '    Headers: $sanitizedHeaders');
     }
 
-    if (printBody && options.data != null) {
+    if (_shouldLogBody(options.uri.path) && options.data != null) {
       final sanitized = _sanitizeBody(options.data);
       try {
         final bodyStr = sanitized is String ? sanitized : jsonEncode(sanitized);
@@ -150,11 +168,11 @@ class DioLoggingInterceptor extends Interceptor {
 
     AppLogger.log(_tag, '<-- $statusCode $method $path in ${duration}ms');
 
-    if (printBody && response.data != null) {
+    if (_shouldLogBody(response.requestOptions.uri.path) &&
+        response.data != null) {
       try {
-        final dataStr = response.data is String
-            ? response.data as String
-            : jsonEncode(response.data);
+        final sanitized = _sanitizeBody(response.data);
+        final dataStr = sanitized is String ? sanitized : jsonEncode(sanitized);
         AppLogger.log(_tag, '    Response: ${_truncate(dataStr)}');
       } catch (_) {
         AppLogger.log(_tag, '    Response: [unserializable]');
@@ -180,11 +198,11 @@ class DioLoggingInterceptor extends Interceptor {
       error: err.error,
     );
 
-    if (printBody && err.response?.data != null) {
+    if (_shouldLogBody(err.requestOptions.uri.path) &&
+        err.response?.data != null) {
       try {
-        final dataStr = err.response!.data is String
-            ? err.response!.data as String
-            : jsonEncode(err.response!.data);
+        final sanitized = _sanitizeBody(err.response!.data);
+        final dataStr = sanitized is String ? sanitized : jsonEncode(sanitized);
         AppLogger.log(_tag, '    Error Body: ${_truncate(dataStr)}');
       } catch (_) {
         AppLogger.log(_tag, '    Error Body: [unserializable]');
@@ -220,6 +238,9 @@ class ErrorInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
+    final failedStatus = err.response?.statusCode;
+    if (failedStatus == null || failedStatus >= 500) NetworkHealth.failures++;
+
     if (err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.sendTimeout ||
         err.type == DioExceptionType.receiveTimeout) {
@@ -245,9 +266,17 @@ class ErrorInterceptor extends Interceptor {
     String errorMessage = 'Request failed with status $statusCode';
     if (decodedData is Map && decodedData['error'] is String) {
       errorMessage = decodedData['error'] as String;
-    } else if (decodedData is String && decodedData.isNotEmpty) {
+    } else if (decodedData is String &&
+        decodedData.isNotEmpty &&
+        !decodedData.trim().startsWith('<')) {
       errorMessage = decodedData;
-    } else if (err.message != null && err.message!.isNotEmpty) {
+    } else if (statusCode == 404) {
+      errorMessage = 'Server endpoint not found (404). Please verify your server URL or try again later.';
+    } else if (statusCode != null && statusCode >= 500) {
+      errorMessage = 'Server error ($statusCode). Please try again later.';
+    } else if (err.message != null &&
+        err.message!.isNotEmpty &&
+        !err.message!.contains('validateStatus')) {
       errorMessage = err.message!;
     }
 
@@ -267,8 +296,8 @@ class ErrorInterceptor extends Interceptor {
       String? reason;
       String? paidThroughDate;
       if (decodedData is Map) {
-        reason = decodedData['reason'] as String?;
-        paidThroughDate = decodedData['paidThroughDate'] as String?;
+        reason = decodedData['reason']?.toString();
+        paidThroughDate = decodedData['paidThroughDate']?.toString();
       }
       onForbidden?.call(reason, paidThroughDate);
       appException = AuthException(

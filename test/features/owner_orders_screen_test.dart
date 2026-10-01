@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/features/orders/presentation/orders_drill_down.dart';
+import 'package:myshop/shared/widgets/app_button.dart';
+import 'package:myshop/shared/widgets/period_filter.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
@@ -52,6 +55,15 @@ class FakeLocalCache extends LocalCacheService {
   bool isAllOutletsScope() => activeOutletId == null;
   @override
   bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) => true;
+  // OutletScopeCubit.hydrate persists the resolved scope; keep it in memory.
+  @override
+  Future<void> setActiveOutletId(String outletId) async {}
+  @override
+  Future<void> clearActiveOutletId() async {}
+  @override
+  Future<void> setAllOutletsScope(bool value) async {}
+  @override
+  Future<void> clearAllOutletsScope() async {}
   @override
   List<Map<String, dynamic>>? getCachedOrders({
     String? outletId,
@@ -153,7 +165,10 @@ void main() {
           id: 'ORD-103',
           name: 'Charlie Brown',
           phone: '9998887776',
-          date: yesterdayStr,
+          // Created today so it is inside the default month-to-date period
+          // even on the 1st of a month; it is late because it was due
+          // yesterday.
+          date: todayStr,
           due: yesterdayStr,
           status: 'In Progress',
           lines: [
@@ -172,7 +187,11 @@ void main() {
       mockOrdersRepo.cachedOrders = fakeOrders;
     });
 
-    Widget createScreen({FakeLocalCache? cache}) {
+    Widget createScreen({
+      FakeLocalCache? cache,
+      ValueNotifier<OrdersDrillDown?>? drillDown,
+      ThemeData? theme,
+    }) {
       final ordersBloc = OrdersBloc(ordersRepository: mockOrdersRepo);
       final cartBloc = CartBloc(posRepository: mockPosRepo);
       final authBloc = MockAuthBloc();
@@ -192,7 +211,10 @@ void main() {
             BlocProvider<AuthBloc>.value(value: authBloc),
             BlocProvider<OutletScopeCubit>.value(value: outletScopeCubit),
           ],
-          child: const MaterialApp(home: OwnerOrdersScreen()),
+          child: MaterialApp(
+            theme: theme,
+            home: OwnerOrdersScreen(drillDown: drillDown),
+          ),
         ),
       );
     }
@@ -319,7 +341,24 @@ void main() {
     testWidgets(
       'Tapping + button in allOutlets scope shows outlet sheet and navigates on selection',
       (tester) async {
-        await tester.pumpWidget(createScreen());
+        final cache = FakeLocalCache()
+          ..allowedOutlets = [
+            {
+              'id': 'outlet_main',
+              'outletCode': 'O01',
+              'displayName': 'Main Outlet',
+              'isDefault': true,
+              'status': 'ACTIVE',
+            },
+            {
+              'id': 'outlet_second',
+              'outletCode': 'O02',
+              'displayName': 'Second Outlet',
+              'isDefault': false,
+              'status': 'ACTIVE',
+            },
+          ];
+        await tester.pumpWidget(createScreen(cache: cache));
         await tester.pumpAndSettle();
 
         final addButton = find.byIcon(Icons.add);
@@ -341,7 +380,24 @@ void main() {
     testWidgets(
       'Tapping + button in allOutlets scope cancels when sheet is dismissed',
       (tester) async {
-        await tester.pumpWidget(createScreen());
+        final cache = FakeLocalCache()
+          ..allowedOutlets = [
+            {
+              'id': 'outlet_main',
+              'outletCode': 'O01',
+              'displayName': 'Main Outlet',
+              'isDefault': true,
+              'status': 'ACTIVE',
+            },
+            {
+              'id': 'outlet_second',
+              'outletCode': 'O02',
+              'displayName': 'Second Outlet',
+              'isDefault': false,
+              'status': 'ACTIVE',
+            },
+          ];
+        await tester.pumpWidget(createScreen(cache: cache));
         await tester.pumpAndSettle();
 
         final addButton = find.byIcon(Icons.add);
@@ -390,7 +446,7 @@ void main() {
         expect(find.text('ORD-102'), findsOneWidget);
 
         // Filter by payment status: Part-paid (replaces 'Partial')
-        await tester.tap(find.text('All payment statuses'));
+        await tester.tap(find.text('Payment status'));
         await tester.pumpAndSettle();
         expect(find.text('Part-paid'), findsWidgets);
         await tester.tap(find.text('Part-paid').last);
@@ -401,7 +457,7 @@ void main() {
         expect(find.text('ORD-102'), findsNothing);
 
         // Filter by work status: Ready
-        await tester.tap(find.text('All work statuses'));
+        await tester.tap(find.text('Work status'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Ready').last);
         await tester.pumpAndSettle();
@@ -412,7 +468,222 @@ void main() {
       },
     );
 
-    testWidgets('Persistent Clear button resets filters to default', (
+    group('Dashboard drill-down', () {
+      late String today;
+
+      Future<void> withDeliveredOrders(WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        today = fakeOrders.first.date;
+        mockOrdersRepo.cachedOrders = [
+          ...fakeOrders,
+          Order(
+            id: 'ORD-201',
+            name: 'Dina Delivered',
+            phone: '9000000001',
+            date: today,
+            due: today,
+            status: 'Delivered',
+            completed: today,
+            lines: [],
+            payments: [],
+          ),
+          Order(
+            id: 'ORD-202',
+            name: 'Old Delivered',
+            phone: '9000000002',
+            date: yesterdayStr,
+            due: yesterdayStr,
+            status: 'Delivered',
+            completed: yesterdayStr,
+            lines: [],
+            payments: [],
+          ),
+        ];
+      }
+
+      testWidgets('Open shows every undelivered order and no delivered ones', (
+        tester,
+      ) async {
+        await withDeliveredOrders(tester);
+        final request = ValueNotifier<OrdersDrillDown?>(null);
+        await tester.pumpWidget(createScreen(drillDown: request));
+        await tester.pumpAndSettle();
+
+        request.value = OrdersDrillDown.open;
+        await tester.pumpAndSettle();
+
+        expect(find.text('ORD-101'), findsOneWidget);
+        expect(find.text('ORD-102'), findsOneWidget);
+        expect(find.text('ORD-103'), findsOneWidget);
+        expect(find.text('ORD-201'), findsNothing);
+        expect(find.text('ORD-202'), findsNothing);
+        // The request is consumed, and the plain list can be restored.
+        expect(request.value, isNull);
+        expect(find.text('Clear'), findsOneWidget);
+      });
+
+      testWidgets('Delivered today shows only orders handed over today', (
+        tester,
+      ) async {
+        await withDeliveredOrders(tester);
+        final request = ValueNotifier<OrdersDrillDown?>(null);
+        await tester.pumpWidget(createScreen(drillDown: request));
+        await tester.pumpAndSettle();
+
+        request.value = OrdersDrillDown.deliveredToday;
+        await tester.pumpAndSettle();
+
+        expect(find.text('ORD-201'), findsOneWidget);
+        expect(find.text('ORD-202'), findsNothing);
+        expect(find.text('ORD-101'), findsNothing);
+      });
+
+      testWidgets('Due today shows undelivered orders due today', (
+        tester,
+      ) async {
+        await withDeliveredOrders(tester);
+        final request = ValueNotifier<OrdersDrillDown?>(null);
+        await tester.pumpWidget(createScreen(drillDown: request));
+        await tester.pumpAndSettle();
+
+        request.value = OrdersDrillDown.dueToday;
+        await tester.pumpAndSettle();
+
+        expect(find.text('ORD-101'), findsOneWidget);
+        expect(find.text('ORD-102'), findsOneWidget);
+        expect(find.text('ORD-103'), findsNothing);
+        expect(find.text('ORD-201'), findsNothing);
+      });
+
+      testWidgets(
+        'a drill-down starts from the plain list, not on top of old filters',
+        (tester) async {
+          await withDeliveredOrders(tester);
+          final request = ValueNotifier<OrdersDrillDown?>(null);
+          await tester.pumpWidget(createScreen(drillDown: request));
+          await tester.pumpAndSettle();
+
+          // An earlier search that would hide everything the tile promises.
+          await tester.enterText(find.byType(TextField), 'zzz-nothing');
+          await tester.pumpAndSettle();
+
+          request.value = OrdersDrillDown.open;
+          await tester.pumpAndSettle();
+
+          expect(find.text('ORD-101'), findsOneWidget);
+        },
+      );
+
+      testWidgets('the chip for the requested view is scrolled into sight', (
+        tester,
+      ) async {
+        await withDeliveredOrders(tester);
+        // A phone-width screen, where the right-hand chips start off-screen.
+        tester.view.physicalSize = const Size(390, 1600);
+        final request = ValueNotifier<OrdersDrillDown?>(null);
+        await tester.pumpWidget(createScreen(drillDown: request));
+        await tester.pumpAndSettle();
+
+        request.value = OrdersDrillDown.deliveredToday;
+        await tester.pumpAndSettle();
+
+        final rect = tester.getRect(find.text('Delivered today').first);
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(390));
+      });
+
+      testWidgets('an empty Open view says everything is delivered', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        mockOrdersRepo.cachedOrders = [
+          Order(
+            id: 'ORD-301',
+            name: 'Only Delivered',
+            phone: '9000000003',
+            date: fakeOrders.first.date,
+            due: fakeOrders.first.date,
+            status: 'Delivered',
+            completed: fakeOrders.first.date,
+            lines: [],
+            payments: [],
+          ),
+        ];
+        final request = ValueNotifier<OrdersDrillDown?>(null);
+        await tester.pumpWidget(createScreen(drillDown: request));
+        await tester.pumpAndSettle();
+
+        request.value = OrdersDrillDown.open;
+        await tester.pumpAndSettle();
+
+        expect(find.text('No open orders'), findsOneWidget);
+        expect(find.text('Everything has been delivered.'), findsOneWidget);
+      });
+    });
+
+    testWidgets(
+      'Clear sits in the dropdown row, appears only with a filter, and moves nothing',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(createScreen());
+        await tester.pumpAndSettle();
+
+        final work = find.byKey(const ValueKey('work-status-filter'));
+        final payment = find.byKey(const ValueKey('payment-status-filter'));
+
+        // Nothing narrowed: no Clear at all.
+        expect(find.text('Clear'), findsNothing);
+        final workBefore = tester.getRect(work);
+        final paymentBefore = tester.getRect(payment);
+        expect(workBefore.height, 44);
+        expect(paymentBefore.height, 44);
+
+        // Apply a quick filter.
+        await tester.tap(find.text('Late'));
+        await tester.pumpAndSettle();
+        expect(find.text('ORD-101'), findsNothing);
+
+        // Clear is now offered, on the same row, same height, and the
+        // dropdowns did not change width or position.
+        final clear = find.text('Clear');
+        expect(clear, findsOneWidget);
+        final clearButton = find.ancestor(
+          of: clear,
+          matching: find.byType(TextActionButton),
+        );
+        final clearRect = tester.getRect(clearButton);
+        expect(clearRect.height, 44);
+        // (The quick view's subtitle now adds a line above the row, so
+        // compare against the dropdowns' current position, not their old one.)
+        final workNow = tester.getRect(work);
+        expect(clearRect.center.dy, workNow.center.dy);
+        expect(
+          clearRect.left,
+          greaterThanOrEqualTo(tester.getRect(payment).right),
+        );
+        expect(workNow.width, workBefore.width);
+        expect(tester.getRect(payment).width, paymentBefore.width);
+
+        // Tap Clear: filters reset and it goes away again.
+        await tester.tap(clear);
+        await tester.pumpAndSettle();
+        expect(find.text('ORD-101'), findsOneWidget);
+        expect(find.text('ORD-102'), findsOneWidget);
+        expect(find.text('Clear'), findsNothing);
+      },
+    );
+
+    testWidgets('Choosing a status tints the dropdown and offers Clear', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(800, 1600);
@@ -423,26 +694,23 @@ void main() {
       await tester.pumpWidget(createScreen());
       await tester.pumpAndSettle();
 
-      // The Clear button is always visible
-      final clearBtn = find.text('Clear');
-      expect(clearBtn, findsOneWidget);
-
-      // Apply a quick filter
-      await tester.tap(find.text('Late'));
+      await tester.tap(find.text('Work status'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Ready').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Clear'), findsOneWidget);
+      expect(find.text('ORD-102'), findsOneWidget);
       expect(find.text('ORD-101'), findsNothing);
 
-      // Tap Clear button
-      await tester.tap(clearBtn);
+      await tester.tap(find.text('Clear'));
       await tester.pumpAndSettle();
-
-      // Both orders visible again
+      expect(find.text('Work status'), findsOneWidget);
       expect(find.text('ORD-101'), findsOneWidget);
-      expect(find.text('ORD-102'), findsOneWidget);
     });
 
     testWidgets(
-      'Period selector supports This quarter and Custom dates with inline pickers',
+      'Sales summary uses the shared period filter with an inline From / To row',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -452,19 +720,36 @@ void main() {
         await tester.pumpWidget(createScreen());
         await tester.pumpAndSettle();
 
-        // Switch to "This quarter"
-        await tester.tap(find.text('This month'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('This quarter').last);
-        await tester.pumpAndSettle();
+        final filter = find.byKey(const ValueKey('orders-period-filter'));
+        expect(filter, findsOneWidget);
+        // Same chips as the dashboard cards (7 days, this month, last month).
+        for (final label in [
+          '7 days',
+          PeriodRange.currentMonthLabel(),
+          PeriodRange.previousMonthLabel(),
+        ]) {
+          expect(
+            find.descendant(of: filter, matching: find.text(label)),
+            findsOneWidget,
+          );
+        }
 
-        // Switch to "Custom dates"
-        await tester.tap(find.text('This quarter'));
+        // A preset that still covers today's orders keeps them.
+        await tester.tap(
+          find.descendant(of: filter, matching: find.text('7 days')),
+        );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Custom dates').last);
-        await tester.pumpAndSettle();
+        expect(find.text('ORD-101'), findsOneWidget);
+        // Changing the period is a filter: Clear is offered.
+        expect(find.text('Clear'), findsOneWidget);
 
-        // Inline FROM / TO selectors appear
+        await tester.tap(
+          find.descendant(
+            of: filter,
+            matching: find.byIcon(Icons.calendar_today_outlined),
+          ),
+        );
+        await tester.pumpAndSettle();
         expect(find.text('FROM'), findsOneWidget);
         expect(find.text('TO'), findsOneWidget);
       },
@@ -495,6 +780,194 @@ void main() {
         expect(find.text('No orders yet'), findsNothing);
       },
     );
+
+    group('Quick views, summary card and narrow screens', () {
+      void setView(WidgetTester tester, Size size, {double textScale = 1}) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      }
+
+      Order delivered(String id, String? completed, {String? date}) => Order(
+        id: id,
+        name: 'Cust $id',
+        phone: '9000000009',
+        date: date ?? todayStr,
+        due: date ?? todayStr,
+        status: 'Delivered',
+        completed: completed,
+        lines: [],
+        payments: [],
+      );
+
+      testWidgets(
+        'Delivered today accepts a full timestamp and rejects null/garbage',
+        (tester) async {
+          setView(tester, const Size(800, 1600));
+          final noon = DateTime(
+            now.year,
+            now.month,
+            now.day,
+            12,
+          ).toIso8601String();
+          mockOrdersRepo.cachedOrders = [
+            delivered('ORD-A', noon),
+            delivered('ORD-B', todayStr),
+            delivered('ORD-C', null),
+            delivered('ORD-D', 'not-a-date'),
+            delivered('ORD-E', yesterdayStr),
+          ];
+          final request = ValueNotifier<OrdersDrillDown?>(null);
+          await tester.pumpWidget(createScreen(drillDown: request));
+          await tester.pumpAndSettle();
+          request.value = OrdersDrillDown.deliveredToday;
+          await tester.pumpAndSettle();
+
+          expect(find.text('ORD-A'), findsOneWidget);
+          expect(find.text('ORD-B'), findsOneWidget);
+          expect(find.text('ORD-C'), findsNothing);
+          expect(find.text('ORD-D'), findsNothing);
+          expect(find.text('ORD-E'), findsNothing);
+        },
+      );
+
+      testWidgets('orders with unparseable dates are not due today or late', (
+        tester,
+      ) async {
+        setView(tester, const Size(800, 1600));
+        mockOrdersRepo.cachedOrders = [
+          ...fakeOrders,
+          Order(
+            id: 'ORD-BAD',
+            name: 'Bad Dates',
+            phone: '9000000008',
+            date: 'garbage',
+            due: '',
+            status: 'Pending',
+            lines: [],
+            payments: [],
+          ),
+        ];
+        final request = ValueNotifier<OrdersDrillDown?>(null);
+        await tester.pumpWidget(createScreen(drillDown: request));
+        await tester.pumpAndSettle();
+        // Default period view: no valid created date, so it is not counted.
+        expect(find.text('ORD-BAD'), findsNothing);
+
+        request.value = OrdersDrillDown.dueToday;
+        await tester.pumpAndSettle();
+        expect(find.text('ORD-101'), findsOneWidget);
+        expect(find.text('ORD-BAD'), findsNothing);
+
+        await tester.tap(find.text('Late'));
+        await tester.pumpAndSettle();
+        expect(find.text('ORD-BAD'), findsNothing);
+      });
+
+      testWidgets(
+        'a quick view dims the period filter and names itself in the summary',
+        (tester) async {
+          setView(tester, const Size(800, 1600));
+          await tester.pumpWidget(createScreen());
+          await tester.pumpAndSettle();
+
+          final subtitle = find.byKey(
+            const ValueKey('orders-summary-subtitle'),
+          );
+          expect(subtitle, findsNothing);
+
+          await tester.tap(find.text('Open'));
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<Text>(subtitle).data,
+            'Open orders · ignores the date range',
+          );
+          final filter = find.byKey(const ValueKey('orders-period-filter'));
+          final ignore = find.ancestor(
+            of: filter,
+            matching: find.byType(IgnorePointer),
+          );
+          expect(tester.widget<IgnorePointer>(ignore.first).ignoring, isTrue);
+
+          // Another narrowing filter is flagged too.
+          await tester.tap(find.text('Work status'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Ready').last);
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<Text>(subtitle).data,
+            'Open orders · ignores the date range · filtered',
+          );
+
+          // Back to Selected dates: filter live again, only "Filtered" left.
+          await tester.tap(find.text('Selected dates').first);
+          await tester.pumpAndSettle();
+          expect(tester.widget<Text>(subtitle).data, 'Filtered');
+          expect(tester.widget<IgnorePointer>(ignore.first).ignoring, isFalse);
+        },
+      );
+
+      for (final dark in [false, true]) {
+        testWidgets(
+          '320x568 at 1.5x text (${dark ? 'dark' : 'light'}): no overflow, '
+          'Clear on its own line when active',
+          (tester) async {
+            setView(tester, const Size(320, 568), textScale: 1.5);
+            await tester.pumpWidget(
+              createScreen(theme: dark ? ThemeData.dark() : ThemeData.light()),
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            // Shortened labels keep the dropdowns readable at this width.
+            expect(find.text('Work'), findsOneWidget);
+            expect(find.text('Payment'), findsOneWidget);
+            expect(find.text('Clear'), findsNothing);
+
+            await tester.ensureVisible(find.text('Work'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Work'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Ready').last);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            final clear = find.text('Clear');
+            expect(clear, findsOneWidget);
+            expect(
+              tester.getRect(clear).top,
+              greaterThan(
+                tester
+                    .getRect(find.byKey(const ValueKey('work-status-filter')))
+                    .bottom,
+              ),
+            );
+          },
+        );
+      }
+
+      testWidgets(
+        'search clear button has a tooltip and a full-height target',
+        (tester) async {
+          setView(tester, const Size(800, 1600));
+          await tester.pumpWidget(createScreen());
+          await tester.pumpAndSettle();
+          expect(find.byTooltip('New order'), findsOneWidget);
+          await tester.enterText(find.byType(TextField), 'ali');
+          await tester.pumpAndSettle();
+          final clear = find.ancestor(
+            of: find.byIcon(Icons.close),
+            matching: find.byType(IconButton),
+          );
+          expect(find.byTooltip('Clear search'), findsOneWidget);
+          expect(clear, findsOneWidget);
+          // The search box is 44px including its 1px border, so 42px inside.
+          expect(tester.getSize(clear).width, greaterThanOrEqualTo(42));
+          expect(tester.getSize(clear).height, greaterThanOrEqualTo(42));
+        },
+      );
+    });
 
     test('LoadOrderDetailEvent emits cached order AND stale-cache warning when network refresh fails', () async {
       final cache = FakeLocalCache()

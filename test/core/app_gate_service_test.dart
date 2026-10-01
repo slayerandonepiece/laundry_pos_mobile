@@ -21,75 +21,95 @@ void main() {
       );
       expect(
         FirebaseService.maintenanceMessage,
-        equals("KlenPOS is undergoing scheduled maintenance. We'll be back shortly."),
+        equals(
+          "KlenPOS is undergoing scheduled maintenance. We'll be back shortly.",
+        ),
       );
     });
   });
 
   group('AppGateService.evaluateGate Order & Fail-Open Behavior', () {
-    test('Fails OPEN (GateDecision.proceed) when Remote Config fetch failed', () async {
-      final decision = await AppGateService.evaluateGate(
-        hasSuccessfulFetchOverride: false,
-        isMaintenanceModeOverride: true, // Even if maintenance would be true
-        isForceUpdateOverride: true,
-      );
-      expect(decision, equals(GateDecision.proceed));
-    });
+    test(
+      'Fails OPEN (GateDecision.proceed) when Remote Config fetch failed',
+      () async {
+        final decision = await AppGateService.evaluateGate(
+          hasSuccessfulFetchOverride: false,
+          isMaintenanceModeOverride: true, // Even if maintenance would be true
+          isForceUpdateOverride: true,
+        );
+        expect(decision, equals(GateDecision.proceed));
+      },
+    );
 
-    test('Maintenance mode has highest priority when fetch succeeded', () async {
-      final decision = await AppGateService.evaluateGate(
-        hasSuccessfulFetchOverride: true,
-        isMaintenanceModeOverride: true,
-        isForceUpdateOverride: true, // Both maintenance and force-update true
-      );
-      expect(decision, equals(GateDecision.maintenance));
-    });
+    test(
+      'Maintenance mode has highest priority when fetch succeeded',
+      () async {
+        final decision = await AppGateService.evaluateGate(
+          hasSuccessfulFetchOverride: true,
+          isMaintenanceModeOverride: true,
+          isForceUpdateOverride: true, // Both maintenance and force-update true
+        );
+        expect(decision, equals(GateDecision.maintenance));
+      },
+    );
 
-    test('Proceeds when neither maintenance nor force-update is enabled', () async {
-      final decision = await AppGateService.evaluateGate(
-        hasSuccessfulFetchOverride: true,
-        isMaintenanceModeOverride: false,
-        isForceUpdateOverride: false,
-      );
-      expect(decision, equals(GateDecision.proceed));
-    });
+    test(
+      'Proceeds when neither maintenance nor force-update is enabled',
+      () async {
+        final decision = await AppGateService.evaluateGate(
+          hasSuccessfulFetchOverride: true,
+          isMaintenanceModeOverride: false,
+          isForceUpdateOverride: false,
+        );
+        expect(decision, equals(GateDecision.proceed));
+      },
+    );
 
-    test('iOS force update fails OPEN when ios_app_store_id is empty', () async {
-      final decision = await AppGateService.evaluateGate(
-        hasSuccessfulFetchOverride: true,
-        isMaintenanceModeOverride: false,
-        isForceUpdateOverride: true,
-        iosAppStoreIdOverride: '', // Empty store ID
-        minSupportedVersionOverride: '2.0.0',
-        installedVersionOverride: '1.0.0',
-      );
-      // Since ios_app_store_id is empty, it must not block
-      expect(decision, equals(GateDecision.proceed));
-    });
+    test(
+      'iOS force update fails OPEN when ios_app_store_id is empty',
+      () async {
+        final decision = await AppGateService.evaluateGate(
+          hasSuccessfulFetchOverride: true,
+          isMaintenanceModeOverride: false,
+          isForceUpdateOverride: true,
+          iosAppStoreIdOverride: '', // Empty store ID
+          minSupportedVersionOverride: '2.0.0',
+          installedVersionOverride: '1.0.0',
+        );
+        // Since ios_app_store_id is empty, it must not block
+        expect(decision, equals(GateDecision.proceed));
+      },
+    );
 
-    test('iOS force update fails OPEN when min_supported_version is empty', () async {
-      final decision = await AppGateService.evaluateGate(
-        hasSuccessfulFetchOverride: true,
-        isMaintenanceModeOverride: false,
-        isForceUpdateOverride: true,
-        iosAppStoreIdOverride: '123456789',
-        minSupportedVersionOverride: '', // Empty min supported version
-        installedVersionOverride: '1.0.0',
-      );
-      expect(decision, equals(GateDecision.proceed));
-    });
+    test(
+      'iOS force update fails OPEN when min_supported_version is empty',
+      () async {
+        final decision = await AppGateService.evaluateGate(
+          hasSuccessfulFetchOverride: true,
+          isMaintenanceModeOverride: false,
+          isForceUpdateOverride: true,
+          iosAppStoreIdOverride: '123456789',
+          minSupportedVersionOverride: '', // Empty min supported version
+          installedVersionOverride: '1.0.0',
+        );
+        expect(decision, equals(GateDecision.proceed));
+      },
+    );
 
-    test('iOS force update proceeds when installed version meets min version', () async {
-      final decision = await AppGateService.evaluateGate(
-        hasSuccessfulFetchOverride: true,
-        isMaintenanceModeOverride: false,
-        isForceUpdateOverride: true,
-        iosAppStoreIdOverride: '123456789',
-        minSupportedVersionOverride: '1.0.0',
-        installedVersionOverride: '1.0.3', // 1.0.3 >= 1.0.0
-      );
-      expect(decision, equals(GateDecision.proceed));
-    });
+    test(
+      'iOS force update proceeds when installed version meets min version',
+      () async {
+        final decision = await AppGateService.evaluateGate(
+          hasSuccessfulFetchOverride: true,
+          isMaintenanceModeOverride: false,
+          isForceUpdateOverride: true,
+          iosAppStoreIdOverride: '123456789',
+          minSupportedVersionOverride: '1.0.0',
+          installedVersionOverride: '1.0.3', // 1.0.3 >= 1.0.0
+        );
+        expect(decision, equals(GateDecision.proceed));
+      },
+    );
   });
 
   group('Version comparison logic', () {
@@ -113,19 +133,23 @@ void main() {
       expect(equal, isFalse);
     });
 
-    test('Fails OPEN (returns false) on malformed or empty version strings', () async {
-      final empty = await AppGateService.isInstalledVersionBelowMinSupported(
-        minVersionOverride: '',
-        installedVersionOverride: '1.0.3',
-      );
-      expect(empty, isFalse);
+    test(
+      'Fails OPEN (returns false) on malformed or empty version strings',
+      () async {
+        final empty = await AppGateService.isInstalledVersionBelowMinSupported(
+          minVersionOverride: '',
+          installedVersionOverride: '1.0.3',
+        );
+        expect(empty, isFalse);
 
-      final malformed = await AppGateService.isInstalledVersionBelowMinSupported(
-        minVersionOverride: 'not-a-valid-version',
-        installedVersionOverride: '1.0.3',
-      );
-      expect(malformed, isFalse);
-    });
+        final malformed =
+            await AppGateService.isInstalledVersionBelowMinSupported(
+              minVersionOverride: 'not-a-valid-version',
+              installedVersionOverride: '1.0.3',
+            );
+        expect(malformed, isFalse);
+      },
+    );
   });
 
   group('Mid-Transaction Detection (Resume Listener Guard)', () {
@@ -140,9 +164,7 @@ void main() {
 
     test('Reports mid-transaction when CartState has items', () {
       final cartWithItems = CartState(
-        items: {
-          'p1': CartItem(product: sampleProduct, quantity: 2),
-        },
+        items: {'p1': CartItem(product: sampleProduct, quantity: 2)},
       );
       final idleOrders = OrdersState();
 

@@ -165,6 +165,35 @@ void main() {
   );
 
   testWidgets(
+    'Single-outlet owner (allowed.length <= 1): shows plain title without chevron even when showAllOutletsOption is true',
+    (tester) async {
+      await localCache.setAllowedOutletsForStore('store_a', [twoOutlets.first]);
+      await localCache.setCachedStoreDetails({'role': 'OWNER'});
+      cubit.adoptFromLogin(isOwner: true);
+
+      await tester.pumpWidget(
+        wrap(
+          const OutletTitleSwitcher(
+            screenLabel: 'Overview',
+            showAllOutletsOption: true,
+          ),
+        ),
+      );
+
+      expect(find.byType(OutletTitleSwitcher), findsOneWidget);
+      expect(find.text('OVERVIEW'), findsOneWidget);
+      expect(find.text('Chinnapanahalli'), findsOneWidget);
+      expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
+
+      await tester.tap(find.text('Chinnapanahalli'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('SWITCH OUTLET'), findsNothing);
+      expect(find.text('All outlets'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'Multi-outlet owner: shows All outlets with chevron, opens menu with check mark, and selecting an outlet updates scope and title',
     (tester) async {
       await localCache.setAllowedOutletsForStore('store_a', twoOutlets);

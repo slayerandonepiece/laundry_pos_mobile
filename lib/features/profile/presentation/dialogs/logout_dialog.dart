@@ -1,3 +1,4 @@
+import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -262,75 +263,31 @@ class _LogoutDialogState extends State<LogoutDialog> {
 
               // Action buttons
               if (_isSyncing) ...[
-                ElevatedButton(
-                  onPressed: null, // Disabled during sync
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    backgroundColor: AppColors.primary,
-                    disabledBackgroundColor: AppColors.primary.withValues(
-                      alpha: 0.65,
-                    ),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Syncing & Logging out...',
-                        style: AppTextStyles.button,
-                      ),
-                    ],
-                  ),
+                PrimaryButton(
+                  label: 'Syncing & Logging out...',
+                  height: AppButtonHeight.inline,
+                  onPressed: null,
+                  isLoading: true,
+                  loadingLabel: 'Syncing & Logging out...',
                 ),
               ] else if (_syncFailed) ...[
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
+                      child: SecondaryButton(
+                        label: 'Log out anyway',
+                        height: AppButtonHeight.inline,
                         onPressed: _performDirectLogout,
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          side: const BorderSide(color: AppColors.danger),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                        ),
-                        child: Text(
-                          'Log out anyway',
-                          style: AppTextStyles.buttonSecondary.copyWith(
-                            color: AppColors.danger,
-                          ),
-                        ),
+                        textColor: AppColors.danger,
+                        borderColor: AppColors.danger,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: ElevatedButton(
+                      child: PrimaryButton(
+                        label: 'Retry Sync',
+                        height: AppButtonHeight.inline,
                         onPressed: _handleLogoutAndSync,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          backgroundColor: AppColors.primary,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                        ),
-                        child: const Text(
-                          'Retry Sync',
-                          style: AppTextStyles.button,
-                        ),
                       ),
                     ),
                   ],
@@ -339,43 +296,23 @@ class _LogoutDialogState extends State<LogoutDialog> {
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
+                      child: SecondaryButton(
+                        label: 'Cancel',
+                        height: AppButtonHeight.inline,
                         onPressed: () => Navigator.of(context).pop(),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          side: const BorderSide(
-                            color: AppColors.controlBorder,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                        ),
-                        child: const Text(
-                          'Cancel',
-                          style: AppTextStyles.buttonSecondary,
-                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: ElevatedButton(
+                      child: PrimaryButton(
+                        label: hasPendingOrders ? 'Logout & Sync' : 'Log out',
+                        height: AppButtonHeight.inline,
                         onPressed: hasPendingOrders
                             ? _handleLogoutAndSync
                             : _performDirectLogout,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          backgroundColor: hasPendingOrders
-                              ? AppColors.primary
-                              : AppColors.danger,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                        ),
-                        child: Text(
-                          hasPendingOrders ? 'Logout & Sync' : 'Log out',
-                          style: AppTextStyles.button,
-                        ),
+                        backgroundColor: hasPendingOrders
+                            ? AppColors.primary
+                            : AppColors.danger,
                       ),
                     ),
                   ],

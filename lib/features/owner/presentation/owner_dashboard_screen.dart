@@ -8,11 +8,13 @@ import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
+import 'package:myshop/core/sync/sync_freshness.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
+import 'package:myshop/features/orders/presentation/orders_drill_down.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
@@ -20,35 +22,37 @@ import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
+import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
+import 'package:myshop/shared/widgets/period_filter.dart';
+import 'package:myshop/features/orders/presentation/order_detail_screen.dart';
+import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
-  final VoidCallback? onOrdersTabPressed;
+  /// Opens the Orders tab; [OrdersDrillDown] says which view, null for the
+  /// plain list.
+  final ValueChanged<OrdersDrillDown?>? onOpenOrders;
   final ValueNotifier<int>? resetSignal;
 
-  const OwnerDashboardScreen({
-    super.key,
-    this.onOrdersTabPressed,
-    this.resetSignal,
-  });
+  const OwnerDashboardScreen({super.key, this.onOpenOrders, this.resetSignal});
 
   @override
   State<OwnerDashboardScreen> createState() => _OwnerDashboardScreenState();
 }
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
-  String _selectedPeriod =
-      '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
-  DateTime? _customFrom;
-  DateTime? _customTo;
+  // Sales by date and Sales by service default to the current month (month-to-date);
+  // each card keeps its own independent selection.
+  PeriodRange _dateRange = PeriodRange.thisMonth;
+  PeriodRange _serviceRange = PeriodRange.thisMonth;
 
   @override
   void initState() {
     super.initState();
     widget.resetSignal?.addListener(_onTabLeft);
-    context.read<OwnerBloc>().add(LoadDashboardEvent());
+    context.read<OwnerBloc>().add(_currentLoadDashboardEvent(refresh: false));
     context.read<OrdersBloc>().add(LoadOrdersEvent());
   }
 
@@ -58,167 +62,113 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     super.dispose();
   }
 
-  void _onTabLeft() {
-    if (_selectedPeriod != '30d' || _customFrom != null || _customTo != null) {
-      setState(() {
-        _selectedPeriod = '30d';
-        _customFrom = null;
-        _customTo = null;
-      });
-      context.read<OwnerBloc>().add(LoadDashboardEvent());
-    }
-  }
+  void _onTabLeft() => _resetCards();
 
-  LoadDashboardEvent _currentLoadDashboardEvent() {
-    if (_customFrom != null && _customTo != null) {
-      return LoadDashboardEvent(
-        from: DateFormatter.toIsoDateString(_customFrom!),
-        to: DateFormatter.toIsoDateString(_customTo!),
-      );
-    }
-    return LoadDashboardEvent();
-  }
-
-  Future<void> _pickCustomDate({required bool isFrom}) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isFrom
-          ? (_customFrom ?? now)
-          : (_customTo ?? _customFrom ?? now),
-      firstDate: DateTime(2020),
-      lastDate: now,
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: AppColors.primary,
-            onPrimary: Colors.white,
-            onSurface: AppColors.text,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked == null) return;
+  /// Both cards back to the default period and the page's own data.
+  void _resetCards() {
+    if (_dateRange.isDefault && _serviceRange.isDefault) return;
     setState(() {
-      if (isFrom) {
-        _customFrom = picked;
-        if (_customTo != null && _customTo!.isBefore(_customFrom!)) {
-          _customTo = _customFrom;
-        }
+      _dateRange = PeriodRange.thisMonth;
+      _serviceRange = PeriodRange.thisMonth;
+    });
+    context.read<OwnerBloc>().add(ResetCardEvent(DashboardCard.values.toSet()));
+  }
+
+  String get _scopeKey {
+    final scope = context.read<OutletScopeCubit?>()?.state;
+    return scope == null
+        ? 'none'
+        : (scope.allOutlets ? 'all' : (scope.activeOutletId ?? 'none'));
+  }
+
+  /// Identifies the page's selection (its outlet scope). Sent with every load
+  /// and echoed back in `OwnerState.dashboardKey`, so the screen can tell when
+  /// the metrics it holds belong to a different outlet.
+  String _currentRequestKey() => 'mtd|$_scopeKey';
+
+  /// A card's selection: its range plus the outlet it is asked for.
+  String _cardKey(PeriodRange r) => '${r.requestKey}|$_scopeKey';
+
+  void _onCardRange(DashboardCard card, PeriodRange r) {
+    setState(() {
+      if (card == DashboardCard.salesByDate) {
+        _dateRange = r;
       } else {
-        _customTo = picked;
-        if (_customFrom != null && _customFrom!.isAfter(_customTo!)) {
-          _customFrom = _customTo;
-        }
+        _serviceRange = r;
       }
     });
-    if (!mounted) return;
-    if (_customFrom != null && _customTo != null) {
-      context.read<OwnerBloc>().add(_currentLoadDashboardEvent());
+    final bloc = context.read<OwnerBloc>();
+    if (r.isDefault) {
+      bloc.add(ResetCardEvent({card}));
+    } else {
+      bloc.add(
+        LoadCardMetricsEvent(card: card, range: r, requestKey: _cardKey(r)),
+      );
     }
   }
 
-  Widget _buildCustomDateSelector() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.selectedSurface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: InkWell(
-                onTap: () => _pickCustomDate(isFrom: true),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.calendar_today_outlined,
-                      size: 14,
-                      color: AppColors.mutedText,
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'FROM',
-                          style: TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: AppColors.mutedText,
-                          ),
-                        ),
-                        Text(
-                          _customFrom != null
-                              ? DateFormatter.formatShort(_customFrom!)
-                              : 'Pick date',
-                          style: const TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.text,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Container(width: 1, height: 26, color: AppColors.border),
-            const SizedBox(width: 14),
-            Expanded(
-              child: InkWell(
-                onTap: () => _pickCustomDate(isFrom: false),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.calendar_today_outlined,
-                      size: 14,
-                      color: AppColors.mutedText,
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'TO',
-                          style: TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: AppColors.mutedText,
-                          ),
-                        ),
-                        Text(
-                          _customTo != null
-                              ? DateFormatter.formatShort(_customTo!)
-                              : 'Pick date',
-                          style: const TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.text,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+  /// What a card should draw for [range]: the page's data at the default
+  /// period, otherwise the card's own reply — loading until it arrives.
+  _CardData _cardData(
+    OwnerState s,
+    DashboardCard card,
+    PeriodRange range,
+    bool pageStale,
+  ) {
+    if (range.isDefault) {
+      return _CardData(s.metrics, loading: pageStale);
+    }
+    final slice = s.cards[card];
+    if (slice == null || slice.key != _cardKey(range)) {
+      return const _CardData(null, loading: true);
+    }
+    return _CardData(
+      slice.metrics,
+      loading: slice.loading,
+      failed: slice.failed,
     );
+  }
+
+  /// The one place that turns the page's selection into a dashboard request,
+  /// used by the outlet switch, pull-to-refresh, "Sync now" and the app-bar
+  /// buttons.
+  LoadDashboardEvent _currentLoadDashboardEvent({
+    bool refresh = true,
+    Completer<void>? done,
+  }) {
+    // Current month (month-to-date) in daily buckets — the only request whose
+    // response is cached as the default dashboard.
+    final now = DateTime.now();
+    return LoadDashboardEvent(
+      from: DateFormatter.toIsoDateString(DateTime(now.year, now.month, 1)),
+      to: DateFormatter.toIsoDateString(now),
+      granularity: 'day',
+      refresh: refresh,
+      done: done,
+      isDefaultPeriod: true,
+      requestKey: _currentRequestKey(),
+    );
+  }
+
+  /// Reloads the page metrics and, for a card on a non-default period, that
+  /// card's own slice too — otherwise it would keep showing stale data.
+  void _refreshDashboard({Completer<void>? done}) {
+    final bloc = context.read<OwnerBloc>();
+    bloc.add(_currentLoadDashboardEvent(done: done));
+    for (final (card, range) in [
+      (DashboardCard.salesByDate, _dateRange),
+      (DashboardCard.salesByService, _serviceRange),
+    ]) {
+      if (!range.isDefault) {
+        bloc.add(
+          LoadCardMetricsEvent(
+            card: card,
+            range: range,
+            requestKey: _cardKey(range),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -250,6 +200,24 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       },
       builder: (context, ownerState) {
         final metrics = ownerState.metrics;
+        // The metrics held belong to a different outlet than the one
+        // selected (its response hasn't arrived yet): dim them instead of
+        // presenting them under the new one.
+        final metricsStale =
+            ownerState.dashboardKey != null &&
+            ownerState.dashboardKey != _currentRequestKey();
+        final dateCard = _cardData(
+          ownerState,
+          DashboardCard.salesByDate,
+          _dateRange,
+          metricsStale,
+        );
+        final serviceCard = _cardData(
+          ownerState,
+          DashboardCard.salesByService,
+          _serviceRange,
+          metricsStale,
+        );
         final ordersState = context.watch<OrdersBloc>().state;
         final allOrders = ordersState.allOrders;
 
@@ -257,9 +225,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           children: [
             SyncStatusBar(
               onSyncNow: () {
-                context.read<OwnerBloc>().add(
-                  LoadDashboardEvent(refresh: true),
-                );
+                _refreshDashboard();
                 context.read<OrdersBloc>().add(LoadOrdersEvent());
               },
             ),
@@ -268,9 +234,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 onRefresh: () async {
                   final done = Completer<void>();
                   final ordersBloc = context.read<OrdersBloc>();
-                  context.read<OwnerBloc>().add(
-                    LoadDashboardEvent(refresh: true, done: done),
-                  );
+                  _refreshDashboard(done: done);
                   ordersBloc.add(RefreshOrdersEvent());
                   await Future.wait([
                     done.future,
@@ -327,26 +291,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                _PeriodSelectorPill(
-                                  selectedPeriod: _selectedPeriod,
-                                  customFrom: _customFrom,
-                                  customTo: _customTo,
-                                  onPeriodChanged: (val) {
-                                    setState(() {
-                                      _selectedPeriod = val;
-                                      if (val != 'custom') {
-                                        _customFrom = null;
-                                        _customTo = null;
-                                      }
-                                    });
-                                    if (val != 'custom') {
-                                      context.read<OwnerBloc>().add(
-                                        LoadDashboardEvent(refresh: true),
-                                      );
-                                    }
-                                  },
-                                ),
                               ],
                             ),
                           ],
@@ -354,56 +298,123 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       ),
                     ),
 
-                    // 1b. Inline Custom Date Selector (if period is 'custom')
-                    if (_selectedPeriod == 'custom')
-                      SliverToBoxAdapter(child: _buildCustomDateSelector()),
-
-                    // 2. Two Large Money Cards
-                    SliverToBoxAdapter(child: _buildMoneyCards(metrics)),
-
-                    // 3. Compact 3-Chip Operational Row
-                    SliverToBoxAdapter(child: _buildOperationalChips(metrics)),
-
-                    // 4. Sales by Date Trend Chart
-                    if (metrics.cash.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                          child: _SalesTrendChart(
-                            cash: metrics.cash,
-                            selectedPeriod: _selectedPeriod,
+                    SliverOpacity(
+                      opacity: metricsStale ? 0.4 : 1.0,
+                      sliver: SliverMainAxisGroup(
+                        slivers: [
+                          // 2. Two Large Money Cards
+                          SliverToBoxAdapter(
+                            child: _buildMoneyCards(metrics),
                           ),
-                        ),
-                      ),
 
-                    // 5. Money in & expenses Net Cash-Flow Chart
-                    if (metrics.cash.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                          child: _CashFlowChart(cash: metrics.cash),
-                        ),
-                      ),
-
-                    // 6. How Orders are Moving Donut Chart
-                    if (allOrders.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                          child: _OrdersMovingDonutChart(allOrders: allOrders),
-                        ),
-                      ),
-
-                    // 7. Sales by Service Horizontal Bar Chart
-                    if (metrics.serviceMix.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                          child: _SalesByServiceChart(
-                            serviceMix: metrics.serviceMix,
+                          // 3. Compact 3-Chip Operational Row
+                          SliverToBoxAdapter(
+                            child: _buildOperationalChips(metrics),
                           ),
-                        ),
+
+                          // 4. Sales by Date Trend Chart — its own period filter
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                              child: _SalesTrendChart(
+                                bars: dateCard.metrics?.bars ?? const [],
+                                cash: dateCard.metrics?.cash ?? const [],
+                                range: _dateRange,
+                                loading: dateCard.loading,
+                                failed: dateCard.failed,
+                                onRange: (r) =>
+                                    _onCardRange(DashboardCard.salesByDate, r),
+                                onRetry: () => _onCardRange(
+                                  DashboardCard.salesByDate,
+                                  _dateRange,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // 5. Money in & expenses Net Cash-Flow Chart (fixed
+                          // at the current month)
+                          if (metrics.cashRange.isNotEmpty ||
+                              metrics.cash.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  14,
+                                  20,
+                                  0,
+                                ),
+                                // An older backend only has the calendar-month
+                                // series, and says so.
+                                child: metricsStale
+                                    ? const _StaleChartPlaceholder()
+                                    : _CashFlowChart(
+                                        cash: metrics.cashRange.isNotEmpty
+                                            ? metrics.cashRange
+                                            : metrics.cash,
+                                        periodLabel: 'This month',
+                                      ),
+                              ),
+                            ),
+
+                          // 6. How Orders are Moving Donut Chart
+                          if (allOrders.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  14,
+                                  20,
+                                  0,
+                                ),
+                                child: _OrdersMovingDonutChart(
+                                  allOrders: allOrders,
+                                ),
+                              ),
+                            ),
+
+                          // 7. Sales by Service — its own period filter
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                              child: _SalesByServiceChart(
+                                serviceMix:
+                                    serviceCard.metrics?.serviceMix ?? const [],
+                                range: _serviceRange,
+                                loading: serviceCard.loading,
+                                failed: serviceCard.failed,
+                                onRange: (r) => _onCardRange(
+                                  DashboardCard.salesByService,
+                                  r,
+                                ),
+                                onRetry: () => _onCardRange(
+                                  DashboardCard.salesByService,
+                                  _serviceRange,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // 8. Recent orders — newest first, from the phone
+                          if (allOrders.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  14,
+                                  20,
+                                  0,
+                                ),
+                                child: _RecentOrdersCard(
+                                  orders: allOrders,
+                                  scope: outletScopeCubit?.state,
+                                  onViewAll: _openOrders(null),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
+                    ),
 
                     const SliverToBoxAdapter(child: SizedBox(height: 28)),
                   ],
@@ -439,9 +450,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   tooltip: 'Retry sync',
                   onPressed: () {
                     SyncEngine.instance.retryNow();
-                    context.read<OwnerBloc>().add(
-                      LoadDashboardEvent(refresh: true),
-                    );
+                    _refreshDashboard();
                     context.read<OrdersBloc>().add(RefreshOrdersEvent());
                   },
                 );
@@ -457,7 +466,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             ),
             tooltip: 'Refresh',
             onPressed: () {
-              context.read<OwnerBloc>().add(LoadDashboardEvent(refresh: true));
+              _refreshDashboard();
               context.read<OrdersBloc>().add(RefreshOrdersEvent());
             },
           ),
@@ -474,7 +483,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   prev.activeOutletId != curr.activeOutletId ||
                   prev.allOutlets != curr.allOutlets,
               listener: (context, state) {
-                context.read<OwnerBloc>().add(_currentLoadDashboardEvent());
+                // Straight after a sync (sign-in) every scope is already
+                // cached and current: show it, don't ask again. Any
+                // non-default period isn't cached and still fetches.
+                _resetCards();
+                context.read<OwnerBloc>().add(
+                  _currentLoadDashboardEvent(refresh: !SyncFreshness.isFresh),
+                );
               },
               child: body,
             )
@@ -482,52 +497,29 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  Widget _buildMoneyCards(DashboardMetrics metrics) {
-    String periodCardTitle;
-    int periodSalesAmount;
-    int periodOrderCount;
-
-    if (_selectedPeriod == '7d') {
-      periodCardTitle = 'Sales this week';
-      periodSalesAmount = metrics.periodSales > 0
-          ? metrics.periodSales
-          : metrics.todaySales;
-      periodOrderCount = metrics.periodOrders > 0
-          ? metrics.periodOrders
-          : metrics.todayCount;
-    } else if (_selectedPeriod == '30d') {
-      periodCardTitle = 'Sales this month';
-      periodSalesAmount = metrics.periodSales > 0
-          ? metrics.periodSales
-          : metrics.todaySales;
-      periodOrderCount = metrics.periodOrders > 0
-          ? metrics.periodOrders
-          : metrics.todayCount;
-    } else if (_selectedPeriod == 'quarter') {
-      periodCardTitle = 'Sales this quarter';
-      periodSalesAmount = metrics.periodSales > 0
-          ? metrics.periodSales
-          : metrics.todaySales;
-      periodOrderCount = metrics.periodOrders > 0
-          ? metrics.periodOrders
-          : metrics.todayCount;
-    } else if (_selectedPeriod == 'custom') {
-      periodCardTitle = 'Sales selected dates';
-      periodSalesAmount = metrics.periodSales > 0
-          ? metrics.periodSales
-          : metrics.todaySales;
-      periodOrderCount = metrics.periodOrders > 0
-          ? metrics.periodOrders
-          : metrics.todayCount;
-    } else {
-      periodCardTitle = 'Sales yesterday';
-      periodSalesAmount = metrics.periodSales > 0
-          ? metrics.periodSales
-          : metrics.todaySales;
-      periodOrderCount = metrics.periodOrders > 0
-          ? metrics.periodOrders
-          : metrics.todayCount;
+  static String _formatKpi(int amountInPaise) {
+    final rupees = amountInPaise / 100.0;
+    if (rupees >= 100000) {
+      final inLakhs = rupees / 100000.0;
+      final formatted = inLakhs.toStringAsFixed(1);
+      final trimmed = formatted.endsWith('.0')
+          ? formatted.substring(0, formatted.length - 2)
+          : formatted;
+      return '₹${trimmed}L';
     }
+    return CurrencyFormatter.format(amountInPaise);
+  }
+
+  // The default dashboard request is month-to-date, so the headline pair is
+  // "Sales today" and "Sales this month", both straight from the server reply.
+  Widget _buildMoneyCards(DashboardMetrics metrics) {
+    const periodCardTitle = 'Sales this month';
+    final int periodSalesAmount = metrics.periodSales > 0
+        ? metrics.periodSales
+        : metrics.todaySales;
+    final int periodOrderCount = metrics.periodOrders > 0
+        ? metrics.periodOrders
+        : metrics.todayCount;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -554,17 +546,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      CurrencyFormatter.format(metrics.todaySales),
-                      style: const TextStyle(
-                        fontFamily: AppTextStyles.fontDisplay,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
+                  Text(
+                    _formatKpi(metrics.todaySales),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontDisplay,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -598,17 +588,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      CurrencyFormatter.format(periodSalesAmount),
-                      style: const TextStyle(
-                        fontFamily: AppTextStyles.fontDisplay,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.text,
-                      ),
+                  Text(
+                    _formatKpi(periodSalesAmount),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontDisplay,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.text,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -629,6 +617,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
+  VoidCallback? _openOrders(OrdersDrillDown? filter) {
+    final open = widget.onOpenOrders;
+    return open == null ? null : () => open(filter);
+  }
+
   Widget _buildOperationalChips(DashboardMetrics metrics) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -640,7 +633,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               count: metrics.todo,
               indicatorColor: AppColors.warning,
               backgroundColor: AppColors.warningBg,
-              onTap: widget.onOrdersTabPressed,
+              onTap: _openOrders(OrdersDrillDown.open),
             ),
           ),
           const SizedBox(width: 8),
@@ -650,7 +643,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               count: metrics.completed,
               indicatorColor: AppColors.success,
               backgroundColor: AppColors.successBg,
-              onTap: widget.onOrdersTabPressed,
+              onTap: _openOrders(OrdersDrillDown.deliveredToday),
             ),
           ),
           const SizedBox(width: 8),
@@ -660,7 +653,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               count: metrics.dueToday,
               indicatorColor: AppColors.primary,
               backgroundColor: AppColors.primaryTint,
-              onTap: widget.onOrdersTabPressed,
+              onTap: _openOrders(OrdersDrillDown.dueToday),
             ),
           ),
         ],
@@ -675,135 +668,59 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     required Color backgroundColor,
     VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      decoration: BoxDecoration(
+    // Material under the InkWell so the splash shows over the tint.
+    return Semantics(
+      button: onTap != null,
+      label: '$label, $count',
+      excludeSemantics: true,
+      onTap: onTap,
+      child: Material(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(10),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            child: Column(
               children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: indicatorColor,
-                    shape: BoxShape.circle,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: indicatorColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '$count',
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.fontDisplay,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(height: 2),
                 Text(
-                  '$count',
+                  label,
                   style: const TextStyle(
-                    fontFamily: AppTextStyles.fontDisplay,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
+                    fontFamily: AppTextStyles.fontBody,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.mutedText,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(
-                fontFamily: AppTextStyles.fontBody,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-                color: AppColors.mutedText,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PeriodSelectorPill extends StatelessWidget {
-  final String selectedPeriod;
-  final DateTime? customFrom;
-  final DateTime? customTo;
-  final ValueChanged<String> onPeriodChanged;
-
-  const _PeriodSelectorPill({
-    required this.selectedPeriod,
-    this.customFrom,
-    this.customTo,
-    required this.onPeriodChanged,
-  });
-
-  String get _label {
-    if (selectedPeriod == 'custom') {
-      if (customFrom != null && customTo != null) {
-        return '${DateFormatter.formatShort(customFrom!)} – ${DateFormatter.formatShort(customTo!)}';
-      }
-      return 'Custom dates';
-    }
-    switch (selectedPeriod) {
-      case '7d':
-        return 'This week';
-      case '30d':
-        return 'This month';
-      case 'quarter':
-        return 'This quarter';
-      case 'today':
-      default:
-        return 'Today';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      initialValue: selectedPeriod,
-      tooltip: 'Select period',
-      onSelected: onPeriodChanged,
-      itemBuilder: (context) => const [
-        PopupMenuItem(value: 'today', child: Text('Today')),
-        PopupMenuItem(value: '7d', child: Text('This week')),
-        PopupMenuItem(value: '30d', child: Text('This month')),
-        PopupMenuItem(value: 'quarter', child: Text('This quarter')),
-        PopupMenuItem(value: 'custom', child: Text('Custom dates')),
-      ],
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      color: AppColors.surface,
-      elevation: 3,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.selectedSurface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _label,
-              style: const TextStyle(
-                fontFamily: AppTextStyles.fontBody,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.keyboard_arrow_down,
-              size: 16,
-              color: AppColors.primary,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -830,21 +747,44 @@ String _monthAbbr(String m) {
 String _formatChartLabel(String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) return '';
+  if (trimmed.contains('\n')) return trimmed;
 
-  // Date ranges: "1 Sept 2026–6 Sept 2026", "1 Sep 2026 - 6 Sep 2026", "01 Sept - 06 Sept"
+  // Month-first date ranges: "Aug 30 - Sep 05", "Aug 30 - Sep 5"
+  final monthFirstRangeRegex = RegExp(
+    r'^([A-Za-z]+)\s+0?(\d{1,2})(?:\s+\d{2,4})?\s*[\-–—]\s*([A-Za-z]+)\s+0?(\d{1,2})(?:\s+\d{2,4})?$',
+  );
+  final mfMatch = monthFirstRangeRegex.firstMatch(trimmed);
+  if (mfMatch != null) {
+    final m1 = _monthAbbr(mfMatch.group(1)!);
+    final d1 = mfMatch.group(2)!.padLeft(2, '0');
+    final m2 = _monthAbbr(mfMatch.group(3)!);
+    final d2 = mfMatch.group(4)!.padLeft(2, '0');
+    return '$m1 $d1 -\n$m2 $d2';
+  }
+
+  // Date ranges: "1 Sept 2026–6 Sept 2026", "1 Sep 2026 - 6 Sep 2026", "01 Sept - 06 Sept", "1 Sep–3 Sep"
   final rangeRegex = RegExp(
-    r'^0?(\d{1,2})\s+([A-Za-z]+)(?:\s+\d{2,4})?\s*[\-–—]\s*0?(\d{1,2})\s+([A-Za-z]+)(?:\s+\d{2,4})?$',
+    r'^0?(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{2,4}))?\s*[\-–—]\s*0?(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{2,4}))?$',
   );
   final rangeMatch = rangeRegex.firstMatch(trimmed);
   if (rangeMatch != null) {
     final d1 = rangeMatch.group(1)!;
     final m1 = _monthAbbr(rangeMatch.group(2)!);
-    final d2 = rangeMatch.group(3)!;
-    final m2 = _monthAbbr(rangeMatch.group(4)!);
-    if (m1.toLowerCase() == m2.toLowerCase()) {
-      return '$d1–$d2 $m1';
+    final y1 = rangeMatch.group(3);
+    final d2 = rangeMatch.group(4)!;
+    final m2 = _monthAbbr(rangeMatch.group(5)!);
+    final y2 = rangeMatch.group(6);
+    final hasYear = y1 != null || y2 != null;
+    if (hasYear) {
+      if (m1.toLowerCase() == m2.toLowerCase()) {
+        return '$d1–$d2\n$m1';
+      } else {
+        return '$d1 $m1 -\n$d2 $m2';
+      }
     } else {
-      return '$d1 $m1–$d2 $m2';
+      final p1 = d1.padLeft(2, '0');
+      final p2 = d2.padLeft(2, '0');
+      return '$p1 $m1 -\n$p2 $m2';
     }
   }
 
@@ -857,19 +797,19 @@ String _formatChartLabel(String raw) {
     final d1 = shortRangeMatch.group(1)!;
     final d2 = shortRangeMatch.group(2)!;
     final m = _monthAbbr(shortRangeMatch.group(3)!);
-    return '$d1–$d2 $m';
+    return '$d1–$d2\n$m';
   }
 
-  // Single date with month: "1 Sept 2026", "28 September", "01 Sep"
+  // Single date with month: "1 Sept 2026", "28 September", "01 Sep", "22 Sep"
   final singleDateRegex = RegExp(r'^0?(\d{1,2})\s+([A-Za-z]+)(?:\s+\d{2,4})?$');
   final singleDateMatch = singleDateRegex.firstMatch(trimmed);
   if (singleDateMatch != null) {
     final d = singleDateMatch.group(1)!;
     final m = _monthAbbr(singleDateMatch.group(2)!);
-    return '$d $m';
+    return '$d\n$m';
   }
 
-  // ISO date: "2026-09-01"
+  // ISO date: "2026-09-01" or "2026-09-22"
   final isoMatch = RegExp(r'^\d{4}-(\d{2})-(\d{2})$').firstMatch(trimmed);
   if (isoMatch != null) {
     final monthNum = int.tryParse(isoMatch.group(1)!) ?? 0;
@@ -890,7 +830,7 @@ String _formatChartLabel(String raw) {
       'Dec',
     ];
     if (monthNum >= 1 && monthNum <= 12) {
-      return '$dayNum ${months[monthNum]}';
+      return '$dayNum\n${months[monthNum]}';
     }
   }
 
@@ -951,33 +891,104 @@ String formatChartLabel(String raw) => _formatChartLabel(raw);
 bool shouldShowChartLabel(int idx, int totalCount) =>
     _shouldShowChartLabel(idx, totalCount);
 
-class _SalesTrendChart extends StatelessWidget {
-  final List<CashPoint> cash;
-  final String selectedPeriod;
+/// What one period-filtered card draws: its metrics, or why it has none yet.
+class _CardData {
+  final DashboardMetrics? metrics;
+  final bool loading;
+  final bool failed;
 
-  const _SalesTrendChart({required this.cash, required this.selectedPeriod});
+  const _CardData(this.metrics, {this.loading = false, this.failed = false});
+}
 
-  String get _caption {
-    if (selectedPeriod == '7d') {
-      return 'How your sales moved this week';
-    } else if (selectedPeriod == '30d') {
-      return 'How your sales moved this month';
-    } else if (selectedPeriod == 'quarter') {
-      return 'How your sales moved this quarter';
-    } else if (selectedPeriod == 'custom') {
-      return 'How your sales moved in selected dates';
-    }
-    return 'How your sales moved today';
-  }
+/// The in-card stand-in for a loading, failed or empty period, so the filter
+/// above it stays usable.
+class _CardStateBox extends StatelessWidget {
+  final bool loading;
+  final bool failed;
+  final String emptyText;
+  final VoidCallback onRetry;
+
+  const _CardStateBox({
+    required this.loading,
+    required this.failed,
+    required this.emptyText,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
-    if (cash.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 150,
+      width: double.infinity,
+      child: Center(
+        child: loading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              )
+            : failed
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Could not load this period',
+                    style: AppTextStyles.hint,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: 120,
+                    child: SecondaryButton(
+                      label: 'Retry',
+                      height: AppButtonHeight.inline,
+                      onPressed: onRetry,
+                    ),
+                  ),
+                ],
+              )
+            : Text(emptyText, style: AppTextStyles.hint),
+      ),
+    );
+  }
+}
+
+class _SalesTrendChart extends StatelessWidget {
+  final List<DashboardBar> bars;
+  final List<CashPoint> cash;
+  final PeriodRange range;
+  final bool loading;
+  final bool failed;
+  final ValueChanged<PeriodRange> onRange;
+  final VoidCallback onRetry;
+
+  const _SalesTrendChart({
+    this.bars = const [],
+    this.cash = const [],
+    required this.range,
+    required this.loading,
+    required this.failed,
+    required this.onRange,
+    required this.onRetry,
+  });
+
+  String get _caption => switch (range.key) {
+    '7d' => 'How your sales moved this week',
+    '90d' => 'How your sales moved this quarter',
+    'custom' => 'How your sales moved in selected dates',
+    _ => 'How your sales moved this month',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final useBars = bars.isNotEmpty;
+    final int dataCount = useBars ? bars.length : cash.length;
+    final showState = loading || failed || dataCount == 0;
 
     final spots = <FlSpot>[];
     double maxY = 0;
-    for (int i = 0; i < cash.length; i++) {
-      final y = (cash[i].income / 100).toDouble();
+    for (int i = 0; i < dataCount; i++) {
+      final amount = useBars ? bars[i].amount : cash[i].income;
+      final y = (amount / 100).toDouble();
       if (y > maxY) maxY = y;
       spots.add(FlSpot(i.toDouble(), y));
     }
@@ -1042,149 +1053,215 @@ class _SalesTrendChart extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          PeriodFilter(
+            key: const ValueKey('filter-salesByDate'),
+            value: range,
+            onChanged: onRange,
+          ),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 180,
-            child: LineChart(
-              LineChartData(
-                minX: 0,
-                maxX: (cash.length - 1).toDouble().clamp(0, double.infinity),
-                minY: 0,
-                maxY: maxY * 1.15,
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) =>
-                      const FlLine(color: AppColors.divider, strokeWidth: 1),
-                ),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 42,
-                      getTitlesWidget: (value, meta) {
-                        if (value == meta.max || value == meta.min) {
-                          return const SizedBox.shrink();
-                        }
-                        String label;
-                        if (value >= 1000) {
-                          final inK = value / 1000;
-                          label = inK % 1 == 0
-                              ? '₹${inK.toInt()}k'
-                              : '₹${inK.toStringAsFixed(1)}k';
-                        } else {
-                          label = '₹${value.toInt()}';
-                        }
-                        return Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.mutedText,
+          if (showState)
+            _CardStateBox(
+              loading: loading,
+              failed: failed,
+              emptyText: 'No sales in this period',
+              onRetry: onRetry,
+            )
+          else
+            Builder(
+              builder: (context) {
+                final screenHeight = MediaQuery.of(context).size.height;
+                final chartHeight = (screenHeight * 0.28).clamp(170.0, 240.0);
+                final yInterval = (maxY * 1.15) / 3;
+
+                return SizedBox(
+                  height: chartHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 12, left: 4, top: 8),
+                    child: LineChart(
+                      duration: Duration.zero,
+                      LineChartData(
+                        minX: 0,
+                        // A single point (one-day custom range) would make
+                        // minX == maxX, which fl_chart can't scale.
+                        maxX: dataCount > 1 ? (dataCount - 1).toDouble() : 1,
+                        minY: 0,
+                        maxY: maxY * 1.15,
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          horizontalInterval: yInterval > 0 ? yInterval : 25,
+                          getDrawingHorizontalLine: (value) => const FlLine(
+                            color: AppColors.divider,
+                            strokeWidth: 1,
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 28,
-                      interval: 1,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (value != idx.toDouble() ||
-                            idx < 0 ||
-                            idx >= cash.length) {
-                          return const SizedBox.shrink();
-                        }
-                        if (!_shouldShowChartLabel(idx, cash.length)) {
-                          return const SizedBox.shrink();
-                        }
-                        return SideTitleWidget(
-                          meta: meta,
-                          space: 6,
-                          child: Text(
-                            _formatChartLabel(cash[idx].label),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: AppTextStyles.fontBody,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.mutedText,
+                        ),
+                        titlesData: FlTitlesData(
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 44,
+                              interval: yInterval > 0 ? yInterval : 25,
+                              getTitlesWidget: (value, meta) {
+                                String label;
+                                if (value.round() == 0) {
+                                  label = '₹0';
+                                } else if (value >= 1000) {
+                                  final inK = value / 1000;
+                                  label = inK % 1 == 0
+                                      ? '₹${inK.toInt()}k'
+                                      : '₹${inK.toStringAsFixed(1)}k';
+                                } else {
+                                  label = '₹${value.toInt()}';
+                                }
+                                return SideTitleWidget(
+                                  meta: meta,
+                                  fitInside:
+                                      SideTitleFitInsideData.fromTitleMeta(
+                                        meta,
+                                      ),
+                                  child: Text(
+                                    label,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.mutedText,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    curveSmoothness: 0.35,
-                    color: AppColors.primary,
-                    barWidth: 2.5,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(
-                      show: true,
-                      getDotPainter: (spot, percent, barData, index) {
-                        return FlDotCirclePainter(
-                          radius: 3.5,
-                          color: AppColors.primary,
-                          strokeWidth: 2,
-                          strokeColor: Colors.white,
-                        );
-                      },
-                    ),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppColors.primary.withValues(alpha: 0.20),
-                          AppColors.primary.withValues(alpha: 0.01),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 38,
+                              interval: 1,
+                              getTitlesWidget: (value, meta) {
+                                final idx = value.toInt();
+                                if (value != idx.toDouble() ||
+                                    idx < 0 ||
+                                    idx >= dataCount) {
+                                  return const SizedBox.shrink();
+                                }
+                                if (!_shouldShowChartLabel(idx, dataCount)) {
+                                  return const SizedBox.shrink();
+                                }
+                                final rawLabel = useBars
+                                    ? bars[idx].label
+                                    : cash[idx].label;
+                                return SideTitleWidget(
+                                  meta: meta,
+                                  space: 6,
+                                  child: Text(
+                                    _formatChartLabel(rawLabel),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontFamily: AppTextStyles.fontBody,
+                                      fontSize: 11,
+                                      height: 1.15,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.mutedText,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots: spots,
+                            isCurved: true,
+                            curveSmoothness: 0.35,
+                            preventCurveOverShooting: true,
+                            color: AppColors.primary,
+                            barWidth: 2.5,
+                            isStrokeCapRound: true,
+                            dotData: FlDotData(
+                              show: true,
+                              getDotPainter: (spot, percent, barData, index) {
+                                return FlDotCirclePainter(
+                                  radius: 3.5,
+                                  color: AppColors.primary,
+                                  strokeWidth: 2,
+                                  strokeColor: Colors.white,
+                                );
+                              },
+                            ),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              color: AppColors.primary.withValues(alpha: 0.10),
+                            ),
+                          ),
                         ],
+                        lineTouchData: LineTouchData(
+                          touchTooltipData: LineTouchTooltipData(
+                            getTooltipColor: (_) => AppColors.text,
+                            getTooltipItems: (touchedSpots) {
+                              return touchedSpots.map((spot) {
+                                final idx = spot.x.toInt();
+                                final valPaise = idx < dataCount
+                                    ? (useBars
+                                          ? bars[idx].amount
+                                          : cash[idx].income)
+                                    : 0;
+                                final period = idx < dataCount
+                                    ? _formatChartLabel(
+                                        useBars
+                                            ? bars[idx].label
+                                            : cash[idx].label,
+                                      )
+                                    : '';
+                                return LineTooltipItem(
+                                  '$period\nCollected: ${CurrencyFormatter.format(valPaise)}',
+                                  const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
+                                );
+                              }).toList();
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ],
-                lineTouchData: LineTouchData(
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (_) => AppColors.text,
-                    getTooltipItems: (touchedSpots) {
-                      return touchedSpots.map((spot) {
-                        final idx = spot.x.toInt();
-                        final valPaise = idx < cash.length
-                            ? cash[idx].income
-                            : 0;
-                        final period = idx < cash.length
-                            ? _formatChartLabel(cash[idx].label)
-                            : '';
-                        return LineTooltipItem(
-                          '$period\nCollected: ${CurrencyFormatter.format(valPaise)}',
-                          const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        );
-                      }).toList();
-                    },
-                  ),
-                ),
-              ),
+                );
+              },
             ),
-          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Stands in for a period-specific chart while the response for the selected
+/// period/outlet is still in flight, so old labels never sit under a new title.
+class _StaleChartPlaceholder extends StatelessWidget {
+  const _StaleChartPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const AppCard(
+      padding: EdgeInsets.all(16),
+      child: SizedBox(
+        height: 180,
+        width: double.infinity,
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
       ),
     );
   }
@@ -1193,7 +1270,10 @@ class _SalesTrendChart extends StatelessWidget {
 class _CashFlowChart extends StatelessWidget {
   final List<CashPoint> cash;
 
-  const _CashFlowChart({required this.cash});
+  /// Which period the totals cover, e.g. "Last 7 days".
+  final String periodLabel;
+
+  const _CashFlowChart({required this.cash, required this.periodLabel});
 
   @override
   Widget build(BuildContext context) {
@@ -1202,68 +1282,27 @@ class _CashFlowChart extends StatelessWidget {
     final totalIncome = cash.fold<int>(0, (s, c) => s + c.income);
     final totalExpenses = cash.fold<int>(0, (s, c) => s + c.expenses);
     final net = totalIncome - totalExpenses;
-
-    double maxVal = 0;
-    for (final c in cash) {
-      final inc = (c.income / 100).toDouble();
-      final exp = (c.expenses / 100).toDouble();
-      if (inc > maxVal) maxVal = inc;
-      if (exp > maxVal) maxVal = exp;
-    }
-    if (maxVal == 0) maxVal = 100;
-
-    final double rodWidth;
-    final double barsSpace;
-    if (cash.length <= 5) {
-      rodWidth = 11.0;
-      barsSpace = 4.0;
-    } else if (cash.length <= 8) {
-      rodWidth = 8.0;
-      barsSpace = 3.0;
-    } else {
-      rodWidth = 5.0;
-      barsSpace = 2.0;
-    }
-
-    final groups = <BarChartGroupData>[];
-    for (int i = 0; i < cash.length; i++) {
-      final inc = (cash[i].income / 100).toDouble();
-      final exp = (cash[i].expenses / 100).toDouble();
-      groups.add(
-        BarChartGroupData(
-          x: i,
-          barsSpace: barsSpace,
-          barRods: [
-            BarChartRodData(
-              toY: inc,
-              color: AppColors.primary,
-              width: rodWidth,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(3),
-              ),
-              backDrawRodData: BackgroundBarChartRodData(
-                show: true,
-                toY: maxVal * 1.15,
-                color: AppColors.border.withValues(alpha: 0.35),
-              ),
-            ),
-            BarChartRodData(
-              toY: exp,
-              color: AppColors.warning,
-              width: rodWidth,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(3),
-              ),
-              backDrawRodData: BackgroundBarChartRodData(
-                show: true,
-                toY: maxVal * 1.15,
-                color: AppColors.border.withValues(alpha: 0.35),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    final spentPct = totalIncome > 0
+        ? ((totalExpenses / totalIncome) * 100).round().clamp(0, 100)
+        : 0;
+    final keptPct = 100 - spentPct;
+    // Spending beyond what was collected: the bar then shows how much of the
+    // spend is covered so far and how much is still to cover.
+    final shortfall = totalExpenses > totalIncome;
+    final coveredPct = (totalIncome <= 0 || totalExpenses <= 0)
+        ? 0
+        : ((totalIncome / totalExpenses) * 100).round().clamp(1, 99);
+    final yetPct = 100 - coveredPct;
+    final leftPct = shortfall ? coveredPct : spentPct;
+    final rightPct = shortfall ? yetPct : keptPct;
+    final leftColor = shortfall ? AppColors.success : AppColors.warning;
+    final rightColor = shortfall ? AppColors.danger : AppColors.success;
+    final leftLabel = shortfall
+        ? 'Covered ${CurrencyFormatter.format(totalIncome)} · $coveredPct%'
+        : 'Spent ${CurrencyFormatter.format(totalExpenses)} · $spentPct%';
+    final rightLabel = shortfall
+        ? 'Yet to cover ${CurrencyFormatter.format(totalExpenses - totalIncome)} · $yetPct%'
+        : 'Kept ${CurrencyFormatter.format(net)} · $keptPct%';
 
     final netLabel = net < 0
         ? '-${CurrencyFormatter.format(net.abs())}'
@@ -1274,232 +1313,136 @@ class _CashFlowChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'Collected vs expenses',
+            style: TextStyle(
+              fontFamily: AppTextStyles.fontBody,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(periodLabel, style: AppTextStyles.hint),
+          const SizedBox(height: 14),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Collected vs expenses — this month',
-                      style: TextStyle(
-                        fontFamily: AppTextStyles.fontBody,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'payments collected this month',
-                      style: AppTextStyles.hint,
-                    ),
-                  ],
+                child: _buildKpi(
+                  'Collected',
+                  CurrencyFormatter.format(totalIncome),
+                  AppColors.primary,
                 ),
               ),
               const SizedBox(width: 8),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildLegendBadge(
-                    color: AppColors.primary,
-                    label: 'Collected',
-                  ),
-                  const SizedBox(width: 8),
-                  _buildLegendBadge(
-                    color: AppColors.warning,
-                    label: 'Expenses',
-                  ),
-                ],
+              Expanded(
+                child: _buildKpi(
+                  'Spent',
+                  CurrencyFormatter.format(totalExpenses),
+                  AppColors.warning,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildKpi(
+                  'Net',
+                  netLabel,
+                  net < 0 ? AppColors.danger : AppColors.success,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                netLabel,
-                style: TextStyle(
-                  fontFamily: AppTextStyles.fontDisplay,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: net >= 0 ? AppColors.success : AppColors.danger,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'net',
-                style: TextStyle(
-                  fontFamily: AppTextStyles.fontBody,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.mutedText,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                '${CurrencyFormatter.format(totalIncome)} received',
-                style: const TextStyle(
-                  fontFamily: AppTextStyles.fontBody,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.mutedText,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 6),
-                child: Text('·', style: TextStyle(color: AppColors.mutedText)),
-              ),
-              Text(
-                '${CurrencyFormatter.format(totalExpenses)} spent',
-                style: const TextStyle(
-                  fontFamily: AppTextStyles.fontBody,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.mutedText,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 180,
-            child: BarChart(
-              BarChartData(
-                minY: 0,
-                maxY: maxVal * 1.15,
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) =>
-                      const FlLine(color: AppColors.divider, strokeWidth: 1),
-                ),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 42,
-                      getTitlesWidget: (value, meta) {
-                        if (value == meta.max || value == meta.min) {
-                          return const SizedBox.shrink();
-                        }
-                        String label;
-                        if (value >= 1000) {
-                          final inK = value / 1000;
-                          label = inK % 1 == 0
-                              ? '₹${inK.toInt()}k'
-                              : '₹${inK.toStringAsFixed(1)}k';
-                        } else {
-                          label = '₹${value.toInt()}';
-                        }
-                        return Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.mutedText,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 28,
-                      interval: 1,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (value != idx.toDouble() ||
-                            idx < 0 ||
-                            idx >= cash.length) {
-                          return const SizedBox.shrink();
-                        }
-                        if (!_shouldShowChartLabel(idx, cash.length)) {
-                          return const SizedBox.shrink();
-                        }
-                        return SideTitleWidget(
-                          meta: meta,
-                          space: 6,
-                          child: Text(
-                            _formatChartLabel(cash[idx].label),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: AppTextStyles.fontBody,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.mutedText,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: groups,
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => AppColors.text,
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      final isIncome = rodIndex == 0;
-                      final valPaise = isIncome
-                          ? cash[groupIndex].income
-                          : cash[groupIndex].expenses;
-                      final label = isIncome ? 'Collected' : 'Expenses';
-                      final period = groupIndex < cash.length
-                          ? _formatChartLabel(cash[groupIndex].label)
-                          : '';
-                      return BarTooltipItem(
-                        '$period\n$label: ${CurrencyFormatter.format(valPaise)}',
-                        const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      );
-                    },
-                  ),
+          if (totalIncome <= 0 && totalExpenses <= 0)
+            const Text(
+              'Nothing collected or spent in this period',
+              style: AppTextStyles.hint,
+            )
+          else ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: double.infinity,
+                height: 12,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (leftPct > 0)
+                      Expanded(
+                        flex: leftPct,
+                        child: ColoredBox(color: leftColor),
+                      ),
+                    if (rightPct > 0)
+                      Expanded(
+                        flex: rightPct,
+                        child: ColoredBox(color: rightColor),
+                      ),
+                  ],
                 ),
               ),
             ),
-          ),
+            const SizedBox(height: 8),
+            // A Wrap, not a Row: with large amounts on a narrow phone the two
+            // labels drop onto separate lines instead of overflowing.
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                spacing: 12,
+                runSpacing: 2,
+                children: [
+                  Text(
+                    leftLabel,
+                    style: TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: leftColor,
+                    ),
+                  ),
+                  Text(
+                    rightLabel,
+                    style: TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: rightColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildLegendBadge({required Color color, required String label}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+  Widget _buildKpi(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
         Text(
           label,
           style: const TextStyle(
             fontFamily: AppTextStyles.fontBody,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
+            fontSize: 12,
             color: AppColors.mutedText,
+          ),
+        ),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: TextStyle(
+              fontFamily: AppTextStyles.fontDisplay,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
           ),
         ),
       ],
@@ -1543,7 +1486,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
         PieChartSectionData(
           value: 1,
           color: AppColors.border,
-          radius: 12,
+          radius: 20,
           showTitle: false,
         ),
       );
@@ -1553,7 +1496,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
           PieChartSectionData(
             value: pendingCount.toDouble(),
             color: AppColors.neutralText,
-            radius: 13,
+            radius: 20,
             showTitle: false,
           ),
         );
@@ -1563,7 +1506,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
           PieChartSectionData(
             value: inProgressCount.toDouble(),
             color: AppColors.primary,
-            radius: 13,
+            radius: 20,
             showTitle: false,
           ),
         );
@@ -1573,7 +1516,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
           PieChartSectionData(
             value: readyCount.toDouble(),
             color: AppColors.violet,
-            radius: 13,
+            radius: 20,
             showTitle: false,
           ),
         );
@@ -1583,7 +1526,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
           PieChartSectionData(
             value: completedCount.toDouble(),
             color: AppColors.success,
-            radius: 13,
+            radius: 20,
             showTitle: false,
           ),
         );
@@ -1616,12 +1559,12 @@ class _OrdersMovingDonutChart extends StatelessWidget {
                 alignment: Alignment.center,
                 children: [
                   SizedBox(
-                    width: 90,
-                    height: 90,
+                    width: 132,
+                    height: 132,
                     child: PieChart(
                       PieChartData(
                         sectionsSpace: 2.5,
-                        centerSpaceRadius: 28,
+                        centerSpaceRadius: 42,
                         sections: sections,
                       ),
                     ),
@@ -1633,7 +1576,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
                         '$total',
                         style: const TextStyle(
                           fontFamily: AppTextStyles.fontDisplay,
-                          fontSize: 18,
+                          fontSize: 24,
                           fontWeight: FontWeight.w800,
                           color: AppColors.text,
                           height: 1.0,
@@ -1642,7 +1585,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
                       const Text(
                         'orders',
                         style: TextStyle(
-                          fontSize: 9.5,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
                           color: AppColors.mutedText,
                           height: 1.2,
@@ -1652,7 +1595,7 @@ class _OrdersMovingDonutChart extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(width: 24),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   children: [
@@ -1660,24 +1603,28 @@ class _OrdersMovingDonutChart extends StatelessWidget {
                       color: AppColors.neutralText,
                       label: 'Pending',
                       count: pendingCount,
+                      total: total,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     _buildLegendItem(
                       color: AppColors.primary,
                       label: 'In progress',
                       count: inProgressCount,
+                      total: total,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     _buildLegendItem(
                       color: AppColors.violet,
                       label: 'Ready',
                       count: readyCount,
+                      total: total,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     _buildLegendItem(
                       color: AppColors.success,
                       label: 'Delivered',
                       count: completedCount,
+                      total: total,
                     ),
                   ],
                 ),
@@ -1693,25 +1640,30 @@ class _OrdersMovingDonutChart extends StatelessWidget {
     required Color color,
     required String label,
     required int count,
+    required int total,
   }) {
+    final pct = total > 0 ? (count / total * 100).round() : 0;
     return Row(
       children: [
         Container(
-          width: 8,
-          height: 8,
+          width: 10,
+          height: 10,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: AppTextStyles.fontBody,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppColors.text,
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: AppTextStyles.fontBody,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.text,
+            ),
           ),
         ),
-        const Spacer(),
         Text(
           '$count',
           style: const TextStyle(
@@ -1721,6 +1673,18 @@ class _OrdersMovingDonutChart extends StatelessWidget {
             color: AppColors.text,
           ),
         ),
+        SizedBox(
+          width: 40,
+          child: Text(
+            '$pct%',
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontFamily: AppTextStyles.fontBody,
+              fontSize: 12,
+              color: AppColors.mutedText,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1728,8 +1692,20 @@ class _OrdersMovingDonutChart extends StatelessWidget {
 
 class _SalesByServiceChart extends StatelessWidget {
   final List<ServiceMixItem> serviceMix;
+  final PeriodRange range;
+  final bool loading;
+  final bool failed;
+  final ValueChanged<PeriodRange> onRange;
+  final VoidCallback onRetry;
 
-  const _SalesByServiceChart({required this.serviceMix});
+  const _SalesByServiceChart({
+    required this.serviceMix,
+    required this.range,
+    required this.loading,
+    required this.failed,
+    required this.onRange,
+    required this.onRetry,
+  });
 
   static const _serviceColors = [
     AppColors.primary, // Brand blue
@@ -1742,8 +1718,6 @@ class _SalesByServiceChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (serviceMix.isEmpty) return const SizedBox.shrink();
-
     double maxVal = 0;
     for (final item in serviceMix) {
       final v = (item.amount / 100).toDouble();
@@ -1766,82 +1740,227 @@ class _SalesByServiceChart extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          const Text(
-            'Your busiest services this period',
+          Text(
+            'Your busiest services · ${range.label.toLowerCase()}',
             style: AppTextStyles.hint,
           ),
+          const SizedBox(height: 12),
+          PeriodFilter(
+            key: const ValueKey('filter-salesByService'),
+            value: range,
+            onChanged: onRange,
+          ),
           const SizedBox(height: 16),
-          ...List.generate(serviceMix.length, (i) {
-            final item = serviceMix[i];
-            final color = _serviceColors[i % _serviceColors.length];
-            final fraction = maxVal > 0
-                ? (item.amount / 100).toDouble() / maxVal
-                : 0.0;
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: i == serviceMix.length - 1 ? 0 : 14,
+          if (loading || failed || serviceMix.isEmpty)
+            _CardStateBox(
+              loading: loading,
+              failed: failed,
+              emptyText: 'No sales in this period',
+              onRetry: onRetry,
+            )
+          else
+            ...List.generate(serviceMix.length, (i) {
+              final item = serviceMix[i];
+              final color = _serviceColors[i % _serviceColors.length];
+              final fraction = maxVal > 0
+                  ? (item.amount / 100).toDouble() / maxVal
+                  : 0.0;
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: i == serviceMix.length - 1 ? 0 : 14,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            item.label,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.text,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          CurrencyFormatter.format(item.amount),
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.fontDisplay,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return Stack(
+                            children: [
+                              Container(height: 8, color: AppColors.neutralBg),
+                              Container(
+                                height: 8,
+                                width:
+                                    constraints.maxWidth *
+                                    fraction.clamp(0.03, 1.0),
+                                color: color,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+/// The five newest orders, from what is on the phone (so it works offline).
+/// In the combined All outlets view each row names its outlet.
+class _RecentOrdersCard extends StatelessWidget {
+  final List<Order> orders;
+  final OutletScope? scope;
+  final VoidCallback? onViewAll;
+
+  const _RecentOrdersCard({
+    required this.orders,
+    required this.scope,
+    required this.onViewAll,
+  });
+
+  static const _shown = 5;
+
+  String? _outletLabel(Order order) {
+    final s = scope;
+    if (s == null || !s.allOutlets || s.allowed.length <= 1) return null;
+    final id = order.outletId;
+    if (id == null || id.isEmpty) return 'Organization-wide';
+    for (final o in s.allowed) {
+      if (o.id == id) return o.displayName;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final newest = [...orders]
+      ..sort((a, b) {
+        if (a.hasValidCreatedDate && !b.hasValidCreatedDate) return -1;
+        if (!a.hasValidCreatedDate && b.hasValidCreatedDate) return 1;
+        if (!a.hasValidCreatedDate && !b.hasValidCreatedDate) return 0;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+    final recent = newest.take(_shown).toList();
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Recent orders',
+                  style: TextStyle(
+                    fontFamily: AppTextStyles.fontBody,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
+                  ),
+                ),
               ),
+              if (onViewAll != null)
+                TextActionButton(label: 'View all', onPressed: onViewAll),
+            ],
+          ),
+          for (var i = 0; i < recent.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: AppColors.divider),
+            _row(context, recent[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, Order order) {
+    final outlet = _outletLabel(order);
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OrderDetailScreen(initialOrder: order),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 10, 8, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.label,
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.text,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
                       Text(
-                        CurrencyFormatter.format(item.amount),
+                        order.displayCode,
                         style: const TextStyle(
                           fontFamily: AppTextStyles.fontDisplay,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
                           color: AppColors.text,
                         ),
                       ),
+                      StatusPill.fromStatus(order.status),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return Stack(
-                          children: [
-                            Container(height: 8, color: AppColors.neutralBg),
-                            Container(
-                              height: 8,
-                              width:
-                                  constraints.maxWidth *
-                                  fraction.clamp(0.03, 1.0),
-                              color: color,
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${order.name.isNotEmpty ? order.name : 'Walk-in Customer'}'
+                    '${outlet != null ? ' · $outlet' : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.hint,
                   ),
                 ],
               ),
-            );
-          }),
-        ],
+            ),
+            const SizedBox(width: 12),
+            Text(
+              CurrencyFormatter.format(order.totalAmount),
+              style: const TextStyle(
+                fontFamily: AppTextStyles.fontDisplay,
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.text,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

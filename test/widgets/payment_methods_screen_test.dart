@@ -77,6 +77,31 @@ void main() {
     );
   }
 
+  group('PaymentMethodsScreen empty state', () {
+    testWidgets('says so when there are no methods and nothing is loading', (
+      tester,
+    ) async {
+      final bloc = TrackingOwnerBloc(OwnerState());
+      await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No payment methods yet'), findsOneWidget);
+    });
+
+    testWidgets('shows a spinner, not the empty state, while loading', (
+      tester,
+    ) async {
+      final bloc = TrackingOwnerBloc(
+        OwnerState(loading: {OwnerSection.paymentMethods}),
+      );
+      await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
+      await tester.pump();
+
+      expect(find.text('No payment methods yet'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
+    });
+  });
+
   group('PaymentMethodsScreen Confirmation Dialog Tests', () {
     testWidgets(
       'Disabling an active payment method shows confirmation dialog with correct texts and does not dispatch toggle event yet',

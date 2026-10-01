@@ -75,7 +75,7 @@ class CentredDialog extends StatelessWidget {
                 Expanded(
                   child: SecondaryButton(
                     label: cancelLabel,
-                    height: 48,
+                    height: AppButtonHeight.inline,
                     onPressed: () {
                       if (onCancel != null) {
                         onCancel!();
@@ -90,7 +90,7 @@ class CentredDialog extends StatelessWidget {
                   Expanded(
                     child: PrimaryButton(
                       label: confirmLabel,
-                      height: 48,
+                      height: AppButtonHeight.inline,
                       isLoading: isLoading,
                       backgroundColor: isDestructive
                           ? AppColors.danger

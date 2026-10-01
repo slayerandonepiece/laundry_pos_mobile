@@ -6,7 +6,7 @@ class AppResumeSync with WidgetsBindingObserver {
   final VoidCallback _onResume;
 
   AppResumeSync({VoidCallback? onResume})
-    : _onResume = onResume ?? (() => SyncEngine.instance.trigger()) {
+    : _onResume = onResume ?? (() => SyncEngine.instance.triggerIfStale()) {
     WidgetsBinding.instance.addObserver(this);
   }
 

@@ -61,9 +61,7 @@ void main() {
       addTearDown(() => tester.view.resetDevicePixelRatio());
 
       await tester.pumpWidget(
-        const MaterialApp(
-          home: SplashScreen(animate: false),
-        ),
+        const MaterialApp(home: SplashScreen(animate: false)),
       );
       await tester.pump();
 

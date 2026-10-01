@@ -387,7 +387,7 @@ class _WeightedItemDialogState extends State<WeightedItemDialog> {
                   Expanded(
                     child: SecondaryButton(
                       label: 'Cancel',
-                      height: 50,
+                      height: AppButtonHeight.inline,
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ),
@@ -395,7 +395,7 @@ class _WeightedItemDialogState extends State<WeightedItemDialog> {
                   Expanded(
                     child: PrimaryButton(
                       label: 'Add to sale',
-                      height: 50,
+                      height: AppButtonHeight.inline,
                       onPressed: _onAdd,
                     ),
                   ),

@@ -420,6 +420,68 @@ Three required changes:
    the outlet-scoped cursor key in O2.1. Switching scope must not
    resume the other scope's cursor.
 
+### O6.1 What sign-in syncs, per role, and what a switch does
+
+Added 2026-09-30. Until now sign-in synced only the *active scope*, so an
+owner's per-outlet caches stayed empty ("Not on this phone yet" in the
+outlet switcher) until each outlet was opened once. Rules from here:
+
+**Owner (`OWNER`, every ACTIVE outlet in `allowedOutlets`)**
+
+- Sign-in bootstrap syncs **every allowed outlet**, not just the active
+  scope. Per outlet: orders (delta, own cursor), the default-period
+  dashboard, and expenses — each request sends that outlet's
+  `X-Outlet-Id` / `?outletId=`. Then the combined **All outlets** scope
+  (no outlet sent) for the same three. Organization-wide data (details,
+  services & prices, payment methods, staff) is fetched once.
+- The bootstrap checklist shows one row per scope ("Syncing All outlets",
+  "Syncing <outlet name>", each "Orders, dashboard and expenses") so
+  progress is visible; an outlet that fails offers Retry / Continue
+  anyway, does not block the others, and Retry redoes only that row. An
+  owner with a single outlet keeps the plain Orders / Dashboard /
+  Expenses rows.
+- After bootstrap every outlet reads "On this phone", so switching
+  outlets (or All outlets) is instant and never shows the "Syncing data"
+  banner; the existing silent refresh keeps the selected scope current.
+- Adding an outlet later, or a session signed in before this rule existed:
+  the outlet appears via `/auth/status` on the next launch/resume, and the
+  first sync after that **fills any scope with nothing on the phone**
+  (`SyncEngine._backfillScopes`) in the background — no checklist, no banner.
+  Owners with several outlets only; it stops on sign-out, a store change,
+  offline or a 401, and only fetches what is missing.
+- App resume no longer re-syncs blindly: `SyncEngine.triggerIfStale()` skips
+  the run when the phone synced within the freshness window (30 s) and nothing
+  is queued to send, so switching apps back and forth costs no requests.
+- Employee sign-in runs its rows in parallel (details, services, payment
+  methods and orders together), like the owner's.
+- Nothing is cleared on a switch — all scopes stay cached.
+
+**Employee (`EMPLOYEE`, only outlets with an active `OutletMembership`)**
+
+- Sign-in syncs **only the one outlet in use**: the sole allowed outlet,
+  the remembered one, or — with two or more — the one picked on the
+  selection screen (O3). Other allowed outlets are not fetched and show
+  "Not on this phone yet" in the switcher.
+- **Switching outlet** (switcher or re-selection) **clears the previous
+  outlet's cached data — orders, delta cursor, dashboard/expenses if any —
+  then syncs the selected outlet** behind the normal first-sync banner
+  (the new outlet has no cache, so the banner is correct here).
+- **Never clear the pending queues** (order/owner actions, dead-letter).
+  Queued actions carry their own `payload.outletId` (O6 item 1) and
+  must still flush to the outlet they were created under. If the queue
+  is non-empty when switching, flush it first; if anything is still
+  queued afterwards the switch is refused ("Some changes are still
+  waiting to sync. Try again once they have.") and nothing is cleared,
+  so an order created offline never disappears from view.
+- Do not clear anything until the switch is confirmed and the device is
+  online (or the user accepts an offline empty state): an offline switch
+  to an outlet with no cache would otherwise leave nothing on screen —
+  in that case keep the old cache and refuse the switch with "Connect to
+  the internet to switch outlets".
+
+No backend change: `GET /orders/sync`, `/dashboard`, `/expenses` already
+take a per-outlet scope (§3 of the API contract).
+
 A `403 FORBIDDEN` on flush means outlet access changed. Move the batch
 to the dead-letter queue, clear the outlet selection, and route to
 re-authentication (O0.3). Do not retry in a loop.

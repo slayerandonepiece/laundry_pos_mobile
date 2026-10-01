@@ -1,6 +1,10 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
@@ -17,7 +21,22 @@ import 'package:myshop/features/pos/data/models/product_model.dart';
 
 const _tag = 'OWNER_REPO';
 
+/// A write the repository refuses to make (rather than guess), with a message
+/// that is safe to show the owner as it is.
+class OwnerRefusedException implements Exception {
+  final String message;
+  OwnerRefusedException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class OwnerRepository {
+  /// True when the most recent owner write was only queued for later (the
+  /// device or the connection was down), so the UI can say "saved offline"
+  /// instead of "updated". Static so test doubles need no support for it.
+  static bool lastWriteQueued = false;
+
   final ApiClient apiClient;
   final LocalCacheService localCache;
   final SecureStorageService secureStorage;
@@ -41,14 +60,114 @@ class OwnerRepository {
     }
   }
 
+  /// The scope (an outlet id, [LocalCacheService.allScope], or 'none') and
+  /// store the active selection points at right now. Captured before a
+  /// request so its reply is stored where it was asked for, even if the
+  /// owner switches outlet while it is in flight.
+  ({String? store, String scope}) _captureScope() => (
+    store: localCache.getActiveStoreId(),
+    scope:
+        localCache.getActiveOutletId() ??
+        (localCache.isAllOutletsScope() ? LocalCacheService.allScope : 'none'),
+  );
+
+  /// Same store as when [cap] was taken (an outlet switch is fine — the write
+  /// goes to the captured outlet's own cache — but another store is not).
+  bool _sameStore(({String? store, String scope}) cap) =>
+      localCache.getActiveStoreId() == cap.store;
+
+  /// The outlet id an owner action is queued under; null for the combined /
+  /// no-outlet view.
+  static String? _actionOutletId(String scope) =>
+      scope == LocalCacheService.allScope || scope == 'none' ? null : scope;
+
+  /// True for failures that mean "could not reach the server" (as opposed to
+  /// the server answering with an error).
+  static bool _isConnectionFailure(Object e) {
+    if (e is TimeoutException) return true;
+    if (e is DioException) {
+      return e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout;
+    }
+    return e is ApiException && e is! AuthException && e.statusCode == null;
+  }
+
+  static bool _isAccessFailure(Object e) =>
+      e is ApiException && (e.statusCode == 401 || e.statusCode == 403);
+
+  /// A write that failed should be queued instead of reported when the device
+  /// is offline or the connection itself failed (Wi-Fi without internet).
+  Future<bool> _shouldQueue(Object e) async =>
+      _isConnectionFailure(e) ||
+      await ConnectivityService.instance.checkIsOffline();
+
+  static String _isoDay(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  /// The dashboard's default period: the current month (month-to-date) in daily
+  /// buckets. This aligns with the dashboard cards' default selection so they
+  /// render immediately from cache offline on first open.
+  static ({String from, String to, String granularity}) _defaultRange() {
+    final now = DateTime.now();
+    return (
+      from: _isoDay(DateTime(now.year, now.month, 1)),
+      to: _isoDay(now),
+      granularity: 'day',
+    );
+  }
+
+  /// The dashboard's default (month-to-date, daily) metrics — the one
+  /// request that is cached.
+  Future<DashboardMetrics> getDefaultDashboardMetrics() {
+    final r = _defaultRange();
+    return getDashboardMetrics(
+      from: r.from,
+      to: r.to,
+      granularity: r.granularity,
+    );
+  }
+
   /// Fetches aggregated metrics for dashboard & reports
   Future<DashboardMetrics> getDashboardMetrics({
     String? from,
     String? to,
+    String? granularity,
   }) async {
+    // A bare request means the default period. The server answers a bare one
+    // in a legacy shape (no cashRange, interval bars), which must never be
+    // cached or shown as the 30-day default.
+    if ((from == null || from.isEmpty) &&
+        (to == null || to.isEmpty) &&
+        (granularity == null || granularity.isEmpty)) {
+      final r = _defaultRange();
+      from = r.from;
+      to = r.to;
+      granularity = r.granularity;
+    }
+    final query = <String, String>{};
+    if (from != null && from.isNotEmpty) query['from'] = from;
+    if (to != null && to.isNotEmpty) query['to'] = to;
+    if (granularity != null && granularity.isNotEmpty) {
+      query['granularity'] = granularity;
+    }
+    final cap = _captureScope();
+    final outletId = localCache.getActiveOutletId();
+    if (outletId != null && !localCache.isAllOutletsScope()) {
+      query['outletId'] = outletId;
+    }
+    // Only the default period is cached, so only it may fall back to the
+    // cache; another period's figures must never be served from it.
+    final isDefault = _isDefaultDashboardRequest(query);
+
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
-      final cached = localCache.getCachedDashboardMetrics();
+      final cached = isDefault
+          ? localCache.getCachedDashboardMetricsForScope(cap.scope)
+          : null;
       if (cached != null && cached.isNotEmpty) {
         final metrics = DashboardMetrics.fromJson(cached);
         final pendingCount = localCache.getTotalPendingCount();
@@ -63,37 +182,37 @@ class OwnerRepository {
       );
     }
 
-    final query = <String, String>{};
-    if (from != null && from.isNotEmpty) query['from'] = from;
-    if (to != null && to.isNotEmpty) query['to'] = to;
-    final outletId = localCache.getActiveOutletId();
-    if (outletId != null && !localCache.isAllOutletsScope()) {
-      query['outletId'] = outletId;
-    }
-
     final uri = Uri.parse(ApiEndpoints.dashboard)
         .replace(queryParameters: query.isEmpty ? null : query);
 
-    SyncManager.instance.startSync('Fetching latest from cloud...');
+    final hasCache = localCache.getCachedDashboardMetrics() != null;
+    final startedSync = !hasCache;
+    if (startedSync) {
+      SyncManager.instance.startSync('Fetching latest from cloud...');
+    }
     try {
       final response = await apiClient.get(uri.toString());
-      if (response is Map) {
-        final metrics = DashboardMetrics.fromJson(
-          Map<String, dynamic>.from(response),
+      if (response is! Map) {
+        // e.g. a captive-portal page: not data, and never cached.
+        throw Exception('Unexpected dashboard response');
+      }
+      final metrics = DashboardMetrics.fromJson(
+        Map<String, dynamic>.from(response),
+      );
+      if (isDefault && _sameStore(cap)) {
+        await localCache.setCachedDashboardMetricsForScope(
+          cap.scope,
+          metrics.toJson(),
         );
-        // Only the default period is cached — it's what the dashboard opens
-        // with; a custom range is always fetched.
-        if (query['from'] == null && query['to'] == null) {
-          await localCache.setCachedDashboardMetrics(metrics.toJson());
-        }
-        SyncManager.instance.completeSync();
-        return metrics;
       }
       SyncManager.instance.completeSync();
-      return DashboardMetrics();
+      return metrics;
     } catch (e) {
+      if (_isAccessFailure(e)) rethrow;
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      final cached = localCache.getCachedDashboardMetrics();
+      final cached = isDefault && _sameStore(cap)
+          ? localCache.getCachedDashboardMetricsForScope(cap.scope)
+          : null;
       if (cached != null && cached.isNotEmpty) {
         final metrics = DashboardMetrics.fromJson(cached);
         final pendingCount = localCache.getTotalPendingCount();
@@ -111,7 +230,96 @@ class OwnerRepository {
         return metrics;
       }
       rethrow;
+    } finally {
+      if (startedSync && SyncManager.instance.value.isSyncing) {
+        SyncManager.instance.setError('Could not refresh dashboard');
+      }
     }
+  }
+
+  /// Metrics for one card's own period. Never falls back to the cache — it
+  /// only holds the default period, and serving it under another period's
+  /// label would be wrong — so any failure is thrown for the card to show.
+  Future<DashboardMetrics> getPeriodMetrics({
+    required String from,
+    required String to,
+    required String granularity,
+  }) async {
+    if (await ConnectivityService.instance.checkIsOffline()) {
+      throw Exception('No network connection');
+    }
+    final query = <String, String>{
+      'from': from,
+      'to': to,
+      'granularity': granularity,
+    };
+    final outletId = localCache.getActiveOutletId();
+    if (outletId != null && !localCache.isAllOutletsScope()) {
+      query['outletId'] = outletId;
+    }
+    final uri = Uri.parse(ApiEndpoints.dashboard)
+        .replace(queryParameters: query);
+    final response = await apiClient.get(uri.toString());
+    if (response is! Map) throw Exception('Dashboard not loaded');
+    return DashboardMetrics.fromJson(Map<String, dynamic>.from(response));
+  }
+
+  /// The request the dashboard opens with: the current month (month-to-date)
+  /// in daily buckets. A bare request (no range) or a custom range that merely
+  /// uses daily buckets is not it — the response shapes differ.
+  static bool _isDefaultDashboardRequest(Map<String, String> query) {
+    final r = _defaultRange();
+    return query['granularity'] == r.granularity &&
+        query['from'] == r.from &&
+        query['to'] == r.to;
+  }
+
+  /// Sign-in sync of one named scope's default-period dashboard (an outlet id,
+  /// or [LocalCacheService.allScope]) into that scope's own cache, without
+  /// touching the active scope or the sync banner. Throws on failure.
+  Future<void> syncDashboardForScope(String scope) async {
+    final r = _defaultRange();
+    final query = <String, String>{
+      'from': r.from,
+      'to': r.to,
+      'granularity': r.granularity,
+      if (scope != LocalCacheService.allScope) 'outletId': scope,
+    };
+    final uri = Uri.parse(ApiEndpoints.dashboard)
+        .replace(queryParameters: query);
+    final response = await apiClient.get(
+      uri.toString(),
+      headers: {
+        'X-Outlet-Id': scope == LocalCacheService.allScope
+            ? kNoOutletHeader
+            : scope,
+      },
+    );
+    if (response is! Map) throw Exception('Dashboard not loaded');
+    final metrics = DashboardMetrics.fromJson(
+      Map<String, dynamic>.from(response),
+    );
+    await localCache.setCachedDashboardMetricsForScope(scope, metrics.toJson());
+  }
+
+  /// Same as [syncDashboardForScope], for the expenses list.
+  Future<void> syncExpensesForScope(String scope) async {
+    final response = await apiClient.get(
+      ApiEndpoints.expenses,
+      headers: {
+        'X-Outlet-Id': scope == LocalCacheService.allScope
+            ? kNoOutletHeader
+            : scope,
+      },
+    );
+    if (response is! List) throw Exception('Expenses not loaded');
+    final expenses = response
+        .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    await localCache.setCachedExpensesForScope(
+      scope,
+      expenses.map((e) => e.toJson()).toList(),
+    );
   }
 
   /// Reads expenses from the local cache only — no network call.
@@ -142,24 +350,34 @@ class OwnerRepository {
       throw Exception('No network connection and no cached expenses available');
     }
 
+    final cap = _captureScope();
+    var startedSync = false;
     try {
-      SyncManager.instance.startSync('Fetching latest from cloud...');
+      final hasCache = localCache.getCachedExpenses() != null;
+      if (!hasCache) {
+        startedSync = true;
+        SyncManager.instance.startSync('Fetching latest from cloud...');
+      }
       final response = await apiClient.get(ApiEndpoints.expenses);
-      if (response is List) {
-        final expenses = response
-            .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList();
-        await localCache.setCachedExpenses(
+      // Not a list (e.g. a captive-portal page): an error, not "no expenses".
+      if (response is! List) throw Exception('Unexpected expenses response');
+      final expenses = response
+          .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+      if (_sameStore(cap)) {
+        await localCache.setCachedExpensesForScope(
+          cap.scope,
           expenses.map((e) => e.toJson()).toList(),
         );
-        SyncManager.instance.completeSync();
-        return expenses;
       }
       SyncManager.instance.completeSync();
-      return [];
+      return expenses;
     } catch (e) {
+      if (_isAccessFailure(e)) rethrow;
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      final cached = localCache.getCachedExpenses();
+      final cached = _sameStore(cap)
+          ? localCache.getCachedExpensesForScope(cap.scope)
+          : null;
       if (cached != null) {
         final expenses = cached.map((e) => Expense.fromJson(e)).toList();
         final pendingCount = localCache.getTotalPendingCount();
@@ -177,6 +395,10 @@ class OwnerRepository {
         return expenses;
       }
       rethrow;
+    } finally {
+      if (startedSync && SyncManager.instance.value.isSyncing) {
+        SyncManager.instance.setError('Could not refresh expenses');
+      }
     }
   }
 
@@ -215,7 +437,9 @@ class OwnerRepository {
     required String due,
     bool monthly = false,
     required String idempotencyKey,
+    required ({String? store, String scope}) cap,
   }) async {
+    lastWriteQueued = true;
     final localId = 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
     final localExpense = Expense(
       id: localId,
@@ -225,16 +449,17 @@ class OwnerRepository {
       due: due,
       monthly: monthly,
     );
-    final cached = localCache.getCachedExpenses() ?? [];
-    cached.insert(0, localExpense.toJson());
-    await localCache.setCachedExpenses(cached);
+    if (_sameStore(cap)) {
+      final cached = localCache.getCachedExpensesForScope(cap.scope) ?? [];
+      cached.insert(0, localExpense.toJson());
+      await localCache.setCachedExpensesForScope(cap.scope, cached);
+    }
 
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'create_expense',
-      'outletId': localCache.isAllOutletsScope()
-          ? null
-          : localCache.getActiveOutletId(),
+      'outletId': _actionOutletId(cap.scope),
+      'scope': cap.scope,
       'payload': {
         'localId': localId,
         'title': title.trim(),
@@ -263,6 +488,8 @@ class OwnerRepository {
     final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
         ? idempotencyKey.trim()
         : IdempotencyKeyGenerator.generate();
+    lastWriteQueued = false;
+    final cap = _captureScope();
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       return _createExpenseOffline(
@@ -272,6 +499,7 @@ class OwnerRepository {
         due: due,
         monthly: monthly,
         idempotencyKey: key,
+        cap: cap,
       );
     }
 
@@ -284,13 +512,14 @@ class OwnerRepository {
         monthly: monthly,
         idempotencyKey: key,
       );
-      final cached = localCache.getCachedExpenses() ?? [];
-      cached.insert(0, expense.toJson());
-      await localCache.setCachedExpenses(cached);
+      if (_sameStore(cap)) {
+        final cached = localCache.getCachedExpensesForScope(cap.scope) ?? [];
+        cached.insert(0, expense.toJson());
+        await localCache.setCachedExpensesForScope(cap.scope, cached);
+      }
       return expense;
     } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
+      if (await _shouldQueue(e)) {
         return _createExpenseOffline(
           title: title,
           category: category,
@@ -298,27 +527,46 @@ class OwnerRepository {
           due: due,
           monthly: monthly,
           idempotencyKey: key,
+          cap: cap,
         );
       }
       rethrow;
     }
   }
 
-  Future<void> _markExpensePaidDirect(String expenseId) async {
-    await apiClient.post(ApiEndpoints.markExpensePaid(expenseId), body: {});
+  Future<void> _markExpensePaidDirect(
+    String expenseId, {
+    String? outletHeader,
+  }) async {
+    await apiClient.post(
+      ApiEndpoints.markExpensePaid(expenseId),
+      headers: outletHeader != null ? {'X-Outlet-Id': outletHeader} : null,
+      body: {},
+    );
   }
 
-  Future<void> _markExpensePaidOffline(String expenseId) async {
-    final cached = localCache.getCachedExpenses() ?? [];
-    final idx = cached.indexWhere((e) => e['id']?.toString() == expenseId);
-    if (idx != -1) {
-      cached[idx] = {...cached[idx], 'paid': DateTime.now().toIso8601String()};
-      await localCache.setCachedExpenses(cached);
+  Future<void> _markExpensePaidOffline(
+    String expenseId,
+    ({String? store, String scope}) cap,
+  ) async {
+    lastWriteQueued = true;
+    if (_sameStore(cap)) {
+      final cached = localCache.getCachedExpensesForScope(cap.scope) ?? [];
+      final idx = cached.indexWhere((e) => e['id']?.toString() == expenseId);
+      if (idx != -1) {
+        cached[idx] = {
+          ...cached[idx],
+          'paid': DateTime.now().toIso8601String(),
+        };
+        await localCache.setCachedExpensesForScope(cap.scope, cached);
+      }
     }
 
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'mark_expense_paid',
+      'outletId': _actionOutletId(cap.scope),
+      'scope': cap.scope,
       'payload': {'expenseId': expenseId},
       'queuedAt': DateTime.now().toIso8601String(),
     });
@@ -328,27 +576,30 @@ class OwnerRepository {
 
   /// Marks an expense paid
   Future<void> markExpensePaid(String expenseId) async {
+    lastWriteQueued = false;
+    final cap = _captureScope();
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
-      await _markExpensePaidOffline(expenseId);
+      await _markExpensePaidOffline(expenseId, cap);
       return;
     }
 
     try {
       await _markExpensePaidDirect(expenseId);
-      final cached = localCache.getCachedExpenses() ?? [];
-      final idx = cached.indexWhere((e) => e['id']?.toString() == expenseId);
-      if (idx != -1) {
-        cached[idx] = {
-          ...cached[idx],
-          'paid': DateTime.now().toIso8601String(),
-        };
-        await localCache.setCachedExpenses(cached);
+      if (_sameStore(cap)) {
+        final cached = localCache.getCachedExpensesForScope(cap.scope) ?? [];
+        final idx = cached.indexWhere((e) => e['id']?.toString() == expenseId);
+        if (idx != -1) {
+          cached[idx] = {
+            ...cached[idx],
+            'paid': DateTime.now().toIso8601String(),
+          };
+          await localCache.setCachedExpensesForScope(cap.scope, cached);
+        }
       }
     } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
-        await _markExpensePaidOffline(expenseId);
+      if (await _shouldQueue(e)) {
+        await _markExpensePaidOffline(expenseId, cap);
         return;
       }
       rethrow;
@@ -383,22 +634,24 @@ class OwnerRepository {
       throw Exception('No network connection and no cached staff available');
     }
 
+    var startedSync = false;
     try {
-      SyncManager.instance.startSync('Fetching latest from cloud...');
-      final response = await apiClient.get(ApiEndpoints.employees);
-      if (response is List) {
-        final staff = response
-            .map(
-              (s) => StaffMember.fromJson(Map<String, dynamic>.from(s as Map)),
-            )
-            .toList();
-        await localCache.setCachedStaff(staff.map((s) => s.toJson()).toList());
-        SyncManager.instance.completeSync();
-        return staff;
+      final hasCache = localCache.getCachedStaff() != null;
+      if (!hasCache) {
+        startedSync = true;
+        SyncManager.instance.startSync('Fetching latest from cloud...');
       }
+      final response = await apiClient.get(ApiEndpoints.employees);
+      // Not a list (e.g. a captive-portal page): an error, not "no staff".
+      if (response is! List) throw Exception('Unexpected staff response');
+      final staff = response
+          .map((s) => StaffMember.fromJson(Map<String, dynamic>.from(s as Map)))
+          .toList();
+      await localCache.setCachedStaff(staff.map((s) => s.toJson()).toList());
       SyncManager.instance.completeSync();
-      return [];
+      return staff;
     } catch (e) {
+      if (_isAccessFailure(e)) rethrow;
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
       final cached = localCache.getCachedStaff();
       if (cached != null) {
@@ -418,6 +671,10 @@ class OwnerRepository {
         return staff;
       }
       rethrow;
+    } finally {
+      if (startedSync && SyncManager.instance.value.isSyncing) {
+        SyncManager.instance.setError('Could not refresh staff');
+      }
     }
   }
 
@@ -426,6 +683,8 @@ class OwnerRepository {
     required String phone,
     required String password,
     String? idempotencyKey,
+    List<String>? outletIds,
+    String? defaultOutletId,
   }) async {
     final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
         ? idempotencyKey.trim()
@@ -438,6 +697,8 @@ class OwnerRepository {
         'password': password,
         'active': true,
         'idempotencyKey': key,
+        'outlets': ?outletIds,
+        'defaultOutletId': ?defaultOutletId,
       },
     );
     return StaffMember.fromJson(Map<String, dynamic>.from(response as Map));
@@ -449,7 +710,10 @@ class OwnerRepository {
     required String phone,
     required String password,
     String? idempotencyKey,
+    List<String>? outletIds,
+    String? defaultOutletId,
   }) async {
+    lastWriteQueued = false;
     final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
         ? idempotencyKey.trim()
         : IdempotencyKeyGenerator.generate();
@@ -464,14 +728,15 @@ class OwnerRepository {
         phone: phone,
         password: password,
         idempotencyKey: key,
+        outletIds: outletIds,
+        defaultOutletId: defaultOutletId,
       );
       final cached = localCache.getCachedStaff() ?? [];
       cached.insert(0, staff.toJson());
       await localCache.setCachedStaff(cached);
       return staff;
     } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
+      if (await _shouldQueue(e)) {
         throw Exception('Adding staff needs an internet connection');
       }
       rethrow;
@@ -485,24 +750,24 @@ class OwnerRepository {
     );
   }
 
+  /// Explicit desired state makes queued replay idempotent. The endpoint
+  /// accepts active alone, so a stale cached name/phone cannot overwrite an
+  /// edit made on another device while this action waited offline.
   Future<void> _setStaffActiveDirect({
     required String employeeId,
-    required String name,
-    required String phone,
     required bool active,
   }) async {
     await apiClient.put(
       ApiEndpoints.employeeDetail(employeeId),
-      body: {'name': name.trim(), 'phone': phone.trim(), 'active': active},
+      body: {'active': active},
     );
   }
 
   Future<void> _setStaffActiveOffline({
     required String employeeId,
-    required String name,
-    required String phone,
     required bool active,
   }) async {
+    lastWriteQueued = true;
     final cached = localCache.getCachedStaff() ?? [];
     final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
     if (idx != -1) {
@@ -513,45 +778,67 @@ class OwnerRepository {
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'set_staff_active',
-      'payload': {
-        'employeeId': employeeId,
-        'name': name.trim(),
-        'phone': phone.trim(),
-        'active': active,
-      },
+      'payload': {'employeeId': employeeId, 'active': active},
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
     SyncEngine.instance.trigger();
   }
 
-  /// Toggles active status of employee
-  Future<void> toggleStaffActive(String employeeId) async {
+  /// Fetches the staff list from the server, refreshes the cache with it and
+  /// returns the row for [employeeId] (null when absent).
+  Future<Map<String, dynamic>?> _fetchStaffRow(String employeeId) async {
+    final response = await apiClient.get(ApiEndpoints.employees);
+    if (response is! List) throw Exception('Unexpected staff response');
+    final rows = [
+      for (final r in response)
+        if (r is Map) Map<String, dynamic>.from(r),
+    ];
+    await localCache.setCachedStaff(rows);
+    for (final r in rows) {
+      if (r['id']?.toString() == employeeId) return r;
+    }
+    return null;
+  }
+
+  static final _staffUnknown = OwnerRefusedException(
+    'Could not confirm this employee\'s current details — refresh the staff '
+    'list and try again',
+  );
+
+  /// The employee's cached row, or (online only) the server's when the cache
+  /// has none. Null when it cannot be determined.
+  Future<Map<String, dynamic>?> _staffRow(
+    String employeeId, {
+    required bool online,
+  }) async {
     final cached = localCache.getCachedStaff() ?? [];
     final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
-    final name = idx != -1 ? (cached[idx]['name']?.toString() ?? '') : '';
-    final phone = idx != -1 ? (cached[idx]['phone']?.toString() ?? '') : '';
-    final currentActive = idx != -1 ? (cached[idx]['active'] != false) : true;
-    final newActive = !currentActive;
+    if (idx != -1) return cached[idx];
+    return online ? _fetchStaffRow(employeeId) : null;
+  }
 
+  /// Toggles active status of employee
+  Future<void> toggleStaffActive(String employeeId) async {
+    lastWriteQueued = false;
     final isOffline = await ConnectivityService.instance.checkIsOffline();
+    Map<String, dynamic>? row;
+    try {
+      row = await _staffRow(employeeId, online: !isOffline);
+    } catch (e) {
+      if (!await _shouldQueue(e)) rethrow;
+    }
+    // Never guess the current state from a missing row.
+    if (row == null) throw _staffUnknown;
+    final newActive = row['active'] == false;
+
     if (isOffline) {
-      await _setStaffActiveOffline(
-        employeeId: employeeId,
-        name: name,
-        phone: phone,
-        active: newActive,
-      );
+      await _setStaffActiveOffline(employeeId: employeeId, active: newActive);
       return;
     }
 
     try {
-      await _setStaffActiveDirect(
-        employeeId: employeeId,
-        name: name,
-        phone: phone,
-        active: newActive,
-      );
+      await _setStaffActiveDirect(employeeId: employeeId, active: newActive);
       final freshCached = localCache.getCachedStaff() ?? [];
       final freshIdx = freshCached.indexWhere(
         (s) => s['id']?.toString() == employeeId,
@@ -561,74 +848,123 @@ class OwnerRepository {
         await localCache.setCachedStaff(freshCached);
       }
     } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
-        await _setStaffActiveOffline(
-          employeeId: employeeId,
-          name: name,
-          phone: phone,
-          active: newActive,
-        );
+      if (await _shouldQueue(e)) {
+        await _setStaffActiveOffline(employeeId: employeeId, active: newActive);
         return;
       }
       rethrow;
     }
   }
 
+  /// [active] null means "leave the employee's status alone": the PUT still
+  /// needs it, so the current one is read from the cache — or, when [fresh]
+  /// is set (a replay long after the cache was written) or the row isn't
+  /// cached, from the server. If it can't be determined nothing is sent.
   Future<StaffMember> _updateStaffDirect({
     required String employeeId,
     required String name,
     required String phone,
     bool? active,
+    bool fresh = false,
+    List<String>? outletIds,
+    String? defaultOutletId,
   }) async {
-    final cached = localCache.getCachedStaff() ?? [];
-    final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
-    final resolvedActive =
-        active ?? (idx != -1 ? (cached[idx]['active'] != false) : true);
+    if (name.trim().isEmpty || phone.trim().isEmpty) {
+      throw ValidationException('Employee name and phone are required');
+    }
+    var resolvedActive = active;
+    if (resolvedActive == null) {
+      final row = fresh
+          ? await _fetchStaffRow(employeeId)
+          : await _staffRow(employeeId, online: true);
+      if (row == null) throw _staffUnknown;
+      resolvedActive = row['active'] != false;
+    }
     final response = await apiClient.put(
       ApiEndpoints.employeeDetail(employeeId),
       body: {
         'name': name.trim(),
         'phone': phone.trim(),
         'active': resolvedActive,
+        // Only sent when the owner changed assignments; leaving them out
+        // keeps whatever the employee already has.
+        'outlets': ?outletIds,
+        if (outletIds != null && defaultOutletId != null)
+          'defaultOutletId': defaultOutletId,
       },
     );
     return StaffMember.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  static List<String>? _stringList(Object? raw) =>
+      raw is List ? [for (final v in raw) v.toString()] : null;
+
+  /// Outlet refs for the ids: names from the outlets cached at sign-in, else
+  /// the name the employee's row already had, else no name at all (never a
+  /// blank one).
+  List<Map<String, dynamic>> _outletRefs(
+    List<String> ids, {
+    List<Map<String, dynamic>> previous = const [],
+  }) {
+    final known = <String, String>{
+      for (final o in previous)
+        if ((o['name']?.toString() ?? '').trim().isNotEmpty)
+          o['id']?.toString() ?? '': o['name'].toString(),
+      for (final o in localCache.getAllowedOutlets() ?? const [])
+        if ((o['displayName']?.toString() ?? '').trim().isNotEmpty)
+          o['id']?.toString() ?? '': o['displayName'].toString(),
+    };
+    return [
+      for (final id in ids)
+        {'id': id, if (known[id] != null) 'name': known[id]},
+    ];
   }
 
   Future<StaffMember> _updateStaffOffline({
     required String employeeId,
     required String name,
     required String phone,
+    List<String>? outletIds,
+    String? defaultOutletId,
   }) async {
     final cached = localCache.getCachedStaff() ?? [];
     final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
-    StaffMember member;
-    if (idx != -1) {
-      cached[idx] = {
-        ...cached[idx],
-        'name': name.trim(),
-        'phone': phone.trim(),
-      };
-      await localCache.setCachedStaff(cached);
-      member = StaffMember.fromJson(cached[idx]);
-    } else {
-      member = StaffMember(
-        id: employeeId,
-        name: name.trim(),
-        phone: phone.trim(),
-        active: true,
-      );
+    // Without the cached row there is nothing to base the edit on.
+    if (idx == -1) throw _staffUnknown;
+    lastWriteQueued = true;
+    final previousOutlets = [
+      for (final o in (cached[idx]['outlets'] as List? ?? const []))
+        if (o is Map) Map<String, dynamic>.from(o),
+    ];
+    final updated = {
+      ...cached[idx],
+      'name': name.trim(),
+      'phone': phone.trim(),
+      if (outletIds != null)
+        'outlets': _outletRefs(outletIds, previous: previousOutlets),
+      if (outletIds != null && defaultOutletId != null)
+        'defaultOutletId': defaultOutletId,
+    };
+    // Outlets changed with no default: the old default no longer applies.
+    if (outletIds != null && defaultOutletId == null) {
+      updated.remove('defaultOutletId');
     }
+    cached[idx] = updated;
+    await localCache.setCachedStaff(cached);
+    final member = StaffMember.fromJson(updated);
 
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'update_staff',
+      // No `active`: the replay reads the server's current value, so a
+      // stale copy here can't reactivate someone deactivated meanwhile.
       'payload': {
         'employeeId': employeeId,
         'name': name.trim(),
         'phone': phone.trim(),
-        'active': member.active,
+        'outlets': ?outletIds,
+        if (outletIds != null && defaultOutletId != null)
+          'defaultOutletId': defaultOutletId,
       },
       'queuedAt': DateTime.now().toIso8601String(),
     });
@@ -637,18 +973,25 @@ class OwnerRepository {
     return member;
   }
 
-  /// Updates staff member details
+  /// Updates staff member details. [outletIds] / [defaultOutletId] are only
+  /// passed when the owner changed the employee's outlets; null leaves them
+  /// as they are.
   Future<StaffMember> updateStaff({
     required String employeeId,
     required String name,
     required String phone,
+    List<String>? outletIds,
+    String? defaultOutletId,
   }) async {
+    lastWriteQueued = false;
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       return _updateStaffOffline(
         employeeId: employeeId,
         name: name,
         phone: phone,
+        outletIds: outletIds,
+        defaultOutletId: defaultOutletId,
       );
     }
 
@@ -657,6 +1000,8 @@ class OwnerRepository {
         employeeId: employeeId,
         name: name,
         phone: phone,
+        outletIds: outletIds,
+        defaultOutletId: defaultOutletId,
       );
       final cached = localCache.getCachedStaff() ?? [];
       final idx = cached.indexWhere((s) => s['id']?.toString() == employeeId);
@@ -666,12 +1011,13 @@ class OwnerRepository {
       }
       return staff;
     } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
+      if (await _shouldQueue(e)) {
         return _updateStaffOffline(
           employeeId: employeeId,
           name: name,
           phone: phone,
+          outletIds: outletIds,
+          defaultOutletId: defaultOutletId,
         );
       }
       rethrow;
@@ -710,26 +1056,32 @@ class OwnerRepository {
       );
     }
 
+    var startedSync = false;
     try {
-      SyncManager.instance.startSync('Fetching latest from cloud...');
-      final response = await apiClient.get(ApiEndpoints.paymentMethodsAll);
-      if (response is List) {
-        final methods = response
-            .map(
-              (m) => StorePaymentMethod.fromJson(
-                Map<String, dynamic>.from(m as Map),
-              ),
-            )
-            .toList();
-        await localCache.setCachedPaymentMethods(
-          methods.map((m) => m.toJson()).toList(),
-        );
-        SyncManager.instance.completeSync();
-        return methods;
+      final hasCache = localCache.getCachedPaymentMethods() != null;
+      if (!hasCache) {
+        startedSync = true;
+        SyncManager.instance.startSync('Fetching latest from cloud...');
       }
+      final response = await apiClient.get(ApiEndpoints.paymentMethodsAll);
+      // Not a list (e.g. a captive-portal page): an error, not "no methods".
+      if (response is! List) {
+        throw Exception('Unexpected payment methods response');
+      }
+      final methods = response
+          .map(
+            (m) => StorePaymentMethod.fromJson(
+              Map<String, dynamic>.from(m as Map),
+            ),
+          )
+          .toList();
+      await localCache.setCachedPaymentMethods(
+        methods.map((m) => m.toJson()).toList(),
+      );
       SyncManager.instance.completeSync();
-      return [];
+      return methods;
     } catch (e) {
+      if (_isAccessFailure(e)) rethrow;
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
       final cached = localCache.getCachedPaymentMethods();
       if (cached != null && cached.isNotEmpty) {
@@ -751,6 +1103,10 @@ class OwnerRepository {
         return methods;
       }
       rethrow;
+    } finally {
+      if (startedSync && SyncManager.instance.value.isSyncing) {
+        SyncManager.instance.setError('Could not refresh payment methods');
+      }
     }
   }
 
@@ -762,6 +1118,7 @@ class OwnerRepository {
   }
 
   Future<void> _togglePaymentMethodOffline(String id, bool active) async {
+    lastWriteQueued = true;
     final cached = localCache.getCachedPaymentMethods() ?? [];
     final idx = cached.indexWhere((m) => m['id']?.toString() == id);
     if (idx != -1) {
@@ -781,6 +1138,7 @@ class OwnerRepository {
 
   /// Toggles active state of payment method
   Future<void> togglePaymentMethod(String id, bool active) async {
+    lastWriteQueued = false;
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       await _togglePaymentMethodOffline(id, active);
@@ -796,8 +1154,7 @@ class OwnerRepository {
         await localCache.setCachedPaymentMethods(cached);
       }
     } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
+      if (await _shouldQueue(e)) {
         await _togglePaymentMethodOffline(id, active);
         return;
       }
@@ -835,8 +1192,14 @@ class OwnerRepository {
       );
     }
 
+    var startedSync = false;
     try {
-      SyncManager.instance.startSync('Fetching latest from cloud...');
+      final cachedProfile = localCache.getCachedStoreProfile();
+      final hasCache = cachedProfile != null && cachedProfile.isNotEmpty;
+      if (!hasCache) {
+        startedSync = true;
+        SyncManager.instance.startSync('Fetching latest from cloud...');
+      }
       final response = await apiClient.get(ApiEndpoints.profile);
       if (response is Map) {
         final profile = StoreProfile.fromJson(
@@ -848,6 +1211,7 @@ class OwnerRepository {
       }
       throw Exception('Failed to load store profile');
     } catch (e) {
+      if (_isAccessFailure(e)) rethrow;
       final reallyOffline = await ConnectivityService.instance.checkIsOffline();
       final cached = localCache.getCachedStoreProfile();
       if (cached != null && cached.isNotEmpty) {
@@ -867,6 +1231,10 @@ class OwnerRepository {
         return profile;
       }
       rethrow;
+    } finally {
+      if (startedSync && SyncManager.instance.value.isSyncing) {
+        SyncManager.instance.setError('Could not refresh store profile');
+      }
     }
   }
 
@@ -897,6 +1265,7 @@ class OwnerRepository {
     required String name,
     required String email,
   }) async {
+    lastWriteQueued = true;
     final profile = StoreProfile(
       store: storeName.trim(),
       address: address.trim(),
@@ -931,6 +1300,7 @@ class OwnerRepository {
     required String name,
     required String email,
   }) async {
+    lastWriteQueued = false;
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       return _updateStoreProfileOffline(
@@ -953,8 +1323,7 @@ class OwnerRepository {
       await localCache.setCachedStoreProfile(profile.toJson());
       return profile;
     } catch (e) {
-      final reallyOffline = await ConnectivityService.instance.checkIsOffline();
-      if (reallyOffline) {
+      if (await _shouldQueue(e)) {
         return _updateStoreProfileOffline(
           storeName: storeName,
           address: address,
@@ -965,6 +1334,15 @@ class OwnerRepository {
       }
       rethrow;
     }
+  }
+
+  /// Only the server rejecting the action itself (validation, conflict, not
+  /// found...) counts towards dead-lettering.
+  static bool _countsAsFailure(Object e) {
+    if (e is! ApiException || e is AuthException) return false;
+    final code = e.statusCode;
+    if (code == null || code < 400 || code >= 500) return false;
+    return code != 401 && code != 403 && code != 408 && code != 429;
   }
 
   /// Drains the pending owner actions queue by replaying each queued entry
@@ -1023,6 +1401,17 @@ class OwnerRepository {
         action['payload'] as Map? ?? {},
       );
       var failCount = (action['failCount'] as num?)?.toInt() ?? 0;
+      // Outlet-scoped actions replay under their OWN outlet, whatever the
+      // owner has selected now. Actions queued before this was recorded
+      // carry neither and fall back to the current selection.
+      final String? actionScope = action['scope'] is String
+          ? action['scope'] as String
+          : action.containsKey('outletId')
+          ? (action['outletId'] as String? ?? LocalCacheService.allScope)
+          : null;
+      final String? actionHeader = action.containsKey('outletId')
+          ? (action['outletId'] as String? ?? kNoOutletHeader)
+          : null;
 
       try {
         switch (type) {
@@ -1035,14 +1424,13 @@ class OwnerRepository {
               due: payload['due']?.toString() ?? '',
               monthly: payload['monthly'] == true,
               idempotencyKey: payload['idempotencyKey']?.toString(),
-              outletHeader: action.containsKey('outletId')
-                  ? (action['outletId'] as String? ?? kNoOutletHeader)
-                  : null,
+              outletHeader: actionHeader,
             );
             if (localId != null && localId.isNotEmpty) {
               idMap[localId] = serverExpense.id;
               await rewriteQueuedId('expenseId', localId, serverExpense.id);
-              final cached = localCache.getCachedExpenses() ?? [];
+              final cached =
+                  localCache.getCachedExpensesForScope(actionScope) ?? [];
               final idx = cached.indexWhere(
                 (e) => e['id']?.toString() == localId,
               );
@@ -1051,15 +1439,19 @@ class OwnerRepository {
               } else {
                 cached.insert(0, serverExpense.toJson());
               }
-              await localCache.setCachedExpenses(cached);
+              await localCache.setCachedExpensesForScope(actionScope, cached);
             }
             break;
 
           case 'mark_expense_paid':
             final rawId = payload['expenseId']?.toString() ?? '';
             final resolvedId = idMap[rawId] ?? rawId;
-            await _markExpensePaidDirect(resolvedId);
-            final cached = localCache.getCachedExpenses() ?? [];
+            await _markExpensePaidDirect(
+              resolvedId,
+              outletHeader: actionHeader,
+            );
+            final cached =
+                localCache.getCachedExpensesForScope(actionScope) ?? [];
             final idx = cached.indexWhere(
               (e) =>
                   e['id']?.toString() == resolvedId ||
@@ -1070,7 +1462,7 @@ class OwnerRepository {
                 ...cached[idx],
                 'paid': DateTime.now().toIso8601String(),
               };
-              await localCache.setCachedExpenses(cached);
+              await localCache.setCachedExpensesForScope(actionScope, cached);
             }
             break;
 
@@ -1081,6 +1473,8 @@ class OwnerRepository {
               phone: payload['phone']?.toString() ?? '',
               password: payload['password']?.toString() ?? '',
               idempotencyKey: payload['idempotencyKey']?.toString(),
+              outletIds: _stringList(payload['outlets']),
+              defaultOutletId: payload['defaultOutletId']?.toString(),
             );
             if (localId != null && localId.isNotEmpty) {
               idMap[localId] = serverStaff.id;
@@ -1104,8 +1498,6 @@ class OwnerRepository {
             final newActive = payload['active'] == true;
             await _setStaffActiveDirect(
               employeeId: resolvedId,
-              name: payload['name']?.toString() ?? '',
-              phone: payload['phone']?.toString() ?? '',
               active: newActive,
             );
             final cached = localCache.getCachedStaff() ?? [];
@@ -1134,6 +1526,10 @@ class OwnerRepository {
               name: payload['name']?.toString() ?? '',
               phone: payload['phone']?.toString() ?? '',
               active: payload['active'] as bool?,
+              // Queued without `active`: read the server's current value.
+              fresh: true,
+              outletIds: _stringList(payload['outlets']),
+              defaultOutletId: payload['defaultOutletId']?.toString(),
             );
             final cached = localCache.getCachedStaff() ?? [];
             final idx = cached.indexWhere(
@@ -1202,11 +1598,20 @@ class OwnerRepository {
           break;
         }
 
+        if (!_countsAsFailure(e)) {
+          // Auth, timeouts, 5xx, rate limits, unreadable replies: not this
+          // action's fault. Stop the drain and try again next cycle without
+          // spending its (or any other action's) retry budget.
+          allSuccess = false;
+          updatedQueue.add(action);
+          break;
+        }
+
         failCount++;
         final updatedAction = {
           ...action,
           'failCount': failCount,
-          'lastError': e.toString(),
+          'lastError': e is ApiException ? e.message : e.toString(),
         };
         if (failCount >= 3) {
           newlyDeadLettered.add(updatedAction);

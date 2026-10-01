@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/shared/widgets/period_filter.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
@@ -41,10 +42,18 @@ class FakeDashboardOwnerRepo implements OwnerRepository {
   Future<DashboardMetrics> getDashboardMetrics({
     String? from,
     String? to,
+    String? granularity,
   }) async {
     getDashboardMetricsCallCount++;
     return metrics;
   }
+
+  @override
+  Future<DashboardMetrics> getPeriodMetrics({
+    required String from,
+    required String to,
+    required String granularity,
+  }) async => metrics;
 
   @override
   DashboardMetrics? getCachedDashboardMetricsSync() => null;
@@ -150,7 +159,7 @@ void main() {
     }
 
     testWidgets(
-      'Switching away from Dashboard tab resets its period selector to default (This month)',
+      'Switching away from Dashboard tab resets the card periods to default (current month)',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -163,17 +172,26 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
         await tester.pumpAndSettle();
 
-        // Initially period is "This month"
-        expect(find.text('This month'), findsWidgets);
+        // Sales by date starts on the current month.
+        PeriodRange dateRange() => tester
+            .widget<PeriodFilter>(
+              find.byKey(const ValueKey('filter-salesByDate')),
+            )
+            .value;
+        expect(dateRange(), PeriodRange.thisMonth);
 
-        // Change period to "This week"
-        await tester.tap(find.text('This month').first);
+        // Change its period to "7 days"
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const ValueKey('filter-salesByDate')),
+            matching: find.text('7 days'),
+          ),
+        );
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('This week').last);
-        await tester.pumpAndSettle();
-
-        // Verify "This week" is active
-        expect(find.text('This week'), findsWidgets);
+        expect(dateRange(), PeriodRange.last7);
 
         // Tap Orders bottom nav tab
         await tester.tap(find.text('Orders'));
@@ -183,8 +201,8 @@ void main() {
         await tester.tap(find.text('Dashboard'));
         await tester.pumpAndSettle();
 
-        // Dashboard period has reset back to "This month"
-        expect(find.text('This month'), findsWidgets);
+        // The card's period has reset back to the current month
+        expect(dateRange(), PeriodRange.thisMonth);
       },
     );
 

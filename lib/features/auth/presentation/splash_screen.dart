@@ -46,10 +46,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     // Wordmark fades in as the circular reveal sweeps past the text area
-    _textFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(
+    _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.28, 0.85, curve: Curves.easeOut),
@@ -57,10 +54,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     // Wordmark slides gently upward into its final resting position
-    _textSlideAnimation = Tween<double>(
-      begin: 16.0,
-      end: 0.0,
-    ).animate(
+    _textSlideAnimation = Tween<double>(begin: 16.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.28, 0.85, curve: Curves.easeOutCubic),
@@ -101,7 +95,9 @@ class _SplashScreenState extends State<SplashScreen>
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: widget.animate ? Colors.white : AppColors.brandDeepHydro,
+        backgroundColor: widget.animate
+            ? Colors.white
+            : AppColors.brandDeepHydro,
         body: LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
@@ -117,10 +113,7 @@ class _SplashScreenState extends State<SplashScreen>
               fit: StackFit.expand,
               children: [
                 // Layer 1: White background (matches native splash background)
-                const ColoredBox(
-                  color: Colors.white,
-                  child: SizedBox.expand(),
-                ),
+                const ColoredBox(color: Colors.white, child: SizedBox.expand()),
 
                 // Layer 2: Circular reveal expanding Deep Hydro outward
                 AnimatedBuilder(
@@ -128,7 +121,7 @@ class _SplashScreenState extends State<SplashScreen>
                   builder: (context, _) {
                     final currentRadius = widget.animate
                         ? minRadius +
-                            (maxRadius - minRadius) * _revealAnimation.value
+                              (maxRadius - minRadius) * _revealAnimation.value
                         : maxRadius;
 
                     return ClipPath(
@@ -227,10 +220,7 @@ class _CircleRevealClipper extends CustomClipper<Path> {
   final Offset center;
   final double radius;
 
-  const _CircleRevealClipper({
-    required this.center,
-    required this.radius,
-  });
+  const _CircleRevealClipper({required this.center, required this.radius});
 
   @override
   Path getClip(Size size) {

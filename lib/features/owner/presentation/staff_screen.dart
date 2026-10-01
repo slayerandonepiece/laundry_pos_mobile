@@ -9,6 +9,8 @@ import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/staff_model.dart';
+import 'package:myshop/features/owner/presentation/outlet_assignment_field.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
@@ -292,93 +294,102 @@ class _StaffScreenState extends State<StaffScreen> {
                             final member = filteredStaff[index];
                             return AppCard(
                               padding: const EdgeInsets.all(14),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: member.active
-                                          ? AppColors.primaryTint
-                                          : AppColors.neutralBg,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        member.name.isNotEmpty
-                                            ? member.name[0].toUpperCase()
-                                            : 'S',
-                                        style: TextStyle(
-                                          fontFamily: AppTextStyles.fontDisplay,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w800,
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
                                           color: member.active
-                                              ? AppColors.primary
-                                              : AppColors.mutedText,
+                                              ? AppColors.primaryTint
+                                              : AppColors.neutralBg,
                                         ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 13),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          member.name,
-                                          style: const TextStyle(
-                                            fontFamily: AppTextStyles.fontBody,
-                                            fontSize: 14.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.text,
+                                        child: Center(
+                                          child: Text(
+                                            member.name.isNotEmpty
+                                                ? member.name[0].toUpperCase()
+                                                : 'S',
+                                            style: TextStyle(
+                                              fontFamily:
+                                                  AppTextStyles.fontDisplay,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w800,
+                                              color: member.active
+                                                  ? AppColors.primary
+                                                  : AppColors.mutedText,
+                                            ),
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '${member.phone} · Employee',
-                                          style: AppTextStyles.hint,
+                                      ),
+                                      const SizedBox(width: 13),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              member.name,
+                                              style: const TextStyle(
+                                                fontFamily:
+                                                    AppTextStyles.fontBody,
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.text,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              member.phone,
+                                              style: AppTextStyles.hint,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 64,
+                                        child: SecondaryButton(
+                                          label: 'Edit',
+                                          height: AppButtonHeight.inline,
+                                          textColor: AppColors.primary,
+                                          onPressed: () => _showEditStaffDialog(
+                                            context,
+                                            member,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Switch(
+                                        value: member.active,
+                                        activeThumbColor: AppColors.primary,
+                                        onChanged: (val) {
+                                          context.read<OwnerBloc>().add(
+                                            ToggleStaffActiveEvent(member.id),
+                                          );
+                                        },
+                                      ),
+                                    ],
                                   ),
-                                  OutlinedButton(
-                                    onPressed: () =>
-                                        _showEditStaffDialog(context, member),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      side: const BorderSide(
-                                        color: AppColors.controlBorder,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
+                                  // Outlets on their own full-width line: the
+                                  // name column beside Edit and the switch is
+                                  // too narrow to show more than one outlet.
+                                  if (member.hasNoOutletAccess) ...[
+                                    const SizedBox(height: 10),
+                                    const _NoOutletBadge(),
+                                  ] else if (_outletSummary(member)
+                                      .isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      _outletSummary(member),
+                                      style: AppTextStyles.hint,
                                     ),
-                                    child: const Text(
-                                      'Edit',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Switch(
-                                    value: member.active,
-                                    activeThumbColor: AppColors.primary,
-                                    onChanged: (val) {
-                                      context.read<OwnerBloc>().add(
-                                        ToggleStaffActiveEvent(member.id),
-                                      );
-                                    },
-                                  ),
+                                  ],
                                 ],
                               ),
                             );
@@ -412,6 +423,61 @@ class _StaffScreenState extends State<StaffScreen> {
   }
 }
 
+/// "Main Road (default) · Lake View" — which outlets an employee works in.
+String _outletSummary(StaffMember member) {
+  // Never a blank label or a dangling " · ": fall back to the id, and skip an
+  // outlet that has neither.
+  final outlets = [
+    for (final o in member.outlets ?? const <StaffOutlet>[])
+      if (o.name.trim().isNotEmpty || o.id.trim().isNotEmpty) o,
+  ];
+  return outlets
+      .map((o) {
+        final label = o.name.trim().isNotEmpty ? o.name.trim() : o.id.trim();
+        return outlets.length > 1 && o.id == member.defaultOutletId
+            ? '$label (default)'
+            : label;
+      })
+      .join(' · ');
+}
+
+/// Shown when the server says an employee has no outlet: they can sign in
+/// but have nowhere to work until the owner assigns one.
+class _NoOutletBadge extends StatelessWidget {
+  const _NoOutletBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.warningBg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text(
+        'No outlet access — assign one',
+        style: TextStyle(
+          fontFamily: AppTextStyles.fontBody,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.warning,
+        ),
+      ),
+    );
+  }
+}
+
+/// The outlets this owner can hand out: the active ones from sign-in.
+List<AssignableOutlet> _assignableOutlets(BuildContext context) {
+  final scope = context.read<OutletScopeCubit?>()?.state;
+  if (scope == null) return const [];
+  return [
+    for (final o in scope.allowed)
+      if (o.status.toUpperCase() == 'ACTIVE')
+        AssignableOutlet(id: o.id, name: o.displayName, code: o.outletCode),
+  ];
+}
+
 class AddStaffScreen extends StatefulWidget {
   const AddStaffScreen({super.key});
 
@@ -425,6 +491,12 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
   final _passwordController = TextEditingController();
   late final String _idempotencyKey = IdempotencyKeyGenerator.generate();
   String? _errorMessage;
+
+  late final List<AssignableOutlet> _outlets = _assignableOutlets(context);
+  late Set<String> _selectedOutlets = _outlets.length == 1
+      ? {_outlets.first.id}
+      : <String>{};
+  late String? _defaultOutlet = _outlets.length == 1 ? _outlets.first.id : null;
 
   @override
   void dispose() {
@@ -452,12 +524,22 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
       return;
     }
 
+    // An employee with no outlet can sign in but has nowhere to work.
+    if (_outlets.isNotEmpty && _selectedOutlets.isEmpty) {
+      setState(
+        () => _errorMessage = 'Choose at least one outlet they can work in',
+      );
+      return;
+    }
+
     context.read<OwnerBloc>().add(
       AddStaffEvent(
         name: name,
         phone: phone,
         password: password,
         idempotencyKey: _idempotencyKey,
+        outletIds: _outlets.isEmpty ? null : _selectedOutlets.toList(),
+        defaultOutletId: _outlets.isEmpty ? null : _defaultOutlet,
       ),
     );
     Navigator.pop(context);
@@ -489,55 +571,72 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
           child: Container(color: AppColors.border, height: 1),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_errorMessage != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.dangerBg,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(
-                    fontFamily: AppTextStyles.fontBody,
-                    fontSize: 13,
-                    color: AppColors.danger,
-                    fontWeight: FontWeight.w600,
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.dangerBg,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 13,
+                      color: AppColors.danger,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 14),
+              ],
+              AppTextField(
+                label: 'FULL NAME',
+                hint: 'e.g. Ramesh Kumar',
+                controller: _nameController,
               ),
               const SizedBox(height: 14),
+              AppTextField(
+                label: 'PHONE NUMBER',
+                hint: 'e.g. 9876543210',
+                keyboardType: TextInputType.phone,
+                controller: _phoneController,
+              ),
+              const SizedBox(height: 14),
+              AppTextField(
+                label: 'TEMPORARY PASSWORD',
+                hint: 'At least 8 characters',
+                obscureText: true,
+                controller: _passwordController,
+              ),
+              if (_outlets.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                OutletAssignmentField(
+                  outlets: _outlets,
+                  selected: _selectedOutlets,
+                  defaultId: _defaultOutlet,
+                  onChanged: (selected, defaultId) => setState(() {
+                    _selectedOutlets = selected;
+                    _defaultOutlet = defaultId;
+                    _errorMessage = null;
+                  }),
+                ),
+              ],
+              const SizedBox(height: 24),
+              PrimaryButton(label: 'Create staff account', onPressed: _save),
             ],
-            AppTextField(
-              label: 'FULL NAME',
-              hint: 'e.g. Ramesh Kumar',
-              controller: _nameController,
-            ),
-            const SizedBox(height: 14),
-            AppTextField(
-              label: 'PHONE NUMBER',
-              hint: 'e.g. 9876543210',
-              keyboardType: TextInputType.phone,
-              controller: _phoneController,
-            ),
-            const SizedBox(height: 14),
-            AppTextField(
-              label: 'TEMPORARY PASSWORD',
-              hint: 'At least 8 characters',
-              obscureText: true,
-              controller: _passwordController,
-            ),
-            const SizedBox(height: 24),
-            PrimaryButton(label: 'Create staff account', onPressed: _save),
-          ],
+          ),
         ),
       ),
     );
@@ -557,6 +656,29 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   String? _errorMessage;
+
+  // The owner's outlets plus any the employee already has that the owner's
+  // list doesn't show, so saving never silently drops one.
+  late final List<AssignableOutlet> _outlets = () {
+    final options = _assignableOutlets(context);
+    final known = options.map((o) => o.id).toSet();
+    return [
+      ...options,
+      for (final o in widget.member.outlets ?? const <StaffOutlet>[])
+        if (!known.contains(o.id))
+          AssignableOutlet(id: o.id, name: o.name.isEmpty ? o.id : o.name),
+    ];
+  }();
+  late Set<String> _selectedOutlets = {
+    for (final o in widget.member.outlets ?? const <StaffOutlet>[]) o.id,
+  };
+  late String? _defaultOutlet = widget.member.defaultOutletId;
+  bool _outletsTouched = false;
+
+  /// Assignments are only editable once they are known: a list cached before
+  /// they were kept could otherwise be "corrected" blind.
+  bool get _canEditOutlets =>
+      _outlets.isNotEmpty && widget.member.outlets != null;
 
   @override
   void initState() {
@@ -587,8 +709,24 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
       return;
     }
 
+    final sendOutlets = _canEditOutlets && _outletsTouched;
+    if (sendOutlets && _selectedOutlets.isEmpty) {
+      setState(
+        () => _errorMessage = 'Choose at least one outlet they can work in',
+      );
+      return;
+    }
+
+    // Outlets are only sent when changed, so an ordinary name or phone edit
+    // leaves the employee's assignments exactly as they are.
     context.read<OwnerBloc>().add(
-      UpdateStaffEvent(employeeId: widget.member.id, name: name, phone: phone),
+      UpdateStaffEvent(
+        employeeId: widget.member.id,
+        name: name,
+        phone: phone,
+        outletIds: sendOutlets ? _selectedOutlets.toList() : null,
+        defaultOutletId: sendOutlets ? _defaultOutlet : null,
+      ),
     );
     Navigator.pop(context);
   }
@@ -619,48 +757,70 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
           child: Container(color: AppColors.border, height: 1),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_errorMessage != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.dangerBg,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(
-                    fontFamily: AppTextStyles.fontBody,
-                    fontSize: 13,
-                    color: AppColors.danger,
-                    fontWeight: FontWeight.w600,
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.dangerBg,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontBody,
+                      fontSize: 13,
+                      color: AppColors.danger,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 14),
+              ],
+              AppTextField(
+                label: 'FULL NAME',
+                hint: 'e.g. Ramesh Kumar',
+                controller: _nameController,
               ),
               const SizedBox(height: 14),
+              AppTextField(
+                label: 'PHONE NUMBER',
+                hint: 'e.g. 9876543210',
+                keyboardType: TextInputType.phone,
+                controller: _phoneController,
+              ),
+              if (widget.member.hasNoOutletAccess) ...[
+                const SizedBox(height: 14),
+                const _NoOutletBadge(),
+              ],
+              if (_canEditOutlets) ...[
+                const SizedBox(height: 14),
+                OutletAssignmentField(
+                  outlets: _outlets,
+                  selected: _selectedOutlets,
+                  defaultId: _defaultOutlet,
+                  onChanged: (selected, defaultId) => setState(() {
+                    _selectedOutlets = selected;
+                    _defaultOutlet = defaultId;
+                    _outletsTouched = true;
+                    _errorMessage = null;
+                  }),
+                ),
+              ],
+              const SizedBox(height: 24),
+              PrimaryButton(label: 'Save changes', onPressed: _save),
             ],
-            AppTextField(
-              label: 'FULL NAME',
-              hint: 'e.g. Ramesh Kumar',
-              controller: _nameController,
-            ),
-            const SizedBox(height: 14),
-            AppTextField(
-              label: 'PHONE NUMBER',
-              hint: 'e.g. 9876543210',
-              keyboardType: TextInputType.phone,
-              controller: _phoneController,
-            ),
-            const SizedBox(height: 24),
-            PrimaryButton(label: 'Save changes', onPressed: _save),
-          ],
+          ),
         ),
       ),
     );
