@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/logging/app_logger.dart';
+import 'package:myshop/core/sync/sync_freshness.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/core/utils/idempotency.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
@@ -46,7 +47,9 @@ class CartBloc extends Bloc<CartEvent, CartState> {
           error: null,
         ),
       );
-      // Background refresh payment methods when online
+      // Background refresh payment methods when online — unless a sync just
+      // pulled them (sign-in).
+      if (SyncFreshness.isFresh) return;
       try {
         final fresh = await posRepository.listPaymentMethods();
         emit(state.copyWith(paymentMethods: fresh));

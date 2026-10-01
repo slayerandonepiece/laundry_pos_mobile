@@ -1,3 +1,5 @@
+import '../../../shared/widgets/app_button.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -55,7 +57,10 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32.0,
+                vertical: 24.0,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -120,40 +125,26 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                   const SizedBox(height: 36),
 
                   // "Check again" button
-                  OutlinedButton(
-                    onPressed: _isChecking ? null : _handleCheckAgain,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.brandCrispMint,
-                      side: const BorderSide(
-                        color: AppColors.brandCrispMint,
-                        width: 1.5,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 28,
-                        vertical: 14,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                  SizedBox(
+                    width: 220,
+                    child: SecondaryButton(
+                      label: 'Check again',
+                      height: AppButtonHeight.main,
+                      backgroundColor: Colors.transparent,
+                      textColor: AppColors.brandCrispMint,
+                      borderColor: AppColors.brandCrispMint,
+                      icon: _isChecking
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.brandCrispMint,
+                              ),
+                            )
+                          : null,
+                      onPressed: _isChecking ? null : _handleCheckAgain,
                     ),
-                    child: _isChecking
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.brandCrispMint,
-                            ),
-                          )
-                        : const Text(
-                            'Check again',
-                            style: TextStyle(
-                              fontFamily: 'DMSans',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
                   ),
                 ],
               ),

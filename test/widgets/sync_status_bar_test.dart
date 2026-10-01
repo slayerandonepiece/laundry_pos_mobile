@@ -107,5 +107,86 @@ void main() {
       expect(find.text('Unable to sync with server'), findsOneWidget);
       expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
     });
+
+    group('layout', () {
+      const contentKey = ValueKey('content');
+
+      Future<void> pumpScreen(WidgetTester tester) async {
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [
+                  SyncStatusBar(),
+                  Expanded(child: SizedBox.expand(key: contentKey)),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      double contentTop(WidgetTester tester) =>
+          tester.getTopLeft(find.byKey(contentKey)).dy;
+
+      testWidgets('syncing floats over the content and moves nothing', (
+        tester,
+      ) async {
+        await pumpScreen(tester);
+        final resting = contentTop(tester);
+
+        SyncManager.instance.startSync('Syncing products...');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Syncing products...'), findsOneWidget);
+        expect(contentTop(tester), resting);
+
+        // The floating bar spans the whole width from the left edge, not a
+        // strip off to one side.
+        final bar = find.ancestor(
+          of: find.text('Syncing products...'),
+          matching: find.byType(AnimatedContainer),
+        );
+        final rect = tester.getRect(bar.first);
+        final screenWidth =
+            tester.view.physicalSize.width / tester.view.devicePixelRatio;
+        expect(rect.left, 0);
+        expect(rect.width, screenWidth);
+        expect(rect.top, 0);
+      });
+
+      testWidgets('"All data synced" appears and goes without a jump', (
+        tester,
+      ) async {
+        await pumpScreen(tester);
+        final resting = contentTop(tester);
+
+        SyncManager.instance.startSync('Syncing products...');
+        await tester.pump();
+        SyncManager.instance.completeSync();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('All data synced'), findsOneWidget);
+        expect(contentTop(tester), resting);
+
+        await tester.pump(const Duration(seconds: 3));
+        await tester.pumpAndSettle();
+        expect(find.text('All data synced'), findsNothing);
+        expect(contentTop(tester), resting);
+      });
+
+      testWidgets('a state that stays (offline) does take its own space', (
+        tester,
+      ) async {
+        await pumpScreen(tester);
+        final resting = contentTop(tester);
+
+        SyncManager.instance.setOffline(0);
+        await tester.pumpAndSettle();
+
+        expect(contentTop(tester), resting + 36);
+      });
+    });
   });
 }

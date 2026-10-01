@@ -1,3 +1,4 @@
+import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -195,7 +196,15 @@ class SubscriptionScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          OutlinedButton.icon(
+          SecondaryButton(
+            label: 'Contact support',
+            icon: const Icon(
+              Icons.help_outline,
+              size: 16,
+              color: AppColors.primary,
+            ),
+            height: AppButtonHeight.inline,
+            textColor: AppColors.primary,
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -204,17 +213,6 @@ class SubscriptionScreen extends StatelessWidget {
                 ),
               );
             },
-            icon: const Icon(Icons.help_outline, size: 16),
-            label: const Text('Contact support'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.controlBorder),
-              textStyle: const TextStyle(
-                fontFamily: AppTextStyles.fontBody,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
           ),
         ],
       ),

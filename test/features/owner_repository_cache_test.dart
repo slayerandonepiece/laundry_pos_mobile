@@ -6,6 +6,7 @@ import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
+import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 
 class FakeConnectivityService extends ConnectivityService {
@@ -59,6 +60,7 @@ void main() {
     Hive.init(tempDir.path);
     await Hive.openBox(LocalCacheService.boxName);
     localCache = LocalCacheService();
+    SyncManager.instance.completeSync(force: true);
     fakeConnectivity = FakeConnectivityService(mockOffline: false);
     ConnectivityService.instance = fakeConnectivity;
     fakeApiClient = FakeApiClient();
@@ -113,13 +115,87 @@ void main() {
       expect(localCache.getCachedDashboardMetrics(), isNull);
     });
 
+    String isoDaysAgo(int days) {
+      final d = DateTime.now().subtract(Duration(days: days));
+      return '${d.year.toString().padLeft(4, '0')}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+    }
+
+    test(
+      'The month-to-date daily request is the default and is cached',
+      () async {
+        fakeConnectivity.mockOffline = false;
+        fakeApiClient.responses[ApiEndpoints.dashboard] = mockMetricsJson;
+
+        final now = DateTime.now();
+        await ownerRepo.getDashboardMetrics(
+          from: isoDaysAgo(now.day - 1),
+          to: isoDaysAgo(0),
+          granularity: 'day',
+        );
+
+        expect(localCache.getCachedDashboardMetrics(), isNotNull);
+      },
+    );
+
+    test('A custom range that only uses weekly buckets is NOT mistaken for the default', () async {
+      fakeConnectivity.mockOffline = false;
+      fakeApiClient.responses[ApiEndpoints.dashboard] = mockMetricsJson;
+
+      await ownerRepo.getDashboardMetrics(
+        from: '2026-08-01',
+        to: '2026-08-31',
+        granularity: 'week',
+      );
+
+      expect(localCache.getCachedDashboardMetrics(), isNull);
+    });
+
+    test('7-day and 90-day requests are fetched but never cached', () async {
+      fakeConnectivity.mockOffline = false;
+      fakeApiClient.responses[ApiEndpoints.dashboard] = mockMetricsJson;
+
+      await ownerRepo.getDashboardMetrics(
+        from: isoDaysAgo(6),
+        to: isoDaysAgo(0),
+        granularity: 'day',
+      );
+      await ownerRepo.getDashboardMetrics(
+        from: isoDaysAgo(89),
+        to: isoDaysAgo(0),
+        granularity: 'month',
+      );
+
+      expect(localCache.getCachedDashboardMetrics(), isNull);
+    });
+
+    test('cashRange is parsed from the response', () async {
+      fakeConnectivity.mockOffline = false;
+      fakeApiClient.responses[ApiEndpoints.dashboard] = {
+        ...mockMetricsJson,
+        'cashRange': [
+          {'label': '23 Sep', 'income': 20000, 'expenses': 5000},
+        ],
+      };
+
+      final metrics = await ownerRepo.getDashboardMetrics(
+        from: isoDaysAgo(6),
+        to: isoDaysAgo(0),
+        granularity: 'day',
+      );
+
+      expect(metrics.cashRange, hasLength(1));
+      expect(metrics.cashRange.first.income, 20000);
+    });
+
     test('Online success writes cache and returns data', () async {
       fakeConnectivity.mockOffline = false;
       fakeApiClient.responses[ApiEndpoints.dashboard] = mockMetricsJson;
 
       expect(localCache.getCachedDashboardMetrics(), isNull);
 
-      final metrics = await ownerRepo.getDashboardMetrics();
+      final metrics = await ownerRepo.getDefaultDashboardMetrics();
 
       expect(fakeApiClient.getCallCount, 1);
       expect(metrics.todaySales, 35000);
@@ -136,7 +212,7 @@ void main() {
         await localCache.setCachedDashboardMetrics(mockMetricsJson);
         fakeConnectivity.mockOffline = true;
 
-        final metrics = await ownerRepo.getDashboardMetrics();
+        final metrics = await ownerRepo.getDefaultDashboardMetrics();
 
         expect(fakeApiClient.getCallCount, 0);
         expect(metrics.todaySales, 35000);
@@ -148,7 +224,7 @@ void main() {
       fakeConnectivity.mockOffline = true;
 
       expect(
-        () => ownerRepo.getDashboardMetrics(),
+        () => ownerRepo.getDefaultDashboardMetrics(),
         throwsA(
           predicate(
             (e) => e.toString().contains(
@@ -165,11 +241,60 @@ void main() {
       fakeConnectivity.mockOffline = false;
       fakeApiClient.shouldThrow = true;
 
-      final metrics = await ownerRepo.getDashboardMetrics();
+      final metrics = await ownerRepo.getDefaultDashboardMetrics();
 
       expect(fakeApiClient.getCallCount, 1);
       expect(metrics.todaySales, 35000);
     });
+
+    test(
+      'With no cache present, a dashboard fetch emits SyncStatus.syncing',
+      () async {
+        fakeConnectivity.mockOffline = false;
+        fakeApiClient.responses[ApiEndpoints.dashboard] = mockMetricsJson;
+
+        expect(localCache.getCachedDashboardMetrics(), isNull);
+
+        final statuses = <SyncStatus>[];
+        void listener() {
+          statuses.add(SyncManager.instance.value.status);
+        }
+
+        SyncManager.instance.addListener(listener);
+
+        try {
+          await ownerRepo.getDefaultDashboardMetrics();
+          expect(statuses, contains(SyncStatus.syncing));
+        } finally {
+          SyncManager.instance.removeListener(listener);
+        }
+      },
+    );
+
+    test(
+      'With cache present, a dashboard fetch never emits SyncStatus.syncing',
+      () async {
+        await localCache.setCachedDashboardMetrics(mockMetricsJson);
+        fakeConnectivity.mockOffline = false;
+        fakeApiClient.responses[ApiEndpoints.dashboard] = mockMetricsJson;
+
+        expect(localCache.getCachedDashboardMetrics(), isNotNull);
+
+        final statuses = <SyncStatus>[];
+        void listener() {
+          statuses.add(SyncManager.instance.value.status);
+        }
+
+        SyncManager.instance.addListener(listener);
+
+        try {
+          await ownerRepo.getDefaultDashboardMetrics();
+          expect(statuses, isNot(contains(SyncStatus.syncing)));
+        } finally {
+          SyncManager.instance.removeListener(listener);
+        }
+      },
+    );
   });
 
   group('OwnerRepository listExpenses Cache-First Tests', () {

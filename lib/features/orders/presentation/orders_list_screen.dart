@@ -12,6 +12,7 @@ import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/presentation/dialogs/collect_payment_dialog.dart';
+import 'package:myshop/features/orders/presentation/dialogs/record_payment_dialog.dart';
 import 'package:myshop/features/orders/presentation/order_detail_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
@@ -19,8 +20,10 @@ import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
 import 'package:myshop/features/profile/presentation/profile_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
+import 'package:myshop/shared/widgets/app_dropdown.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
+import 'package:myshop/shared/widgets/filter_dropdown_row.dart';
 import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sticky_header_delegate.dart';
@@ -37,16 +40,38 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   final TextEditingController _searchController = TextEditingController();
   SyncStatus? _lastSyncStatus;
 
-  // Search box (44) + gap (12) + filter chip row (44) + container padding
-  // (14 top, 12 bottom) + divider (1) — the fixed height of the pinned
-  // sliver header. Keep in sync with _buildStickyFilters below.
-  static const double _stickyHeaderHeight = 127;
+  // Pinned header: search (46, including its 1px border) + gap (12) + chip row + container padding
+  // (14 top, 12 bottom) + divider (1). The chip row grows with the text scale
+  // (chips are at least 44 tall), so the height is measured per build. The
+  // dropdown row is not pinned — it scrolls away to keep small screens usable.
+  double _stickyHeaderHeight(BuildContext context) {
+    final chipLine = MediaQuery.textScalerOf(context)
+        .scale(AppTextStyles.chip.fontSize ?? 14);
+    // 1.5x line height + 2px chip border covers the tallest font metrics.
+    final chipRow = (chipLine * 1.5 + 2).clamp(44.0, double.infinity);
+    return 14 + 46 + 12 + chipRow + 12 + 1;
+  }
 
   @override
   void initState() {
     super.initState();
     context.read<OrdersBloc>().add(LoadOrdersEvent());
     SyncManager.instance.addListener(_onSyncStateChanged);
+  }
+
+  String? _lastOutletId;
+
+  /// Filters and search belong to the outlet being viewed; carrying them over
+  /// leaves a filtered list under an unselected "All" chip.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final outletId = context.read<OutletScopeCubit>().state.activeOutletId;
+    if (_lastOutletId != null && outletId != _lastOutletId) {
+      _searchController.clear();
+      context.read<OrdersBloc>().add(ClearOrderFiltersEvent());
+    }
+    _lastOutletId = outletId;
   }
 
   @override
@@ -84,6 +109,17 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     final outletScope = context.watch<OutletScopeCubit>().state;
+    if (outletScope.activeOutletId != _lastOutletId) {
+      final changedTo = outletScope.activeOutletId;
+      _lastOutletId = changedTo;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            context.read<OutletScopeCubit>().state.activeOutletId ==
+                changedTo) {
+          _clearFilters(context);
+        }
+      });
+    }
     final ordersState = context.watch<OrdersBloc>().state;
     final allOrders = ordersState.allOrders;
     final activeCount = allOrders.where((o) => !o.isDelivered).length;
@@ -152,18 +188,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
 
           // Counts for stat cards and filter chips
           final allCount = allOrders.length;
-          final toCollectCount = allOrders
-              .where((o) => o.balanceDue > 0 && !o.isDelivered)
-              .length;
           final pendingCount = allOrders
               .where((o) => o.status.toLowerCase() == 'pending')
               .length;
-          final inProgressCount = allOrders
-              .where((o) => o.status.toLowerCase() == 'in progress')
-              .length;
-          final readyCount = allOrders
-              .where((o) => o.status.toLowerCase() == 'ready')
-              .length;
+          // Ready orders are still being worked on, so they count here;
+          // otherwise the three cards fall short of the total.
+          final inProgressCount = allOrders.where((o) {
+            final status = o.status.toLowerCase();
+            return status == 'in progress' || status == 'ready';
+          }).length;
           final deliveredCount = allOrders
               .where((o) => o.status.toLowerCase() == 'delivered')
               .length;
@@ -231,17 +264,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       SliverPersistentHeader(
                         pinned: true,
                         delegate: StickyHeaderDelegate(
-                          height: _stickyHeaderHeight,
-                          child: _buildStickyFilters(
-                            context,
-                            state: state,
-                            allCount: allCount,
-                            toCollectCount: toCollectCount,
-                            pendingCount: pendingCount,
-                            inProgressCount: inProgressCount,
-                            readyCount: readyCount,
-                            deliveredCount: deliveredCount,
-                          ),
+                          height: _stickyHeaderHeight(context),
+                          child: _buildStickyFilters(context, state: state),
+                        ),
+                      ),
+
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                          child: _buildDropdownFilters(context, state: state),
                         ),
                       ),
 
@@ -251,6 +282,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                         allOrders: allOrders,
                         filteredOrders: filteredOrders,
                         outletScope: outletScope,
+                        searchQuery: state.searchQuery,
                         loadFailed: state.loadFailed,
                       ),
                     ],
@@ -262,6 +294,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: 'New order',
         backgroundColor: AppColors.primary,
         onPressed: () => _startNewOrder(context),
         child: const Icon(Icons.add, color: Colors.white),
@@ -283,12 +316,6 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   Widget _buildStickyFilters(
     BuildContext context, {
     required OrdersState state,
-    required int allCount,
-    required int toCollectCount,
-    required int pendingCount,
-    required int inProgressCount,
-    required int readyCount,
-    required int deliveredCount,
   }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -300,7 +327,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
             children: [
               // Search box
               Container(
-                height: 44,
+                height: 46,
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   border: Border.all(color: AppColors.controlBorder),
@@ -342,15 +369,30 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       ),
                     ),
                     if (_searchController.text.isNotEmpty)
-                      InkWell(
-                        onTap: () {
-                          _searchController.clear();
-                          context.read<OrdersBloc>().add(SearchOrdersEvent(''));
-                        },
-                        child: const Icon(
-                          Icons.close,
-                          size: 18,
-                          color: AppColors.mutedText,
+                      Semantics(
+                        label: 'Clear search',
+                        button: true,
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 44,
+                              height: 44,
+                            ),
+                            onPressed: () {
+                              _searchController.clear();
+                              context.read<OrdersBloc>().add(
+                                SearchOrdersEvent(''),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.close,
+                              size: 18,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -364,37 +406,37 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                 child: Row(
                   children: [
                     AppFilterChip(
-                      label: 'All $allCount',
+                      label: 'All ${state.countFor('all')}',
                       isSelected: state.activeFilter == 'all',
                       onTap: () => _setFilter(context, 'all'),
                     ),
                     const SizedBox(width: 8),
                     AppFilterChip(
-                      label: 'To collect $toCollectCount',
+                      label: 'To collect ${state.countFor('to_collect')}',
                       isSelected: state.activeFilter == 'to_collect',
                       onTap: () => _setFilter(context, 'to_collect'),
                     ),
                     const SizedBox(width: 8),
                     AppFilterChip(
-                      label: 'Pending $pendingCount',
+                      label: 'Pending ${state.countFor('pending')}',
                       isSelected: state.activeFilter == 'pending',
                       onTap: () => _setFilter(context, 'pending'),
                     ),
                     const SizedBox(width: 8),
                     AppFilterChip(
-                      label: 'In progress $inProgressCount',
+                      label: 'In progress ${state.countFor('in_progress')}',
                       isSelected: state.activeFilter == 'in_progress',
                       onTap: () => _setFilter(context, 'in_progress'),
                     ),
                     const SizedBox(width: 8),
                     AppFilterChip(
-                      label: 'Ready $readyCount',
+                      label: 'Ready ${state.countFor('ready')}',
                       isSelected: state.activeFilter == 'ready',
                       onTap: () => _setFilter(context, 'ready'),
                     ),
                     const SizedBox(width: 8),
                     AppFilterChip(
-                      label: 'Delivered $deliveredCount',
+                      label: 'Delivered ${state.countFor('delivered')}',
                       isSelected: state.activeFilter == 'delivered',
                       onTap: () => _setFilter(context, 'delivered'),
                     ),
@@ -407,6 +449,42 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         const Divider(color: AppColors.border, height: 1),
       ],
     );
+  }
+
+  Widget _buildDropdownFilters(
+    BuildContext context, {
+    required OrdersState state,
+  }) {
+    return FilterDropdownRow(
+      showClear: state.hasActiveFilters,
+      onClear: () => _clearFilters(context),
+      first: (compact) => AppDropdownField<String>(
+        key: const ValueKey('payment-status-filter'),
+        value: state.paymentFilter,
+        options: [
+          ('all', compact ? 'Payment' : 'Payment status'),
+          const ('paid', 'Paid'),
+          const ('unpaid', 'Unpaid'),
+          const ('partial', 'Part-paid'),
+        ],
+        onChanged: (v) => context.read<OrdersBloc>().add(PaymentFilterEvent(v)),
+      ),
+      second: (compact) => AppDropdownField<String>(
+        key: const ValueKey('due-filter'),
+        value: state.dueFilter,
+        options: [
+          ('any', compact ? 'Due' : 'Any due date'),
+          const ('due_today', 'Due today'),
+          const ('late', 'Late'),
+        ],
+        onChanged: (v) => context.read<OrdersBloc>().add(DueFilterEvent(v)),
+      ),
+    );
+  }
+
+  void _clearFilters(BuildContext context) {
+    _searchController.clear();
+    context.read<OrdersBloc>().add(ClearOrderFiltersEvent());
   }
 
   void _setFilter(BuildContext context, String filter) {
@@ -427,6 +505,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     required List<Order> allOrders,
     required List<Order> filteredOrders,
     required OutletScope outletScope,
+    required String searchQuery,
     bool loadFailed = false,
   }) {
     if (allOrders.isEmpty) {
@@ -467,15 +546,14 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
               padding: const EdgeInsets.all(24),
               child: EmptyState(
                 icon: Icons.search_off_outlined,
-                title: 'No orders match',
-                subtitle:
-                    'Try clearing your search query or switching filters.',
+                title: searchQuery.trim().isNotEmpty
+                    ? 'No orders match "${searchQuery.trim()}"'
+                    : 'No orders match',
+                subtitle: searchQuery.trim().isNotEmpty
+                    ? 'Try another search or clear the filters.'
+                    : 'Try clearing or changing your filters.',
                 actionLabel: 'Clear filters',
-                onAction: () {
-                  _searchController.clear();
-                  context.read<OrdersBloc>().add(SearchOrdersEvent(''));
-                  context.read<OrdersBloc>().add(FilterOrdersEvent('all'));
-                },
+                onAction: () => _clearFilters(context),
               ),
             ),
           ),
@@ -656,6 +734,41 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       hasBalance
                           ? 'Collect ${CurrencyFormatter.format(order.balanceDue)} & deliver'
                           : 'Collect payment & deliver',
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else if (order.isDelivered && hasBalance) ...[
+            const SizedBox(height: 13),
+            InkWell(
+              onTap: () {
+                RecordPaymentDialog.show(context, order: order);
+              },
+              borderRadius: BorderRadius.circular(9),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 46),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.primary, width: 1.5),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.payments_outlined,
+                      size: 17,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Collect ${CurrencyFormatter.format(order.balanceDue)}',
                       style: const TextStyle(
                         fontFamily: AppTextStyles.fontBody,
                         fontSize: 13.5,

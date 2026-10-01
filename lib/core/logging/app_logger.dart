@@ -9,7 +9,12 @@ import 'package:flutter/foundation.dart';
 class AppLogger {
   AppLogger._();
 
-  static void log(String tag, String message, {Object? error, StackTrace? stackTrace}) {
+  static void log(
+    String tag,
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
     final now = DateTime.now();
     final ts =
         '${_two(now.hour)}:${_two(now.minute)}:${_two(now.second)}.${_three(now.millisecond)}';

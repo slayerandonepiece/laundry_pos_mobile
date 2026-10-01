@@ -135,5 +135,88 @@ void main() {
       expect(find.text('Forgot password?'), findsOneWidget);
       expect(find.text('Got it'), findsOneWidget);
     });
+
+    testWidgets('B4: Error banner does not shift form layout position', (
+      tester,
+    ) async {
+      final normalBloc = MockAuthBloc(UnauthenticatedState());
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BlocProvider<AuthBloc>.value(
+            value: normalBloc,
+            child: const LoginScreen(),
+          ),
+        ),
+      );
+      final normalFieldPosition = tester.getTopLeft(
+        find.byType(TextField).first,
+      );
+
+      final errorBloc = MockAuthBloc(
+        UnauthenticatedState(errorMessage: 'Invalid phone or password.'),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BlocProvider<AuthBloc>.value(
+            value: errorBloc,
+            child: const LoginScreen(),
+          ),
+        ),
+      );
+      final errorFieldPosition = tester.getTopLeft(
+        find.byType(TextField).first,
+      );
+
+      expect(errorFieldPosition, equals(normalFieldPosition));
+    });
+
+    testWidgets(
+      'B4: Dismissing error banner with (X) button closes the banner',
+      (tester) async {
+        final bloc = MockAuthBloc(
+          UnauthenticatedState(errorMessage: 'Invalid phone or password.'),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BlocProvider<AuthBloc>.value(
+              value: bloc,
+              child: const LoginScreen(),
+            ),
+          ),
+        );
+
+        expect(find.text('Invalid phone or password.'), findsOneWidget);
+        expect(find.byKey(const Key('login_error_dismiss')), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('login_error_dismiss')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Invalid phone or password.'), findsNothing);
+      },
+    );
+
+    testWidgets('B4: Error banner auto-dismisses after 6 seconds', (
+      tester,
+    ) async {
+      final bloc = MockAuthBloc(
+        UnauthenticatedState(errorMessage: 'Invalid phone or password.'),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BlocProvider<AuthBloc>.value(
+            value: bloc,
+            child: const LoginScreen(),
+          ),
+        ),
+      );
+
+      expect(find.text('Invalid phone or password.'), findsOneWidget);
+
+      // Advance clock by 6 seconds
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invalid phone or password.'), findsNothing);
+    });
   });
 }

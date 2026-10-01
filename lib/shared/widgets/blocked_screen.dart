@@ -7,10 +7,11 @@ import 'app_button.dart';
 import 'app_inset.dart';
 
 class BlockedScreen extends StatelessWidget {
-  final String? reason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed' | 'no_outlet_assigned'
+  final String? reason; // 'membership_inactive' | 'store_locked' | 'store_archived' | 'payment_lapsed' | 'billing_pending' | 'no_outlet_assigned'
   final bool isOwner;
   final String? paidThroughDate;
   final String? ownerPhone;
+  final String? billingUrl;
   final VoidCallback onRetry;
   final VoidCallback onSignOut;
   final int? pendingCount;
@@ -21,6 +22,7 @@ class BlockedScreen extends StatelessWidget {
     required this.isOwner,
     this.paidThroughDate,
     this.ownerPhone,
+    this.billingUrl,
     required this.onRetry,
     required this.onSignOut,
     this.pendingCount,
@@ -93,6 +95,42 @@ class BlockedScreen extends StatelessWidget {
         // Staff never sees figures or dates (Non-negotiable #4)
         description = 'Store operations are paused. Please check with your store owner to resume access.';
       }
+    } else if (normReason == 'billing_pending') {
+      title = 'Billing not completed';
+      if (isOwner) {
+        description = 'Complete payment to start using your organization.';
+        if (billingUrl == null || billingUrl!.isEmpty) {
+          extraNotice = Container(
+            decoration: BoxDecoration(
+              color: AppColors.warningBg,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: AppColors.warningBorder),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 20,
+                  color: AppColors.warning,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Complete payment on the KlenPOS web dashboard',
+                    style: AppTextStyles.hint.copyWith(
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        description = 'Ask your owner to complete billing.';
+      }
     } else {
       description = 'You do not have access to this store. Please contact your store administrator.';
     }
@@ -164,7 +202,10 @@ class BlockedScreen extends StatelessWidget {
                 ),
               ],
               const Spacer(),
-              if (!isOwner && ownerPhone != null && ownerPhone!.isNotEmpty) ...[
+              if (!isOwner &&
+                  normReason != 'billing_pending' &&
+                  ownerPhone != null &&
+                  ownerPhone!.isNotEmpty) ...[
                 PrimaryButton(
                   label: 'Call store owner',
                   icon: const Icon(Icons.call, size: 18, color: Colors.white),
@@ -172,7 +213,25 @@ class BlockedScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
               ],
-              PrimaryButton(label: 'Try again', onPressed: onRetry),
+              if (isOwner &&
+                  normReason == 'billing_pending' &&
+                  billingUrl != null &&
+                  billingUrl!.isNotEmpty) ...[
+                PrimaryButton(
+                  label: 'Complete payment',
+                  onPressed: () async {
+                    final uri = Uri.tryParse(billingUrl!);
+                    if (uri != null && await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+              PrimaryButton(
+                label: normReason == 'billing_pending' ? 'Retry' : 'Try again',
+                onPressed: onRetry,
+              ),
               const SizedBox(height: 12),
               SecondaryButton(label: 'Sign out', onPressed: onSignOut),
             ],

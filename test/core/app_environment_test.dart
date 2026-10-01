@@ -22,9 +22,11 @@ void main() {
     test('Stage url and prod url defaults', () {
       expect(
         AppEnvironmentConfig.stageUrl,
-        anyOf(isEmpty, contains('express-laundry-staging')),
+        anyOf(isEmpty, contains('klenpos-staging')),
       );
-      expect(AppEnvironmentConfig.prodUrl, isEmpty);
+      expect(AppEnvironmentConfig.stageUrl.endsWith('/'), isFalse);
+      expect(AppEnvironmentConfig.prodUrl.endsWith('/'), isFalse);
+      expect(AppEnvironmentConfig.baseUrl.endsWith('/'), isFalse);
     });
 
     test('ApiEndpoints uses AppEnvironmentConfig base URL', () {

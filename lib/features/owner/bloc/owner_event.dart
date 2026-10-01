@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:myshop/features/owner/bloc/owner_state.dart';
+import 'package:myshop/shared/widgets/period_filter.dart';
+
 abstract class OwnerEvent {}
 
 // Load* events read the local cache only (network only when nothing is
@@ -8,10 +11,53 @@ abstract class OwnerEvent {}
 class LoadDashboardEvent extends OwnerEvent {
   final String? from;
   final String? to;
+  final String? granularity;
   final bool refresh;
   final Completer<void>? done;
 
-  LoadDashboardEvent({this.from, this.to, this.refresh = false, this.done});
+  /// True for the period the dashboard opens with — the only one whose
+  /// response is cached and may be shown from cache. Every other period is
+  /// always fetched. Defaults to "no explicit range given"; the screen sets it
+  /// explicitly for its month-to-date default, which does carry a range.
+  final bool isDefaultPeriod;
+
+  /// Identifies the selection (period + outlet scope) this request is for;
+  /// echoed into [OwnerState.dashboardKey] so the screen can tell when the
+  /// metrics it holds belong to a different selection.
+  final String? requestKey;
+
+  LoadDashboardEvent({
+    this.from,
+    this.to,
+    this.granularity,
+    this.refresh = false,
+    this.done,
+    bool? isDefaultPeriod,
+    this.requestKey,
+  }) : isDefaultPeriod = isDefaultPeriod ?? (from == null && to == null);
+}
+
+/// One card asks for its own period. The page's default period needs no
+/// request — send [ResetCardEvent] instead.
+class LoadCardMetricsEvent extends OwnerEvent {
+  final DashboardCard card;
+  final PeriodRange range;
+
+  /// Identifies range + outlet scope; a reply for any other key is dropped.
+  final String requestKey;
+
+  LoadCardMetricsEvent({
+    required this.card,
+    required this.range,
+    required this.requestKey,
+  });
+}
+
+/// Back to the page's own data for these cards (default period, outlet switch).
+class ResetCardEvent extends OwnerEvent {
+  final Set<DashboardCard> cards;
+
+  ResetCardEvent(this.cards);
 }
 
 class LoadExpensesEvent extends OwnerEvent {
@@ -57,12 +103,16 @@ class AddStaffEvent extends OwnerEvent {
   final String phone;
   final String password;
   final String? idempotencyKey;
+  final List<String>? outletIds;
+  final String? defaultOutletId;
 
   AddStaffEvent({
     required this.name,
     required this.phone,
     required this.password,
     this.idempotencyKey,
+    this.outletIds,
+    this.defaultOutletId,
   });
 }
 
@@ -77,10 +127,16 @@ class UpdateStaffEvent extends OwnerEvent {
   final String name;
   final String phone;
 
+  /// Only set when the owner changed the employee's outlets.
+  final List<String>? outletIds;
+  final String? defaultOutletId;
+
   UpdateStaffEvent({
     required this.employeeId,
     required this.name,
     required this.phone,
+    this.outletIds,
+    this.defaultOutletId,
   });
 }
 

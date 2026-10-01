@@ -134,3 +134,25 @@ machine-local and do **not** reach cloud sessions — this file does.
 - Weighted full-height sheets need top safe-area protection with a keyboard; preserve their bottom keyboard/safe-area handling and scrollable content.
 - Browser web-console checks use `localhost:3000`; the iOS API still uses `127.0.0.1:3000`. Do not classify non-localhost dev-asset failure or screenshot-pixel/device-point mismatch as an app bug.
 - Never store account credentials in committed context, reports or memory. Keep historical test claims separate from fresh checks.
+
+## Facts added 2026-10-01 (stage 1.0.4 prep)
+
+- **Local sandbox for write testing**: a disposable local Postgres + backend on
+  `http://127.0.0.1:3100` (owner + three employees with different outlet
+  grants, two outlets, seeded orders/expenses). Build the app against it with
+  `--flavor dev --dart-define=ENV=dev --dart-define=BASE_URL=http://127.0.0.1:3100`.
+  Never write test data to the shared Neon DB; Neon access given is the
+  **stage** branch only.
+- `MOBILE_BLOCK_TERMS_NOT_SET` stays `false` (decided): an organization with
+  no billing terms keeps working. Owners have no self-serve billing, so
+  enabling it would lock them out.
+- Dashboard card filters are per card, presets are 7 days / current month /
+  previous month / custom (366-day cap); the default dashboard request is
+  month-to-date. Do not reintroduce 30/90-day chips.
+- A backend list cached with `unstable_cache` + `revalidateTag` can serve a
+  stale first read after a write; mobile re-fetches right after saving, so
+  such lists must not be cached (employee list was fixed this way).
+- Date-dependent backend tests: the dashboard `cash` series covers the month so
+  far, so assertions on its length must tolerate the 1st of a month.
+- Simulator test agents lose screenshots to request limits; ask for few
+  screenshots per step and treat unseen steps as unverified.

@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/sync/sync_engine.dart';
+import '../../../core/sync/sync_freshness.dart';
 import '../../../core/sync/sync_manager.dart';
 import '../data/models/order_model.dart';
 import '../data/orders_repository.dart';
@@ -17,6 +18,20 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     on<LoadOrdersEvent>(_onLoadOrders);
     on<RefreshOrdersEvent>(_onRefreshOrders);
     on<FilterOrdersEvent>(_onFilterOrders);
+    on<PaymentFilterEvent>(
+      (e, emit) => emit(state.copyWith(paymentFilter: e.filter)),
+    );
+    on<DueFilterEvent>((e, emit) => emit(state.copyWith(dueFilter: e.filter)));
+    on<ClearOrderFiltersEvent>(
+      (e, emit) => emit(
+        state.copyWith(
+          searchQuery: '',
+          activeFilter: 'all',
+          paymentFilter: 'all',
+          dueFilter: 'any',
+        ),
+      ),
+    );
     on<SearchOrdersEvent>(_onSearchOrders);
     on<LoadOrderDetailEvent>(_onLoadOrderDetail);
     on<UpdateOrderStatusEvent>(_onUpdateOrderStatus);
@@ -34,21 +49,54 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     LoadOrdersEvent event,
     Emitter<OrdersState> emit,
   ) async {
+    bool hasCache = false;
+    try {
+      hasCache = ordersRepository.hasCachedOrders();
+    } catch (e) {
+      AppLogger.log(_tag, 'hasCachedOrders() failed', error: e);
+      hasCache = false;
+    }
     final cachedOrders = ordersRepository.getCachedOrdersList();
-    if (cachedOrders.isNotEmpty) {
+    if (hasCache || cachedOrders.isNotEmpty) {
       emit(
         state.copyWith(allOrders: cachedOrders, loadFailed: false, error: null),
       );
+      // Opening right after a sync (sign-in, a switch) has nothing new to
+      // ask the server for.
+      if (!SyncFreshness.isFresh) SyncEngine.instance.trigger();
       return;
     }
 
     emit(state.copyWith(isLoading: true, error: null));
-    await SyncEngine.instance.trigger();
-    final orders = ordersRepository.getCachedOrdersList();
-    final syncState = SyncManager.instance.value;
+    await _syncThenShow(emit, () => SyncEngine.instance.trigger());
+  }
+
+  /// Runs [sync], then shows whatever the cache holds. isLoading always
+  /// clears, even when the sync throws. An empty list only counts as a
+  /// failed load when this run itself failed — not because the shared banner
+  /// happens to carry an old error, and not "No orders yet" after a failure.
+  Future<void> _syncThenShow(
+    Emitter<OrdersState> emit,
+    Future<void> Function() sync,
+  ) async {
+    var syncThrew = false;
+    try {
+      await sync();
+    } catch (e) {
+      syncThrew = true;
+      AppLogger.log(_tag, 'sync failed while loading orders', error: e);
+    }
+    var orders = <Order>[];
+    try {
+      orders = ordersRepository.getCachedOrdersList();
+    } catch (e) {
+      syncThrew = true;
+      AppLogger.log(_tag, 'reading cached orders failed', error: e);
+    }
+    final ranOk = SyncEngine.instance.lastRunSucceeded;
     final loadFailed =
         orders.isEmpty &&
-        (syncState.isOffline || syncState.hasError || syncState.isSyncPaused);
+        (syncThrew || ranOk == false || (ranOk == null && _bannerShowsFailure));
     emit(
       state.copyWith(
         isLoading: false,
@@ -56,6 +104,11 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         loadFailed: loadFailed,
       ),
     );
+  }
+
+  bool get _bannerShowsFailure {
+    final syncState = SyncManager.instance.value;
+    return syncState.isOffline || syncState.hasError || syncState.isSyncPaused;
   }
 
   /// Pull-to-refresh / manual "Sync now": the only path that touches the
@@ -68,19 +121,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     Emitter<OrdersState> emit,
   ) async {
     emit(state.copyWith(isLoading: true, error: null));
-    await SyncEngine.instance.retryNow();
-    final orders = ordersRepository.getCachedOrdersList();
-    final syncState = SyncManager.instance.value;
-    final loadFailed =
-        orders.isEmpty &&
-        (syncState.isOffline || syncState.hasError || syncState.isSyncPaused);
-    emit(
-      state.copyWith(
-        isLoading: false,
-        allOrders: orders,
-        loadFailed: loadFailed,
-      ),
-    );
+    await _syncThenShow(emit, () => SyncEngine.instance.retryNow());
   }
 
   void _onFilterOrders(FilterOrdersEvent event, Emitter<OrdersState> emit) {
@@ -116,7 +157,9 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
             break;
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        AppLogger.log(_tag, 'cached order lookup failed', error: e);
+      }
       if (cached != null) {
         emit(
           state.copyWith(
@@ -224,7 +267,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           // and returned — re-dispatch as a fresh event so the invoice
           // number shows up on screen now instead of only next reopen.
           if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
-        } catch (_) {
+        } catch (e) {
+          AppLogger.log(_tag, 'invoice generation failed', error: e);
           // Ignored — invoice generation retried by SyncEngine after the
           // next clean sync (retryMissingInvoices).
         }
@@ -268,6 +312,22 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           actionSuccessMessage: 'Payment recorded',
         ),
       );
+
+      if (updated.isDelivered &&
+          updated.isPaidInFull &&
+          updated.invoice == null) {
+        () async {
+          try {
+            await ordersRepository.getOrCreateInvoice(event.orderCode);
+            if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
+          } catch (e) {
+            AppLogger.log(_tag, 'invoice generation failed', error: e);
+            // Ignored — invoice generation retried by SyncEngine after the
+            // next clean sync (retryMissingInvoices).
+          }
+        }();
+      }
+
       SyncEngine.instance.trigger();
     } catch (e) {
       AppLogger.log(_tag, 'recordPayment(${event.orderCode}) failed', error: e);
@@ -321,7 +381,8 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
           // and returned — re-dispatch as a fresh event so the invoice
           // number shows up on screen now instead of only next reopen.
           if (!isClosed) add(RefreshInvoiceEvent(event.orderCode));
-        } catch (_) {
+        } catch (e) {
+          AppLogger.log(_tag, 'invoice generation failed', error: e);
           // Ignored — invoice generation retried by SyncEngine after the
           // next clean sync (retryMissingInvoices).
         }

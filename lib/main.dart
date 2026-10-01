@@ -6,6 +6,7 @@ import 'package:myshop/core/constants/app_environment.dart';
 import 'package:myshop/core/gate/app_gate_service.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/network/firebase_service.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
@@ -89,6 +90,29 @@ void main() async {
   );
 }
 
+enum OutletAccessResolution { signOut, outletRevoked, keepSignedIn }
+
+/// Decides what a reason-less 403 / "Invalid outlet" means. Only a real
+/// 401/403 from the server (or an outlet that is still allowed, i.e. the 403
+/// was not about outlet scope) signs the user out; a network/5xx failure of
+/// the refresh keeps them signed in.
+Future<OutletAccessResolution> resolveOutletAccessLost({
+  required String? previousOutletId,
+  required Future<List<Map<String, dynamic>>?> Function() refresh,
+}) async {
+  if (previousOutletId == null) return OutletAccessResolution.signOut;
+  try {
+    final fresh = await refresh();
+    if (fresh == null) return OutletAccessResolution.keepSignedIn;
+    if (fresh.any((o) => o['id']?.toString() == previousOutletId)) {
+      return OutletAccessResolution.signOut;
+    }
+    return OutletAccessResolution.outletRevoked;
+  } on AuthException {
+    return OutletAccessResolution.signOut;
+  }
+}
+
 class MyShopApp extends StatefulWidget {
   final ApiClient apiClient;
   final AuthRepository authRepository;
@@ -136,7 +160,19 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   /// list yet — e.g. switching to a new outlet). Cold start otherwise opens
   /// straight from local data.
   bool _needsSetup(AuthenticatedState state) =>
-      state.isFreshLogin || widget.localCache.getCachedOrders() == null;
+      state.isFreshLogin ||
+      (widget.localCache.getCachedOrders() == null &&
+          _setupSkippedScope != _scopeKey());
+
+  /// Scope whose setup screen the user left via "Continue anyway" with no
+  /// orders pulled. It stays uncached (Orders shows "can't load") but must
+  /// not trap the user on the setup screen.
+  String? _setupSkippedScope;
+
+  String? _scopeKey() {
+    final scope = _outletScopeCubit.state;
+    return scope.allOutlets ? 'all' : scope.activeOutletId;
+  }
 
   Future<void> _handleOutletAccessLost() async {
     if (_rescoping) return;
@@ -156,8 +192,17 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
         _authBloc.add(AccessForbiddenEvent());
         return;
       }
-      final fresh = await widget.authRepository.refreshOutletContext();
-      if (fresh == null || fresh.any((o) => o['id']?.toString() == previous)) {
+      final resolution = await resolveOutletAccessLost(
+        previousOutletId: previous,
+        refresh: widget.authRepository.refreshOutletContext,
+      );
+      if (resolution == OutletAccessResolution.keepSignedIn) {
+        // Could not reach the server (offline / 5xx): that says nothing about
+        // access, so keep the user signed in with the cached outlets.
+        AppLogger.log('MAIN', 'outlet refresh inconclusive; staying signed in');
+        return;
+      }
+      if (resolution == OutletAccessResolution.signOut) {
         _authBloc.add(AccessForbiddenEvent());
         return;
       }
@@ -419,163 +464,170 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
                       ),
                       BlocListener<AuthBloc, AuthState>(
                         listener: (context, state) {
-                  if (state is UnauthenticatedState) {
-                    _outletScopeCubit.reset();
-                    Navigator.of(context).popUntil((route) => route.isFirst);
-                  } else if (state is AuthenticatedState) {
-                    if (state.isFreshLogin) {
-                      // Resolve the O3 initial outlet scope before
-                      // BootstrapScreen (which fetches orders directly) ever
-                      // mounts — otherwise an employee who hasn't picked an
-                      // outlet yet 403s immediately.
-                      _outletScopeCubit.adoptFromLogin(isOwner: state.isOwner);
-                      if (_outletScopeCubit.state.missingCache) {
-                        _authBloc.add(SessionRevokedEvent());
-                      }
-                      return;
-                    }
+                          if (state is UnauthenticatedState) {
+                            _outletScopeCubit.reset();
+                            Navigator.of(context)
+                                .popUntil((route) => route.isFirst);
+                          } else if (state is AuthenticatedState) {
+                            if (state.isFreshLogin) {
+                              // Resolve the O3 initial outlet scope before
+                              // BootstrapScreen (which fetches orders directly) ever
+                              // mounts — otherwise an employee who hasn't picked an
+                              // outlet yet 403s immediately.
+                              _outletScopeCubit.adoptFromLogin(
+                                isOwner: state.isOwner,
+                              );
+                              if (_outletScopeCubit.state.missingCache) {
+                                _authBloc.add(SessionRevokedEvent());
+                              }
+                              return;
+                            }
 
-                    // Cold start (or post-bootstrap re-entry): re-read
-                    // whatever outlet scope is already cached. Preloading
-                    // catalog/orders/dashboard itself happens in the
-                    // OutletScopeCubit listener below, once scope is
-                    // actually resolved — that also covers the case where a
-                    // cold-start employee has to pick from
-                    // OutletRequiredScreen first.
-                    _outletScopeCubit.hydrate();
-                    if (_outletScopeCubit.state.missingCache) {
-                      _authBloc.add(SessionRevokedEvent());
-                    }
-                  }
-                },
-              ),
-              BlocListener<OutletScopeCubit, OutletScope>(
-                listener: (context, scope) {
-                  final authState = _authBloc.state;
-                  if (authState is! AuthenticatedState ||
-                      _needsSetup(authState)) {
-                    // Fresh-login / new-outlet preload is BootstrapScreen's
-                    // job, not OrdersBloc/CartBloc's — see the listener above.
-                    return;
-                  }
-                  if (!scope.missingCache &&
-                      !scope.requiresSelection &&
-                      !scope.blockedNoOutlet) {
-                    _cartBloc.add(LoadCatalogEvent());
-                    _ordersBloc.add(LoadOrdersEvent());
-                    if (authState.isOwner) {
-                      _ownerBloc.add(LoadDashboardEvent());
-                      _ownerBloc.add(LoadExpensesEvent());
-                    }
-                  }
-                },
-              ),
-            ],
-            child: BlocBuilder<AuthBloc, AuthState>(
-              builder: (context, state) {
-                final showSplash =
-                    !_splashAnimationCompleted ||
-                    state is AuthInitialState ||
-                    (state is AuthLoadingState && state.isInitialCheck);
+                            // Cold start (or post-bootstrap re-entry): re-read
+                            // whatever outlet scope is already cached. Preloading
+                            // catalog/orders/dashboard itself happens in the
+                            // OutletScopeCubit listener below, once scope is
+                            // actually resolved — that also covers the case where a
+                            // cold-start employee has to pick from
+                            // OutletRequiredScreen first.
+                            _outletScopeCubit.hydrate();
+                            if (_outletScopeCubit.state.missingCache) {
+                              _authBloc.add(SessionRevokedEvent());
+                            }
+                          }
+                        },
+                      ),
+                      BlocListener<OutletScopeCubit, OutletScope>(
+                        listener: (context, scope) {
+                          final authState = _authBloc.state;
+                          if (authState is! AuthenticatedState ||
+                              _needsSetup(authState)) {
+                            // Fresh-login / new-outlet preload is BootstrapScreen's
+                            // job, not OrdersBloc/CartBloc's — see the listener above.
+                            return;
+                          }
+                          if (!scope.missingCache &&
+                              !scope.requiresSelection &&
+                              !scope.blockedNoOutlet) {
+                            _cartBloc.add(LoadCatalogEvent());
+                            _ordersBloc.add(LoadOrdersEvent());
+                            if (authState.isOwner) {
+                              _ownerBloc.add(LoadDashboardEvent());
+                              _ownerBloc.add(LoadExpensesEvent());
+                            }
+                          }
+                        },
+                      ),
+                    ],
+                    child: BlocBuilder<AuthBloc, AuthState>(
+                      builder: (context, state) {
+                        final showSplash =
+                            !_splashAnimationCompleted ||
+                            state is AuthInitialState ||
+                            (state is AuthLoadingState && state.isInitialCheck);
 
-                if (showSplash) {
-                  return SplashScreen(
-                    onAnimationComplete: () {
-                      if (mounted && !_splashAnimationCompleted) {
-                        setState(() {
-                          _splashAnimationCompleted = true;
-                        });
-                      }
-                    },
-                  );
-                }
+                        if (showSplash) {
+                          return SplashScreen(
+                            onAnimationComplete: () {
+                              if (mounted && !_splashAnimationCompleted) {
+                                setState(() {
+                                  _splashAnimationCompleted = true;
+                                });
+                              }
+                            },
+                          );
+                        }
 
-                if (state is MustChangePasswordState ||
-                    (state is AuthLoadingState &&
-                        state.message == 'Updating password...')) {
-                  return const ResetPasswordScreen();
-                }
+                        if (state is MustChangePasswordState ||
+                            (state is AuthLoadingState &&
+                                state.message == 'Updating password...')) {
+                          return const ResetPasswordScreen();
+                        }
 
-                if (state is AccessBlockedState) {
-                  return BlockedScreen(
-                    reason: state.reason,
-                    isOwner: state.isOwner,
-                    paidThroughDate: state.paidThroughDate,
-                    ownerPhone: state.ownerPhone,
-                    onRetry: () {
-                      _authBloc.add(CheckAuthStatusEvent());
-                    },
-                    onSignOut: () {
-                      _authBloc.add(LogoutRequestedEvent());
-                    },
-                    pendingCount: widget.localCache.getTotalPendingCount(),
-                  );
-                }
+                        if (state is AccessBlockedState) {
+                          return BlockedScreen(
+                            reason: state.reason,
+                            isOwner: state.isOwner,
+                            paidThroughDate: state.paidThroughDate,
+                            ownerPhone: state.ownerPhone,
+                            onRetry: () {
+                              _authBloc.add(CheckAuthStatusEvent());
+                            },
+                            onSignOut: () {
+                              _authBloc.add(LogoutRequestedEvent());
+                            },
+                            pendingCount: widget.localCache
+                                .getTotalPendingCount(),
+                          );
+                        }
 
-                if (state is AuthenticatedState) {
-                  return BlocBuilder<OutletScopeCubit, OutletScope>(
-                    builder: (context, scope) {
-                      if (scope.missingCache) {
-                        // SessionRevokedEvent was just dispatched from the
-                        // listener above; show a brief transitional splash
-                        // rather than guessing an outlet.
-                        return const SplashScreen(animate: false);
-                      }
+                        if (state is AuthenticatedState) {
+                          return BlocBuilder<OutletScopeCubit, OutletScope>(
+                            builder: (context, scope) {
+                              if (scope.missingCache) {
+                                // SessionRevokedEvent was just dispatched from the
+                                // listener above; show a brief transitional splash
+                                // rather than guessing an outlet.
+                                return const SplashScreen(animate: false);
+                              }
 
-                      if (scope.blockedNoOutlet) {
-                        return BlockedScreen(
-                          reason: 'no_outlet_assigned',
-                          isOwner: false,
-                          onRetry: () {
-                            _authBloc.add(CheckAuthStatusEvent());
-                          },
-                          onSignOut: () {
-                            _authBloc.add(LogoutRequestedEvent());
-                          },
-                          pendingCount: widget.localCache
-                              .getTotalPendingCount(),
-                        );
-                      }
+                              if (scope.blockedNoOutlet) {
+                                return BlockedScreen(
+                                  reason: 'no_outlet_assigned',
+                                  isOwner: false,
+                                  onRetry: () {
+                                    _authBloc.add(CheckAuthStatusEvent());
+                                  },
+                                  onSignOut: () {
+                                    _authBloc.add(LogoutRequestedEvent());
+                                  },
+                                  pendingCount: widget.localCache
+                                      .getTotalPendingCount(),
+                                );
+                              }
 
-                      if (scope.requiresSelection) {
-                        return OutletRequiredScreen(
-                          outlets: scope.allowed,
-                          onSelected: (outletId) {
-                            _outletScopeCubit.select(outletId);
-                          },
-                        );
-                      }
+                              if (scope.requiresSelection) {
+                                return OutletRequiredScreen(
+                                  outlets: scope.allowed,
+                                  onSelected: (outletId) {
+                                    _outletScopeCubit.select(outletId);
+                                  },
+                                );
+                              }
 
-                      if (_needsSetup(state)) {
-                        return BootstrapScreen(
-                          // A new scope (outlet switch) restarts the setup.
-                          key: ValueKey(
-                            scope.allOutlets ? 'all' : scope.activeOutletId,
-                          ),
-                          authState: state,
-                          authRepository: widget.authRepository,
-                          posRepository: widget.posRepository,
-                          ordersRepository: widget.ordersRepository,
-                          ownerRepository: widget.ownerRepository,
-                          localCache: widget.localCache,
-                          onCompleted: () {
-                            _authBloc.add(BootstrapCompletedEvent());
-                          },
-                        );
-                      }
-                      return const MainNavigationShell();
-                    },
-                  );
-                }
+                              if (_needsSetup(state)) {
+                                return BootstrapScreen(
+                                  // A new scope (outlet switch) restarts the setup.
+                                  key: ValueKey(
+                                    scope.allOutlets
+                                        ? 'all'
+                                        : scope.activeOutletId,
+                                  ),
+                                  authState: state,
+                                  authRepository: widget.authRepository,
+                                  posRepository: widget.posRepository,
+                                  ordersRepository: widget.ordersRepository,
+                                  ownerRepository: widget.ownerRepository,
+                                  localCache: widget.localCache,
+                                  onCompleted: () {
+                                    _setupSkippedScope = _scopeKey();
+                                    _authBloc.add(BootstrapCompletedEvent());
+                                  },
+                                );
+                              }
+                              return const MainNavigationShell();
+                            },
+                          );
+                        }
 
-                // Default: UnauthenticatedState or AuthLoadingState (when signing in)
-                return const LoginScreen();
-              },
-            ),
-          ),
+                        // Default: UnauthenticatedState or AuthLoadingState (when signing in)
+                        return const LoginScreen();
+                      },
+                    ),
+                  ),
+                ),
         ),
       ),
-    ),
-  );
+    );
   }
 }

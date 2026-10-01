@@ -72,6 +72,22 @@ void main() {
       expect(cubit.state.allowed.length, 2);
     });
 
+    test(
+      'Owner with exactly 1 outlet lands on that outlet with allOutlets: false',
+      () async {
+        await localCache.setAllowedOutletsForStore('store_a', oneOutlet);
+        await localCache.setCachedStoreDetails({'role': 'OWNER'});
+
+        cubit.adoptFromLogin(isOwner: true);
+
+        expect(cubit.state.allOutlets, isFalse);
+        expect(cubit.state.activeOutletId, 'outlet_1');
+        expect(cubit.state.allowed.length, 1);
+        expect(localCache.getActiveOutletId(), 'outlet_1');
+        expect(localCache.isAllOutletsScope(), isFalse);
+      },
+    );
+
     test('Employee with 0 outlets is blocked (O4)', () async {
       await localCache.setAllowedOutletsForStore('store_a', []);
       await localCache.setCachedStoreDetails({'role': 'EMPLOYEE'});
@@ -130,6 +146,18 @@ void main() {
 
       expect(cubit.state.missingCache, isFalse);
       expect(cubit.state.allOutlets, isTrue);
+    });
+
+    test('Owner cold start with exactly 1 outlet hydrates to that outlet with allOutlets: false', () async {
+      await localCache.setAllowedOutletsForStore('store_a', oneOutlet);
+      await localCache.setCachedStoreDetails({'role': 'OWNER'});
+
+      cubit.hydrate();
+
+      expect(cubit.state.missingCache, isFalse);
+      expect(cubit.state.allOutlets, isFalse);
+      expect(cubit.state.activeOutletId, 'outlet_1');
+      expect(cubit.state.allowed.length, 1);
     });
 
     test('reset() clears state back to empty (logout)', () async {

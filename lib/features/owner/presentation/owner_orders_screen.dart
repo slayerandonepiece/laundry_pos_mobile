@@ -9,6 +9,7 @@ import 'package:myshop/features/orders/bloc/orders_bloc.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
+import 'package:myshop/features/orders/presentation/orders_drill_down.dart';
 import 'package:myshop/features/orders/presentation/order_detail_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
@@ -16,16 +17,22 @@ import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/features/shell/data/models/outlet_model.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
+import 'package:myshop/shared/widgets/app_dropdown.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
+import 'package:myshop/shared/widgets/filter_dropdown_row.dart';
 import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
+import 'package:myshop/shared/widgets/period_filter.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class OwnerOrdersScreen extends StatefulWidget {
   final ValueNotifier<int>? resetSignal;
 
-  const OwnerOrdersScreen({super.key, this.resetSignal});
+  /// A view the dashboard asked for; applied when set, then cleared.
+  final ValueNotifier<OrdersDrillDown?>? drillDown;
+
+  const OwnerOrdersScreen({super.key, this.resetSignal, this.drillDown});
 
   @override
   State<OwnerOrdersScreen> createState() => _OwnerOrdersScreenState();
@@ -35,12 +42,41 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
   final TextEditingController _searchController = TextEditingController();
   SyncStatus? _lastSyncStatus;
 
-  String _selectedPeriod =
-      '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
-  DateTime? _customFrom;
-  DateTime? _customTo;
-  String _activeQuickFilter =
-      'selected_dates'; // 'selected_dates' | 'due_today' | 'late'
+  // The Sales summary card's period; it also narrows the list below it.
+  PeriodRange _period = PeriodRange.thisMonth;
+  String _activeQuickFilter = 'selected_dates'; // 'selected_dates' | 'due_today' | 'late' | 'open' | 'delivered_today'
+
+  // The chip row scrolls sideways; a view picked from the dashboard may sit
+  // off-screen, so the active chip is scrolled into view.
+  final Map<String, GlobalKey> _chipKeys = {
+    for (final k in const [
+      'selected_dates',
+      'due_today',
+      'late',
+      'open',
+      'delivered_today',
+    ])
+      k: GlobalKey(),
+  };
+
+  void _setQuickFilter(String value) {
+    setState(() => _activeQuickFilter = value);
+    _revealChip(value);
+  }
+
+  void _revealChip(String value) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final chipContext = _chipKeys[value]?.currentContext;
+      if (!mounted || chipContext == null) return;
+      Scrollable.ensureVisible(
+        chipContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   String _searchQuery = '';
   String _selectedWorkStatus =
       'all'; // 'all' | 'pending' | 'in_progress' | 'ready' | 'delivered'
@@ -51,6 +87,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
   void initState() {
     super.initState();
     widget.resetSignal?.addListener(_onTabLeft);
+    widget.drillDown?.addListener(_applyDrillDown);
     context.read<OrdersBloc>().add(LoadOrdersEvent());
     SyncManager.instance.addListener(_onSyncStateChanged);
   }
@@ -58,172 +95,51 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
   @override
   void dispose() {
     widget.resetSignal?.removeListener(_onTabLeft);
+    widget.drillDown?.removeListener(_applyDrillDown);
     SyncManager.instance.removeListener(_onSyncStateChanged);
     _searchController.dispose();
     super.dispose();
   }
 
+  /// Any narrowing beyond the defaults — decides whether Clear is offered.
+  bool get _hasActiveFilters =>
+      _searchQuery.isNotEmpty ||
+      !_period.isDefault ||
+      _activeQuickFilter != 'selected_dates' ||
+      _selectedWorkStatus != 'all' ||
+      _selectedPaymentStatus != 'all';
+
+  /// Starts from the plain list and applies just the requested view, so the
+  /// rows match the dashboard tile that was tapped.
+  void _applyDrillDown() {
+    final request = widget.drillDown?.value;
+    if (request == null) return;
+    _clearAllFilters();
+    setState(() {
+      _activeQuickFilter = switch (request) {
+        OrdersDrillDown.open => 'open',
+        OrdersDrillDown.deliveredToday => 'delivered_today',
+        OrdersDrillDown.dueToday => 'due_today',
+      };
+    });
+    _revealChip(_activeQuickFilter);
+    widget.drillDown!.value = null;
+  }
+
   void _onTabLeft() {
-    if (_selectedPeriod != '30d' ||
-        _customFrom != null ||
-        _customTo != null ||
-        _activeQuickFilter != 'selected_dates') {
-      setState(() {
-        _selectedPeriod = '30d';
-        _customFrom = null;
-        _customTo = null;
-        _activeQuickFilter = 'selected_dates';
-      });
-    }
+    if (_hasActiveFilters) _clearAllFilters();
   }
 
   void _clearAllFilters() {
     _searchController.clear();
     setState(() {
       _searchQuery = '';
-      _selectedPeriod = '30d';
+      _period = PeriodRange.thisMonth;
       _activeQuickFilter = 'selected_dates';
       _selectedWorkStatus = 'all';
       _selectedPaymentStatus = 'all';
-      _customFrom = null;
-      _customTo = null;
     });
-  }
-
-  Future<void> _pickCustomDate({required bool isFrom}) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isFrom
-          ? (_customFrom ?? now)
-          : (_customTo ?? _customFrom ?? now),
-      firstDate: DateTime(2020),
-      lastDate: now,
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: AppColors.primary,
-            onPrimary: Colors.white,
-            onSurface: AppColors.text,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isFrom) {
-        _customFrom = picked;
-        if (_customTo != null && _customTo!.isBefore(_customFrom!)) {
-          _customTo = _customFrom;
-        }
-      } else {
-        _customTo = picked;
-        if (_customFrom != null && _customFrom!.isAfter(_customTo!)) {
-          _customFrom = _customTo;
-        }
-      }
-    });
-  }
-
-  Widget _buildCustomDateSelector() {
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.selectedSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: InkWell(
-              onTap: () => _pickCustomDate(isFrom: true),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.calendar_today_outlined,
-                    size: 14,
-                    color: AppColors.mutedText,
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'FROM',
-                        style: TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                          color: AppColors.mutedText,
-                        ),
-                      ),
-                      Text(
-                        _customFrom != null
-                            ? DateFormatter.formatShort(_customFrom!)
-                            : 'Pick date',
-                        style: const TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.text,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Container(width: 1, height: 26, color: AppColors.border),
-          const SizedBox(width: 14),
-          Expanded(
-            child: InkWell(
-              onTap: () => _pickCustomDate(isFrom: false),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.calendar_today_outlined,
-                    size: 14,
-                    color: AppColors.mutedText,
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'TO',
-                        style: TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                          color: AppColors.mutedText,
-                        ),
-                      ),
-                      Text(
-                        _customTo != null
-                            ? DateFormatter.formatShort(_customTo!)
-                            : 'Pick date',
-                        style: const TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.text,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    _revealChip('selected_dates');
   }
 
   void _onSyncStateChanged() {
@@ -244,7 +160,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     final scope = context.read<OutletScopeCubit>().state;
     final String? chosenOutletId;
 
-    if (scope.allOutlets) {
+    if (scope.allOutlets && scope.allowed.length > 1) {
       chosenOutletId = await showModalBottomSheet<String>(
         context: context,
         isScrollControlled: true,
@@ -255,7 +171,9 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
         return;
       }
     } else {
-      chosenOutletId = scope.activeOutletId;
+      chosenOutletId =
+          scope.activeOutletId ??
+          (scope.allowed.isNotEmpty ? scope.allowed.first.id : null);
     }
 
     if (!context.mounted) return;
@@ -264,59 +182,36 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
         .push(MaterialPageRoute(builder: (_) => const CustomerDetailsScreen()));
   }
 
+  bool get _quickViewActive => _activeQuickFilter != 'selected_dates';
+
+  /// Names the quick view (which ignores the date range) and flags extra
+  /// narrowing so the totals aren't mistaken for a period sales total.
+  String? get _summarySubtitle {
+    final narrowed =
+        _searchQuery.isNotEmpty ||
+        _selectedWorkStatus != 'all' ||
+        _selectedPaymentStatus != 'all';
+    if (_quickViewActive) {
+      final name = switch (_activeQuickFilter) {
+        'due_today' => 'Due today',
+        'late' => 'Late orders',
+        'open' => 'Open orders',
+        'delivered_today' => 'Delivered today',
+        _ => 'Quick view',
+      };
+      return '$name · ignores the date range${narrowed ? ' · filtered' : ''}';
+    }
+    return narrowed ? 'Filtered' : null;
+  }
+
   DateTime _startOfDay(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 
-  bool _matchesPeriod(Order order, String period, DateTime todayStart) {
-    final orderDate = _startOfDay(order.createdAt);
-    final tomorrowStart = todayStart.add(const Duration(days: 1));
-
-    switch (period) {
-      case 'today':
-        return orderDate.isAtSameMomentAs(todayStart);
-      case '7d':
-        final start7d = todayStart.subtract(const Duration(days: 6));
-        return !orderDate.isBefore(start7d) &&
-            orderDate.isBefore(tomorrowStart);
-      case '30d':
-        final start30d = todayStart.subtract(const Duration(days: 29));
-        final isLast30d =
-            !orderDate.isBefore(start30d) && orderDate.isBefore(tomorrowStart);
-        final isThisMonth =
-            orderDate.year == todayStart.year &&
-            orderDate.month == todayStart.month;
-        return isLast30d || isThisMonth;
-      case 'quarter':
-        final quarterStart = DateTime(
-          todayStart.year,
-          ((todayStart.month - 1) ~/ 3) * 3 + 1,
-          1,
-        );
-        final nextQuarterStart = DateTime(
-          todayStart.year,
-          ((todayStart.month - 1) ~/ 3) * 3 + 4,
-          1,
-        );
-        return !orderDate.isBefore(quarterStart) &&
-            orderDate.isBefore(nextQuarterStart);
-      case 'custom':
-        if (_customFrom == null || _customTo == null) {
-          final start30d = todayStart.subtract(const Duration(days: 29));
-          final isLast30d =
-              !orderDate.isBefore(start30d) &&
-              orderDate.isBefore(tomorrowStart);
-          final isThisMonth =
-              orderDate.year == todayStart.year &&
-              orderDate.month == todayStart.month;
-          return isLast30d || isThisMonth;
-        }
-        final fromDate = _startOfDay(_customFrom!);
-        final toDateTomorrow = _startOfDay(_customTo!)
-            .add(const Duration(days: 1));
-        return !orderDate.isBefore(fromDate) &&
-            orderDate.isBefore(toDateTomorrow);
-      default:
-        return true;
-    }
+  /// True when [completed] (a date or full ISO timestamp) falls on the local
+  /// calendar day [dayStart]. Empty/unparseable values are never "today".
+  bool _completedOn(String? completed, DateTime dayStart) {
+    final parsed = DateTime.tryParse(completed ?? '');
+    if (parsed == null) return false;
+    return _startOfDay(parsed.toLocal()).isAtSameMomentAs(dayStart);
   }
 
   List<Order> _filterOrders(List<Order> allOrders) {
@@ -326,18 +221,24 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     return allOrders.where((order) {
       // 1. Quick filter / Date range
       if (_activeQuickFilter == 'due_today') {
+        // Same meaning as the dashboard's "Due today": still to be delivered.
+        if (!order.hasValidDueDate || order.isDelivered) return false;
         final dueDate = _startOfDay(order.dueDateTime);
-        if (!dueDate.isAtSameMomentAs(todayStart)) {
-          return false;
-        }
+        if (!dueDate.isAtSameMomentAs(todayStart)) return false;
       } else if (_activeQuickFilter == 'late') {
+        if (!order.hasValidDueDate || order.isDelivered) return false;
         final dueDate = _startOfDay(order.dueDateTime);
-        if (!dueDate.isBefore(todayStart) || order.isDelivered) {
+        if (!dueDate.isBefore(todayStart)) return false;
+      } else if (_activeQuickFilter == 'open') {
+        if (order.isDelivered) return false;
+      } else if (_activeQuickFilter == 'delivered_today') {
+        if (!order.isDelivered || !_completedOn(order.completed, todayStart)) {
           return false;
         }
       } else {
         // 'selected_dates'
-        if (!_matchesPeriod(order, _selectedPeriod, todayStart)) {
+        if (!order.hasValidCreatedDate ||
+            !_period.contains(order.createdAt, now)) {
           return false;
         }
       }
@@ -410,6 +311,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: IconButton(
+              tooltip: 'New order',
               icon: Container(
                 width: 36,
                 height: 36,
@@ -477,31 +379,45 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                                 child: Row(
                                   children: [
                                     AppFilterChip(
+                                      key: _chipKeys['selected_dates'],
                                       label: 'Selected dates',
                                       isSelected:
                                           _activeQuickFilter ==
                                           'selected_dates',
-                                      onTap: () => setState(
-                                        () => _activeQuickFilter =
-                                            'selected_dates',
-                                      ),
+                                      onTap: () =>
+                                          _setQuickFilter('selected_dates'),
                                     ),
                                     const SizedBox(width: 8),
                                     AppFilterChip(
+                                      key: _chipKeys['due_today'],
                                       label: 'Due today',
                                       isSelected:
                                           _activeQuickFilter == 'due_today',
-                                      onTap: () => setState(
-                                        () => _activeQuickFilter = 'due_today',
-                                      ),
+                                      onTap: () => _setQuickFilter('due_today'),
                                     ),
                                     const SizedBox(width: 8),
                                     AppFilterChip(
+                                      key: _chipKeys['late'],
                                       label: 'Late',
                                       isSelected: _activeQuickFilter == 'late',
-                                      onTap: () => setState(
-                                        () => _activeQuickFilter = 'late',
-                                      ),
+                                      onTap: () => _setQuickFilter('late'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    AppFilterChip(
+                                      key: _chipKeys['open'],
+                                      label: 'Open',
+                                      isSelected: _activeQuickFilter == 'open',
+                                      onTap: () => _setQuickFilter('open'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    AppFilterChip(
+                                      key: _chipKeys['delivered_today'],
+                                      label: 'Delivered today',
+                                      isSelected:
+                                          _activeQuickFilter ==
+                                          'delivered_today',
+                                      onTap: () =>
+                                          _setQuickFilter('delivered_today'),
                                     ),
                                   ],
                                 ),
@@ -555,12 +471,17 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                                       ),
                                     ),
                                     if (_searchController.text.isNotEmpty)
-                                      InkWell(
-                                        onTap: () {
+                                      IconButton(
+                                        tooltip: 'Clear search',
+                                        style: IconButton.styleFrom(
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: const Size(44, 44),
+                                        ),
+                                        onPressed: () {
                                           _searchController.clear();
                                           setState(() => _searchQuery = '');
                                         },
-                                        child: const Icon(
+                                        icon: const Icon(
                                           Icons.close,
                                           size: 18,
                                           color: AppColors.mutedText,
@@ -571,160 +492,40 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                               ),
                               const SizedBox(height: 10),
 
-                              // 5. Dropdown filters side by side
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      height: 40,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surface,
-                                        border: Border.all(
-                                          color: AppColors.controlBorder,
-                                        ),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<String>(
-                                          value: _selectedWorkStatus,
-                                          isExpanded: true,
-                                          icon: const Icon(
-                                            Icons.expand_more,
-                                            size: 16,
-                                            color: AppColors.mutedText,
-                                          ),
-                                          style: const TextStyle(
-                                            fontFamily: AppTextStyles.fontBody,
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.text,
-                                          ),
-                                          onChanged: (val) {
-                                            if (val != null) {
-                                              setState(
-                                                () => _selectedWorkStatus = val,
-                                              );
-                                            }
-                                          },
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: 'all',
-                                              child: Text(
-                                                'All work statuses',
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'pending',
-                                              child: Text('Pending'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'in_progress',
-                                              child: Text('In Progress'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'ready',
-                                              child: Text('Ready'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'delivered',
-                                              child: Text('Delivered'),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                              // 5. Status dropdowns with Clear (same row at
+                              // normal widths, own line below 320pt).
+                              FilterDropdownRow(
+                                showClear: _hasActiveFilters,
+                                onClear: _clearAllFilters,
+                                first: (compact) => AppDropdownField<String>(
+                                  key: const ValueKey('work-status-filter'),
+                                  value: _selectedWorkStatus,
+                                  options: [
+                                    ('all', compact ? 'Work' : 'Work status'),
+                                    const ('pending', 'Pending'),
+                                    const ('in_progress', 'In Progress'),
+                                    const ('ready', 'Ready'),
+                                    const ('delivered', 'Delivered'),
+                                  ],
+                                  onChanged: (v) =>
+                                      setState(() => _selectedWorkStatus = v),
+                                ),
+                                second: (compact) => AppDropdownField<String>(
+                                  key: const ValueKey('payment-status-filter'),
+                                  value: _selectedPaymentStatus,
+                                  options: [
+                                    (
+                                      'all',
+                                      compact ? 'Payment' : 'Payment status',
                                     ),
+                                    const ('paid', 'Paid'),
+                                    const ('unpaid', 'Unpaid'),
+                                    const ('partial', 'Part-paid'),
+                                  ],
+                                  onChanged: (v) => setState(
+                                    () => _selectedPaymentStatus = v,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Container(
-                                      height: 40,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surface,
-                                        border: Border.all(
-                                          color: AppColors.controlBorder,
-                                        ),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<String>(
-                                          value: _selectedPaymentStatus,
-                                          isExpanded: true,
-                                          icon: const Icon(
-                                            Icons.expand_more,
-                                            size: 16,
-                                            color: AppColors.mutedText,
-                                          ),
-                                          style: const TextStyle(
-                                            fontFamily: AppTextStyles.fontBody,
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.text,
-                                          ),
-                                          onChanged: (val) {
-                                            if (val != null) {
-                                              setState(
-                                                () => _selectedPaymentStatus =
-                                                    val,
-                                              );
-                                            }
-                                          },
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: 'all',
-                                              child: Text(
-                                                'All payment statuses',
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'paid',
-                                              child: Text('Paid'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'unpaid',
-                                              child: Text('Unpaid'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'partial',
-                                              child: Text('Part-paid'),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  GestureDetector(
-                                    onTap: _clearAllFilters,
-                                    child: const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 4,
-                                        horizontal: 2,
-                                      ),
-                                      child: Text(
-                                        'Clear',
-                                        style: TextStyle(
-                                          fontFamily: AppTextStyles.fontBody,
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                               const SizedBox(height: 10),
                             ],
@@ -765,64 +566,78 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Sales summary',
-                style: TextStyle(
-                  fontFamily: AppTextStyles.fontDisplay,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              _PeriodSelector(
-                selectedPeriod: _selectedPeriod,
-                customFrom: _customFrom,
-                customTo: _customTo,
-                onPeriodChanged: (val) {
-                  setState(() {
-                    _selectedPeriod = val;
-                    if (val != 'custom') {
-                      _customFrom = null;
-                      _customTo = null;
-                    }
-                    _activeQuickFilter = 'selected_dates';
-                  });
-                },
-              ),
-            ],
+          const Text(
+            'Sales summary',
+            style: TextStyle(
+              fontFamily: AppTextStyles.fontDisplay,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
           ),
-          if (_selectedPeriod == 'custom') _buildCustomDateSelector(),
+          if (_summarySubtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              _summarySubtitle!,
+              key: const ValueKey('orders-summary-subtitle'),
+              style: const TextStyle(
+                fontFamily: AppTextStyles.fontBody,
+                fontSize: 12,
+                color: AppColors.mutedText,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          // A quick view ignores the period, so the chips are shown dimmed
+          // and inert instead of looking selected.
+          IgnorePointer(
+            ignoring: _quickViewActive,
+            child: Opacity(
+              opacity: _quickViewActive ? 0.4 : 1,
+              child: PeriodFilter(
+                key: const ValueKey('orders-period-filter'),
+                value: _period,
+                onChanged: (r) => setState(() {
+                  _period = r;
+                  _activeQuickFilter = 'selected_dates';
+                }),
+              ),
+            ),
+          ),
           const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    CurrencyFormatter.format(orderValue),
-                    style: const TextStyle(
-                      fontFamily: AppTextStyles.fontDisplay,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.text,
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        CurrencyFormatter.format(orderValue),
+                        style: const TextStyle(
+                          fontFamily: AppTextStyles.fontDisplay,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.text,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Total order value',
-                    style: TextStyle(
-                      fontFamily: AppTextStyles.fontBody,
-                      fontSize: 12,
-                      color: AppColors.mutedText,
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Total order value',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 12,
+                        color: AppColors.mutedText,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
@@ -857,24 +672,32 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Text(
-                          'Collected',
-                          style: TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 12,
-                            color: AppColors.mutedText,
+                        const Flexible(
+                          child: Text(
+                            'Collected',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 12,
+                              color: AppColors.mutedText,
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      CurrencyFormatter.format(collected),
-                      style: const TextStyle(
-                        fontFamily: AppTextStyles.fontDisplay,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        CurrencyFormatter.format(collected),
+                        style: const TextStyle(
+                          fontFamily: AppTextStyles.fontDisplay,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.text,
+                        ),
                       ),
                     ),
                   ],
@@ -897,26 +720,34 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Text(
-                          'To collect',
-                          style: TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 12,
-                            color: AppColors.mutedText,
+                        const Flexible(
+                          child: Text(
+                            'To collect',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 12,
+                              color: AppColors.mutedText,
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      CurrencyFormatter.format(toCollect),
-                      style: TextStyle(
-                        fontFamily: AppTextStyles.fontDisplay,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: toCollect > 0
-                            ? AppColors.danger
-                            : AppColors.text,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        CurrencyFormatter.format(toCollect),
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fontDisplay,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: toCollect > 0
+                              ? AppColors.danger
+                              : AppColors.text,
+                        ),
                       ),
                     ),
                   ],
@@ -1000,8 +831,24 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     }
 
     if (filteredOrders.isEmpty) {
-      final isQuickFilterActive =
-          _activeQuickFilter == 'due_today' || _activeQuickFilter == 'late';
+      // A quick view that is the only narrowing left and finds nothing is
+      // good news, not a failed search.
+      final onlyQuickView =
+          _activeQuickFilter != 'selected_dates' &&
+          _searchQuery.isEmpty &&
+          _selectedWorkStatus == 'all' &&
+          _selectedPaymentStatus == 'all';
+      final (quickTitle, quickText) = switch (_activeQuickFilter) {
+        'open' => ('No open orders', 'Everything has been delivered.'),
+        'delivered_today' => (
+          'Nothing delivered today',
+          'Orders you hand over today will show here.',
+        ),
+        _ => (
+          'Nothing here yet',
+          "Nothing due today or overdue, you're all caught up",
+        ),
+      };
 
       return [
         SliverFillRemaining(
@@ -1009,12 +856,11 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
           child: Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: isQuickFilterActive
-                  ? const EmptyState(
+              child: onlyQuickView
+                  ? EmptyState(
                       icon: Icons.check_circle_outline,
-                      title: 'Nothing here yet',
-                      subtitle:
-                          "Nothing due today or overdue, you're all caught up",
+                      title: quickTitle,
+                      subtitle: quickText,
                     )
                   : EmptyState(
                       icon: Icons.search_off_outlined,
@@ -1169,86 +1015,6 @@ class _OwnerOrderCard extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _PeriodSelector extends StatelessWidget {
-  final String selectedPeriod;
-  final DateTime? customFrom;
-  final DateTime? customTo;
-  final ValueChanged<String> onPeriodChanged;
-
-  const _PeriodSelector({
-    required this.selectedPeriod,
-    this.customFrom,
-    this.customTo,
-    required this.onPeriodChanged,
-  });
-
-  static const _labels = {
-    'today': 'Today',
-    '7d': 'This week',
-    '30d': 'This month',
-    'quarter': 'This quarter',
-    'custom': 'Custom dates',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.controlBorder),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: selectedPeriod,
-          icon: const Icon(
-            Icons.expand_more,
-            size: 16,
-            color: AppColors.mutedText,
-          ),
-          style: const TextStyle(
-            fontFamily: AppTextStyles.fontBody,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.text,
-          ),
-          onChanged: (val) {
-            if (val != null) {
-              onPeriodChanged(val);
-            }
-          },
-          selectedItemBuilder: (context) {
-            return _labels.entries.map((e) {
-              String labelText = e.value;
-              if (e.key == 'custom' && customFrom != null && customTo != null) {
-                labelText =
-                    '${DateFormatter.formatShort(customFrom!)} – ${DateFormatter.formatShort(customTo!)}';
-              }
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  labelText,
-                  style: const TextStyle(
-                    fontFamily: AppTextStyles.fontBody,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.text,
-                  ),
-                ),
-              );
-            }).toList();
-          },
-          items: _labels.entries.map((e) {
-            return DropdownMenuItem<String>(value: e.key, child: Text(e.value));
-          }).toList(),
-        ),
       ),
     );
   }

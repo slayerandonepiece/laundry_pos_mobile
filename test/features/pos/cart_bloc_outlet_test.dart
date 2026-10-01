@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
@@ -25,6 +26,7 @@ class _FakePosApiClient implements ApiClient {
   final List<String> getUrls = [];
   dynamic nextResponse;
   bool shouldThrow = false;
+  Object? errorToThrow;
 
   @override
   Future<dynamic> get(
@@ -33,6 +35,7 @@ class _FakePosApiClient implements ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     getUrls.add(url);
+    if (errorToThrow != null) throw errorToThrow!;
     if (shouldThrow) throw Exception('Network error');
     return nextResponse;
   }
@@ -319,6 +322,30 @@ void main() {
       expect(result.length, 1);
       expect(result.single.id, 'pm_1');
       expect(result.single.name, 'Cash');
+    });
+
+    for (final status in [401, 403]) {
+      test('$status propagates despite cached payment methods', () async {
+        fakeLocalCache.cachedPaymentMethods = [
+          {'id': 'pm_1', 'name': 'Cash', 'enabled': true},
+        ];
+        fakeApiClient.errorToThrow = AuthException(
+          code: status == 401 ? 'UNAUTHENTICATED' : 'FORBIDDEN',
+          statusCode: status,
+        );
+        await expectLater(
+          posRepo.listPaymentMethods(),
+          throwsA(isA<AuthException>()),
+        );
+      });
+    }
+
+    test('network failure still serves cached payment methods', () async {
+      fakeLocalCache.cachedPaymentMethods = [
+        {'id': 'pm_1', 'name': 'Cash', 'enabled': true},
+      ];
+      fakeApiClient.errorToThrow = ApiException('network');
+      expect((await posRepo.listPaymentMethods()).single.name, 'Cash');
     });
   });
 }

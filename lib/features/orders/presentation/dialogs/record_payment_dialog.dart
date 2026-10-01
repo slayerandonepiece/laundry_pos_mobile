@@ -217,24 +217,10 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                     ),
                     errorText: _amountError,
                     onChanged: (_) => setState(() {}),
-                    suffixIcon: TextButton(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      ),
+                    suffixIcon: TextActionButton(
+                      label: 'Pay balance',
+                      height: AppButtonHeight.compact,
                       onPressed: isBusy ? null : _payBalance,
-                      child: const Text(
-                        'Pay balance',
-                        style: TextStyle(
-                          fontFamily: AppTextStyles.fontBody,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

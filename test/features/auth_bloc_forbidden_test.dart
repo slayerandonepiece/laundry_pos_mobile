@@ -10,8 +10,10 @@ import 'package:myshop/features/auth/data/models/user_model.dart';
 
 class FakeAuthRepository extends AuthRepository {
   bool loggedOut = false;
+  String? blockedReason;
+  String role;
 
-  FakeAuthRepository()
+  FakeAuthRepository({this.blockedReason, this.role = 'EMPLOYEE'})
     : super(
         apiClient: ApiClient(),
         secureStorage: SecureStorageService(),
@@ -23,13 +25,18 @@ class FakeAuthRepository extends AuthRepository {
     return AuthResult(
       user: User(id: 'u1', name: 'Priya', phone: 'priya'),
       stores: [
-        StoreSummary(storeId: 's1', storeName: 'Test Store', role: 'EMPLOYEE'),
+        StoreSummary(
+          storeId: 's1',
+          storeName: 'Test Store',
+          role: role,
+          blockedReason: blockedReason,
+        ),
       ],
     );
   }
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({bool involuntary = false}) async {
     loggedOut = true;
   }
 }
@@ -120,5 +127,87 @@ void main() {
 
       expect(authRepository.loggedOut, isFalse);
     });
+
+    test('billing_pending 403 emits AccessBlockedState with billing_pending reason', () async {
+      authBloc.add(
+        AccessForbiddenEvent(reason: 'billing_pending', paidThroughDate: null),
+      );
+
+      await expectLater(
+        authBloc.stream,
+        emits(
+          isA<AccessBlockedState>().having(
+            (s) => s.reason,
+            'reason',
+            'billing_pending',
+          ),
+        ),
+      );
+
+      expect(authRepository.loggedOut, isFalse);
+    });
+
+    test('checkSession returning billing_pending store emits AccessBlockedState and never AuthenticatedState', () async {
+      final blockedRepo = FakeAuthRepository(
+        blockedReason: 'billing_pending',
+        role: 'OWNER',
+      );
+      final bloc = AuthBloc(
+        authRepository: blockedRepo,
+        localCache: localCache,
+      );
+      addTearDown(bloc.close);
+
+      bloc.add(CheckAuthStatusEvent());
+
+      await expectLater(
+        bloc.stream,
+        emitsInOrder([
+          isA<AuthLoadingState>(),
+          isA<AccessBlockedState>()
+              .having((s) => s.reason, 'reason', 'billing_pending')
+              .having((s) => s.isOwner, 'isOwner', isTrue),
+        ]),
+      );
+      expect(bloc.state is AuthenticatedState, isFalse);
+    });
+
+    test(
+      'checkSession re-run after block cleared emits AuthenticatedState',
+      () async {
+        final mutableRepo = FakeAuthRepository(
+          blockedReason: 'billing_pending',
+          role: 'OWNER',
+        );
+        final bloc = AuthBloc(
+          authRepository: mutableRepo,
+          localCache: localCache,
+        );
+        addTearDown(bloc.close);
+
+        bloc.add(CheckAuthStatusEvent());
+
+        await expectLater(
+          bloc.stream,
+          emitsInOrder([
+            isA<AuthLoadingState>(),
+            isA<AccessBlockedState>().having(
+              (s) => s.reason,
+              'reason',
+              'billing_pending',
+            ),
+          ]),
+        );
+
+        // Now block cleared (e.g. payment completed on web)
+        mutableRepo.blockedReason = null;
+        bloc.add(CheckAuthStatusEvent());
+
+        await expectLater(
+          bloc.stream,
+          emitsInOrder([isA<AuthLoadingState>(), isA<AuthenticatedState>()]),
+        );
+      },
+    );
   });
 }

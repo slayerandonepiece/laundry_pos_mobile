@@ -250,6 +250,11 @@ class Order {
     };
   }
 
+  /// False when [date] is missing/unparseable, in which case [createdAt] is
+  /// only a "now" placeholder that filters must not treat as a real date.
+  bool get hasValidCreatedDate => DateTime.tryParse(date) != null;
+  bool get hasValidDueDate => DateTime.tryParse(due) != null;
+
   DateTime get createdAt =>
       DateTime.tryParse(date)?.toLocal() ?? DateTime.now();
   DateTime get dueDateTime =>

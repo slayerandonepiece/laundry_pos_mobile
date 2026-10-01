@@ -1,5 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/logging/app_logger.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
+import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 
 import 'owner_event.dart';
@@ -12,6 +14,8 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
 
   OwnerBloc({required this.ownerRepository}) : super(OwnerState()) {
     on<LoadDashboardEvent>(_onLoadDashboard);
+    on<LoadCardMetricsEvent>(_onLoadCardMetrics);
+    on<ResetCardEvent>(_onResetCard);
     on<LoadExpensesEvent>(_onLoadExpenses);
     on<AddExpenseEvent>(_onAddExpense);
     on<MarkExpensePaidEvent>(_onMarkExpensePaid);
@@ -26,6 +30,33 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     on<ChangePasswordSubmittedEvent>(_onChangePasswordSubmitted);
   }
 
+  /// The most recent dashboard selection asked for. Handlers run
+  /// concurrently, so a reply (or failure) for an older selection must not
+  /// overwrite what a newer one already showed.
+  String? _latestDashboardKey;
+
+  static const _queuedMessage =
+      'Saved offline — will sync when you\'re back online';
+
+  /// [online] normally; the "saved offline" wording when the repository only
+  /// queued the write. Read straight after the write.
+  String _writeMessage(String online) =>
+      OwnerRepository.lastWriteQueued ? _queuedMessage : online;
+
+  /// What to tell the owner about a failed write: the server's own message
+  /// for validation / conflict rejections (duplicate phone, invalid outlet,
+  /// last outlet...), a refusal's message as is, else [fallback].
+  String _failure(Object e, String fallback) {
+    if (e is OwnerRefusedException) return e.message;
+    if (e is ApiException &&
+        e is! AuthException &&
+        const {400, 409, 422}.contains(e.statusCode) &&
+        e.message.trim().isNotEmpty) {
+      return e.message;
+    }
+    return fallback;
+  }
+
   Set<OwnerSection> _addLoading(OwnerSection section) => {
     ...state.loading,
     section,
@@ -38,16 +69,24 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     LoadDashboardEvent event,
     Emitter<OwnerState> emit,
   ) async {
+    if (event.requestKey != null) _latestDashboardKey = event.requestKey;
+    bool superseded() =>
+        event.requestKey != null && event.requestKey != _latestDashboardKey;
     try {
       // Opening the screen shows the cache only; the network is used on
-      // refresh, for a custom date range (only the default period is cached),
-      // or when nothing is cached yet.
-      final isCustomRange = event.from != null || event.to != null;
-      final cachedMetrics = isCustomRange
-          ? null
-          : ownerRepository.getCachedDashboardMetricsSync();
+      // refresh, for any non-default period (only the default period is
+      // cached), or when nothing is cached yet.
+      final cachedMetrics = event.isDefaultPeriod
+          ? ownerRepository.getCachedDashboardMetricsSync()
+          : null;
       if (cachedMetrics != null) {
-        emit(state.copyWith(metrics: cachedMetrics, error: null));
+        emit(
+          state.copyWith(
+            metrics: cachedMetrics,
+            dashboardKey: event.requestKey,
+            error: null,
+          ),
+        );
         if (!event.refresh) return;
       } else {
         emit(
@@ -61,23 +100,40 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         final metrics = await ownerRepository.getDashboardMetrics(
           from: event.from,
           to: event.to,
+          granularity: event.granularity,
         );
+        if (superseded()) return;
         emit(
           state.copyWith(
             loading: _removeLoading(OwnerSection.dashboard),
             metrics: metrics,
+            dashboardKey: event.requestKey,
           ),
         );
       } catch (e) {
         AppLogger.log(_tag, 'load dashboard failed', error: e);
-        final err = cachedMetrics == null
+        if (superseded()) return;
+        // A 401 means the session is gone (signing out): the auth flow deals
+        // with that, and a "try again" message would linger on the sign-in
+        // screen.
+        final sessionLost = e is AuthException && e.statusCode == 401;
+        final err = cachedMetrics == null && !sessionLost
             ? 'Could not load dashboard — try again'
             : null;
+        // Nothing on the phone and the request failed: the metrics held are
+        // another outlet's. Drop them rather than leave the screen waiting
+        // for a reply that isn't coming (it would stay dimmed for good).
+        final holdsOtherSelection =
+            cachedMetrics == null &&
+            event.requestKey != null &&
+            state.dashboardKey != event.requestKey;
         emit(
           state.copyWith(
             loading: _removeLoading(OwnerSection.dashboard),
             error: err,
             messageSection: err != null ? OwnerSection.dashboard : null,
+            metrics: holdsOtherSelection ? DashboardMetrics() : null,
+            dashboardKey: holdsOtherSelection ? event.requestKey : null,
           ),
         );
       }
@@ -86,6 +142,57 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         event.done!.complete();
       }
     }
+  }
+
+  Future<void> _onLoadCardMetrics(
+    LoadCardMetricsEvent event,
+    Emitter<OwnerState> emit,
+  ) async {
+    emit(
+      state.copyWith(
+        cards: {
+          ...state.cards,
+          event.card: CardMetrics(key: event.requestKey),
+        },
+      ),
+    );
+    try {
+      final metrics = await ownerRepository.getPeriodMetrics(
+        from: event.range.fromIso,
+        to: event.range.toIso,
+        granularity: event.range.granularity,
+      );
+      // The selection moved on while this was in flight: not for this card.
+      if (state.cards[event.card]?.key != event.requestKey) return;
+      emit(
+        state.copyWith(
+          cards: {
+            ...state.cards,
+            event.card: CardMetrics(key: event.requestKey, metrics: metrics),
+          },
+        ),
+      );
+    } catch (e) {
+      AppLogger.log(_tag, 'load card ${event.card.name} failed', error: e);
+      if (state.cards[event.card]?.key != event.requestKey) return;
+      emit(
+        state.copyWith(
+          cards: {
+            ...state.cards,
+            event.card: CardMetrics(key: event.requestKey, failed: true),
+          },
+        ),
+      );
+    }
+  }
+
+  void _onResetCard(ResetCardEvent event, Emitter<OwnerState> emit) {
+    if (!state.cards.keys.any(event.cards.contains)) return;
+    emit(
+      state.copyWith(
+        cards: {...state.cards}..removeWhere((k, _) => event.cards.contains(k)),
+      ),
+    );
   }
 
   Future<void> _onLoadExpenses(
@@ -149,12 +256,13 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         monthly: event.monthly,
         idempotencyKey: event.idempotencyKey,
       );
+      final message = _writeMessage('Expense recorded successfully');
       final updated = await ownerRepository.listExpenses();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.expenses),
           expenses: updated,
-          actionMessage: 'Expense recorded successfully',
+          actionMessage: message,
           messageSection: OwnerSection.expenses,
         ),
       );
@@ -163,7 +271,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.expenses),
-          error: 'Could not add expense — try again',
+          error: _failure(e, 'Could not add expense — try again'),
           messageSection: OwnerSection.expenses,
         ),
       );
@@ -179,12 +287,13 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     );
     try {
       await ownerRepository.markExpensePaid(event.expenseId);
+      final message = _writeMessage('Expense marked paid');
       final updated = await ownerRepository.listExpenses();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.expenses),
           expenses: updated,
-          actionMessage: 'Expense marked paid',
+          actionMessage: message,
           messageSection: OwnerSection.expenses,
         ),
       );
@@ -193,7 +302,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.expenses),
-          error: 'Could not mark expense paid — try again',
+          error: _failure(e, 'Could not mark expense paid — try again'),
           messageSection: OwnerSection.expenses,
         ),
       );
@@ -208,7 +317,10 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       final cachedStaff = ownerRepository.getCachedStaffSync();
       if (cachedStaff != null) {
         emit(state.copyWith(staff: cachedStaff, error: null));
-        if (!event.refresh) return;
+        // A list cached before assignments were kept has no outlet facts:
+        // fetch once so the badges and warnings are real, not guessed.
+        final lacksOutlets = cachedStaff.any((m) => m.outlets == null);
+        if (!event.refresh && !lacksOutlets) return;
       } else {
         emit(
           state.copyWith(loading: _addLoading(OwnerSection.staff), error: null),
@@ -253,13 +365,16 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         phone: event.phone,
         password: event.password,
         idempotencyKey: event.idempotencyKey,
+        outletIds: event.outletIds,
+        defaultOutletId: event.defaultOutletId,
       );
+      final message = _writeMessage('Staff member added successfully');
       final updated = await ownerRepository.listStaff();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.staff),
           staff: updated,
-          actionMessage: 'Staff member added successfully',
+          actionMessage: message,
           messageSection: OwnerSection.staff,
         ),
       );
@@ -273,7 +388,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
           loading: _removeLoading(OwnerSection.staff),
           error: isOfflineError
               ? 'Adding staff needs an internet connection'
-              : 'Could not add staff — try again',
+              : _failure(e, 'Could not add staff — try again'),
           messageSection: OwnerSection.staff,
         ),
       );
@@ -287,11 +402,14 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     emit(state.copyWith(loading: _addLoading(OwnerSection.staff), error: null));
     try {
       await ownerRepository.toggleStaffActive(event.employeeId);
+      final queued = OwnerRepository.lastWriteQueued;
       final updated = await ownerRepository.listStaff();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.staff),
           staff: updated,
+          actionMessage: queued ? _queuedMessage : null,
+          messageSection: queued ? OwnerSection.staff : null,
         ),
       );
     } catch (e) {
@@ -299,7 +417,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.staff),
-          error: 'Could not update staff status — try again',
+          error: _failure(e, 'Could not update staff status — try again'),
           messageSection: OwnerSection.staff,
         ),
       );
@@ -316,13 +434,16 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         employeeId: event.employeeId,
         name: event.name,
         phone: event.phone,
+        outletIds: event.outletIds,
+        defaultOutletId: event.defaultOutletId,
       );
+      final message = _writeMessage('Staff member updated successfully');
       final updated = await ownerRepository.listStaff();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.staff),
           staff: updated,
-          actionMessage: 'Staff member updated successfully',
+          actionMessage: message,
           messageSection: OwnerSection.staff,
         ),
       );
@@ -331,7 +452,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.staff),
-          error: 'Could not update staff — try again',
+          error: _failure(e, 'Could not update staff — try again'),
           messageSection: OwnerSection.staff,
         ),
       );
@@ -395,11 +516,14 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     );
     try {
       await ownerRepository.togglePaymentMethod(event.id, event.active);
+      final queued = OwnerRepository.lastWriteQueued;
       final updated = await ownerRepository.listPaymentMethods();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.paymentMethods),
           paymentMethods: updated,
+          actionMessage: queued ? _queuedMessage : null,
+          messageSection: queued ? OwnerSection.paymentMethods : null,
         ),
       );
     } catch (e) {
@@ -407,7 +531,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.paymentMethods),
-          error: 'Could not update payment method — try again',
+          error: _failure(e, 'Could not update payment method — try again'),
           messageSection: OwnerSection.paymentMethods,
         ),
       );
@@ -478,7 +602,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         state.copyWith(
           loading: _removeLoading(OwnerSection.profile),
           storeProfile: profile,
-          actionMessage: 'Store profile updated',
+          actionMessage: _writeMessage('Store profile updated'),
           messageSection: OwnerSection.profile,
         ),
       );
@@ -487,7 +611,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.profile),
-          error: 'Could not update store profile — try again',
+          error: _failure(e, 'Could not update store profile — try again'),
           messageSection: OwnerSection.profile,
         ),
       );

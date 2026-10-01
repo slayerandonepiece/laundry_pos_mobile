@@ -279,7 +279,7 @@ class _EditItemDialogState extends State<EditItemDialog> {
                   Expanded(
                     child: SecondaryButton(
                       label: 'Cancel',
-                      height: 48,
+                      height: AppButtonHeight.inline,
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ),
@@ -287,7 +287,7 @@ class _EditItemDialogState extends State<EditItemDialog> {
                   Expanded(
                     child: PrimaryButton(
                       label: 'Update',
-                      height: 48,
+                      height: AppButtonHeight.inline,
                       onPressed: () {
                         Navigator.of(context).pop();
                         widget.onUpdateQuantity(_quantity);

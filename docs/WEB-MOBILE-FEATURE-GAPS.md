@@ -49,16 +49,16 @@ Paths below are repository-relative. Web paths start `../laundry_pos/`; other pa
 
 **D3 — Gap: recent orders and filtered attention navigation.** Web `Dashboard.tsx:46` links attention to the filtered register and `:67` provides recent orders with direct details. Flutter `owner_dashboard_screen.dart:631` routes Open orders/Delivered/Due today through the same argument-free callback; the current shell callback only changes tabs. No recent-orders section is rendered in the dashboard composition at `:284`.
 
-- [ ] D3.1 Due today, overdue and open-order actions open the intended result set, rather than the default register.
-- [ ] D3.2 Recent orders are newest first, show the right outlet in aggregate scope, and open the selected order.
-- [ ] D3.3 Offline drill-down uses cached orders and retains existing tab-reset behavior except for explicitly supplied filters.
+- [x] D3.1 Due today, overdue and open-order actions open the intended result set, rather than the default register. _(done 2026-09-30: the three dashboard tiles open Orders on Open / Delivered today / Due today, matching the dashboard's own counts)_
+- [x] D3.2 Recent orders are newest first, show the right outlet in aggregate scope, and open the selected order. _(done 2026-09-30: five newest, outlet named in All outlets, tap opens the order)_
+- [x] D3.3 Offline drill-down uses cached orders and retains existing tab-reset behavior except for explicitly supplied filters. _(done 2026-09-30: cached orders only; leaving the tab still resets filters)_
 
 ## Orders, POS and invoices
 
 **O1 — Partial: employee register filters.** Web `Sales.tsx` offers date selection, Due today/Late and a separate payment-status selector for its register. Flutter owner orders already have these; employee `OrdersState.filteredOrders` and `orders_list_screen.dart:283` expose search and a combined status/To collect chip set.
 
-- [ ] O1.1 Employee can combine work status, payment status and delivery/date scope where required, without gaining owner financial summaries or broader outlet access.
-- [ ] O1.2 Search, clear/reset, chip counts and empty results agree with the filtered cached dataset.
+- [x] O1.1 Employee can combine work status, payment status and delivery/date scope where required, without gaining owner financial summaries or broader outlet access. _(done 2026-09-30: work-status chips + Payment status and Due date dropdowns; no financial summary)_
+- [x] O1.2 Search, clear/reset, chip counts and empty results agree with the filtered cached dataset. _(done 2026-09-30: chip counts follow search, payment and due filters)_
 
 **O2 — Parity: core operations already exist.** Sources: `owner_orders_screen.dart:326`, `order_detail_screen.dart`, `order_activity_screen.dart:138`, `customer_details_screen.dart`, `checkout_screen.dart`, and `orders_repository.dart:157`. Do not rebuild these as new features.
 
@@ -113,9 +113,9 @@ Paths below are repository-relative. Web paths start `../laundry_pos/`; other pa
 
 **S1 — Gap: assignments/default outlet.** Web employee UI displays assigned/default outlets, warns about unassigned staff and edits assignments. Flutter `staff_model.dart` retains only id/name/phone/active; create/update payloads (`owner_repository.dart:424`, `:584`) omit outlets/defaultOutletId. The backend supports these fields. Creation with no outlets creates no outlet memberships, so a new mobile-created employee can lack operational outlet access.
 
-- [ ] S1.1 Add/edit employee supports allowed outlets and a default that belongs to the selection.
-- [ ] S1.2 Existing assignments survive ordinary name/phone edits and queued replay.
-- [ ] S1.3 Assignment badges, no-outlet warning and assignment recovery match server truth.
+- [x] S1.1 Add/edit employee supports allowed outlets and a default that belongs to the selection. _(done 2026-09-30; the API now also refuses outlets outside the organization)_
+- [x] S1.2 Existing assignments survive ordinary name/phone edits and queued replay. _(done 2026-09-30: outlets are sent only when changed)_
+- [x] S1.3 Assignment badges, no-outlet warning and assignment recovery match server truth. _(done 2026-09-30: list shows outlets and a no-access warning; a staff list cached before this refetches once)_
 - [ ] S1.4 Employee sees only granted outlets after refresh/relogin; removing the active outlet preserves current access-loss recovery.
 
 **S2 — Gap: temporary password reset.** Web `ResetEmployeePasswordDialog.tsx` and service reset end current sessions and require password change. Flutter has no owner reset flow. Current PUT can update a password, but a dedicated reset contract or deliberate reuse must be confirmed for full semantics.

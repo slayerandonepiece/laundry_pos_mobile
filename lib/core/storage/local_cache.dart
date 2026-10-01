@@ -166,29 +166,45 @@ class LocalCacheService {
   // reads, same as before.
   static const String keyCachedDashboardMetrics =
       'cached_dashboard_metrics_json';
-  Map<String, dynamic>? getCachedDashboardMetrics() {
-    final raw = _box.get(_outletScopedKey(keyCachedDashboardMetrics));
+  Map<String, dynamic>? getCachedDashboardMetrics() =>
+      getCachedDashboardMetricsForScope(null);
+
+  Future<void> setCachedDashboardMetrics(Map<String, dynamic> metrics) =>
+      setCachedDashboardMetricsForScope(null, metrics);
+
+  Map<String, dynamic>? getCachedDashboardMetricsForScope(String? scope) {
+    final raw = _box.get(_outletScopedKey(keyCachedDashboardMetrics, scope));
     if (raw is Map) {
       return deepCopy(raw) as Map<String, dynamic>;
     }
     return null;
   }
 
-  Future<void> setCachedDashboardMetrics(Map<String, dynamic> metrics) =>
-      _box.put(_outletScopedKey(keyCachedDashboardMetrics), metrics);
+  Future<void> setCachedDashboardMetricsForScope(
+    String? scope,
+    Map<String, dynamic> metrics,
+  ) => _box.put(_outletScopedKey(keyCachedDashboardMetrics, scope), metrics);
 
   // Cached Expenses List
   static const String keyCachedExpenses = 'cached_expenses_list';
-  List<Map<String, dynamic>>? getCachedExpenses() {
-    final raw = _box.get(_outletScopedKey(keyCachedExpenses));
+  List<Map<String, dynamic>>? getCachedExpenses() =>
+      getCachedExpensesForScope(null);
+
+  Future<void> setCachedExpenses(List<Map<String, dynamic>> expensesList) =>
+      setCachedExpensesForScope(null, expensesList);
+
+  List<Map<String, dynamic>>? getCachedExpensesForScope(String? scope) {
+    final raw = _box.get(_outletScopedKey(keyCachedExpenses, scope));
     if (raw is List) {
       return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
     }
     return null;
   }
 
-  Future<void> setCachedExpenses(List<Map<String, dynamic>> expensesList) =>
-      _box.put(_outletScopedKey(keyCachedExpenses), expensesList);
+  Future<void> setCachedExpensesForScope(
+    String? scope,
+    List<Map<String, dynamic>> expensesList,
+  ) => _box.put(_outletScopedKey(keyCachedExpenses, scope), expensesList);
 
   // Cached Staff List
   static const String keyCachedStaff = 'cached_staff_list';
@@ -275,20 +291,48 @@ class LocalCacheService {
   // Outlet-scoped key: switching the active outlet (or All-outlets scope)
   // must not serve the previous scope's cached orders or resume its sync
   // cursor — see keyCachedOrders/keyLastSyncCursor/keyCachedDashboardMetrics.
-  String _outletScopedKey(String baseKey) =>
-      '$baseKey::${getActiveStoreId() ?? 'none'}'
-      '::${getActiveOutletId() ?? (isAllOutletsScope() ? 'all' : 'none')}';
+  //
+  // [scope] names a scope explicitly — an outlet id, or [allScope] for the
+  // combined view — so a sync can fill an outlet other than the active one
+  // without switching to it; null means the active scope.
+  static const String allScope = 'all';
 
-  List<Map<String, dynamic>>? getCachedOrders() {
-    final raw = _box.get(_outletScopedKey(keyCachedOrders));
+  String _outletScopedKey(String baseKey, [String? scope]) =>
+      '$baseKey::${getActiveStoreId() ?? 'none'}'
+      '::${scope ?? getActiveOutletId() ?? (isAllOutletsScope() ? 'all' : 'none')}';
+
+  /// Drops one scope's cached orders, delta cursor, dashboard and expenses.
+  /// Pending/dead-letter queues, other scopes and organization-wide data are
+  /// left alone: queued actions carry their own outlet and must still flush.
+  Future<void> clearScopeData(String scope) async {
+    for (final base in [
+      keyCachedOrders,
+      keyLastSyncCursor,
+      keyCachedDashboardMetrics,
+      keyCachedExpenses,
+    ]) {
+      await _box.delete(_outletScopedKey(base, scope));
+    }
+  }
+
+  List<Map<String, dynamic>>? getCachedOrders() =>
+      getCachedOrdersForScope(null);
+
+  Future<void> setCachedOrders(List<Map<String, dynamic>> ordersList) =>
+      setCachedOrdersForScope(null, ordersList);
+
+  List<Map<String, dynamic>>? getCachedOrdersForScope(String? scope) {
+    final raw = _box.get(_outletScopedKey(keyCachedOrders, scope));
     if (raw is List) {
       return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
     }
     return null;
   }
 
-  Future<void> setCachedOrders(List<Map<String, dynamic>> ordersList) =>
-      _box.put(_outletScopedKey(keyCachedOrders), ordersList);
+  Future<void> setCachedOrdersForScope(
+    String? scope,
+    List<Map<String, dynamic>> ordersList,
+  ) => _box.put(_outletScopedKey(keyCachedOrders, scope), ordersList);
 
   bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) {
     final key =
@@ -321,10 +365,14 @@ class LocalCacheService {
   // so resuming sync after switching scope doesn't skip the new scope's
   // changes or replay the old scope's cursor.
   static const String keyLastSyncCursor = 'last_sync_cursor';
-  String? getLastSyncCursor() =>
-      _box.get(_outletScopedKey(keyLastSyncCursor)) as String?;
+  String? getLastSyncCursor() => getLastSyncCursorForScope(null);
   Future<void> setLastSyncCursor(String cursor) =>
-      _box.put(_outletScopedKey(keyLastSyncCursor), cursor);
+      setLastSyncCursorForScope(null, cursor);
+
+  String? getLastSyncCursorForScope(String? scope) =>
+      _box.get(_outletScopedKey(keyLastSyncCursor, scope)) as String?;
+  Future<void> setLastSyncCursorForScope(String? scope, String cursor) =>
+      _box.put(_outletScopedKey(keyLastSyncCursor, scope), cursor);
 
   // Cached In-Progress Cart
   static const String keyCachedCart = 'cached_cart_json';
@@ -417,6 +465,14 @@ class LocalCacheService {
   /// Combined count of orders pending sync and owner actions pending sync.
   int getTotalPendingCount() {
     return getPendingSyncQueue().length + getPendingOwnerActionsQueue().length;
+  }
+
+  /// Orders + owner actions parked after exhausting their retries. They are
+  /// excluded from [getTotalPendingCount] (so they stop being retried on every
+  /// cycle) but are still unsynced data the user must be told about.
+  int getTotalDeadLetterCount() {
+    return getDeadLetterQueue().length +
+        getDeadLetterOwnerActionsQueue().length;
   }
 
   // Generic key-value helpers for offline storage

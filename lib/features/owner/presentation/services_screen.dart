@@ -1,3 +1,4 @@
+import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -327,17 +328,21 @@ class _ServicesScreenState extends State<ServicesScreen> {
                     onRefresh: () => _loadServices(refresh: true),
                     child: filtered.isEmpty
                         ? ListView(
-                            padding: const EdgeInsets.all(40),
                             children: [
-                              Center(
-                                child: Text(
-                                  _searchQuery.isNotEmpty
-                                      ? 'No services match "$_searchQuery"'
-                                      : 'No services configured yet',
-                                  style: AppTextStyles.hint,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
+                              _searchQuery.isNotEmpty
+                                  ? EmptyState(
+                                      icon: Icons.search_off,
+                                      title: 'No services found',
+                                      subtitle:
+                                          'No services match "$_searchQuery".',
+                                    )
+                                  : const EmptyState(
+                                      icon:
+                                          Icons.local_laundry_service_outlined,
+                                      title: 'No services yet',
+                                      subtitle:
+                                          'Services you add will show here.',
+                                    ),
                             ],
                           )
                         : _isGridView

@@ -1,4 +1,6 @@
-import 'dart:typed_data';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
@@ -35,6 +37,60 @@ class OrdersRepository {
 
   Future<bool>? _pendingSyncInFlight;
 
+  String _incompletePullKey(String scope) =>
+      'orders_setup_pull_incomplete::${_localCache.getActiveStoreId()}::$scope';
+
+  /// Clock for the invoice-retry backoff (replaceable in tests).
+  @visibleForTesting
+  DateTime Function() now = DateTime.now;
+
+  // How long an order the server refused (404/409/403/...) is left alone
+  // before the next sync cycle asks about it again.
+  static const Duration _invoiceBackoff = Duration(minutes: 2);
+  final Map<String, DateTime> _invoiceRetryAfter = {};
+
+  /// Which store/outlet scope was active when a request started. The active
+  /// scope can change while it is in flight (outlet switch, sign-in as
+  /// another store); results must land in the scope they were fetched for.
+  _CacheContext _captureContext() => _CacheContext(
+    storeId: _localCache.getActiveStoreId(),
+    outletId: _localCache.getActiveOutletId(),
+    allOutlets: _localCache.isAllOutletsScope(),
+  );
+
+  bool _sameStore(_CacheContext ctx) =>
+      _localCache.getActiveStoreId() == ctx.storeId;
+
+  bool _sameScope(_CacheContext ctx) =>
+      _sameStore(ctx) &&
+      _localCache.getActiveOutletId() == ctx.outletId &&
+      _localCache.isAllOutletsScope() == ctx.allOutlets;
+
+  /// Cached orders of the captured scope, or null when the store changed
+  /// (its keys are no longer reachable) or nothing is cached.
+  List<Map<String, dynamic>>? _readOrdersIn(_CacheContext ctx) {
+    if (!_sameStore(ctx)) return null;
+    return _sameScope(ctx)
+        ? _localCache.getCachedOrders()
+        : _localCache.getCachedOrdersForScope(ctx.scope);
+  }
+
+  /// Writes to the captured scope; skipped when the store changed.
+  Future<void> _writeOrdersIn(
+    _CacheContext ctx,
+    List<Map<String, dynamic>> orders,
+  ) async {
+    if (!_sameStore(ctx)) {
+      AppLogger.log(_tag, 'store changed mid-request -> dropping cache write');
+      return;
+    }
+    if (_sameScope(ctx)) {
+      await _localCache.setCachedOrders(orders);
+    } else {
+      await _localCache.setCachedOrdersForScope(ctx.scope, orders);
+    }
+  }
+
   OrdersRepository({ApiClient? apiClient, LocalCacheService? localCache})
     : _apiClient = apiClient ?? ApiClient(),
       _localCache = localCache ?? LocalCacheService();
@@ -56,6 +112,13 @@ class OrdersRepository {
     // to the very top.
     orders.sort((a, b) => _orderSortKey(b).compareTo(_orderSortKey(a)));
     return orders;
+  }
+
+  bool hasCachedOrders({String? outletId, bool? allOutlets}) {
+    return _localCache.hasCachedOrdersFor(
+      outletId: outletId ?? _localCache.getActiveOutletId(),
+      allOutlets: allOutlets ?? _localCache.isAllOutletsScope(),
+    );
   }
 
   static int _orderSortKey(Order order) {
@@ -98,7 +161,10 @@ class OrdersRepository {
         final name = response['name'];
         if (name is String && name.trim().isNotEmpty) return name.trim();
       }
-    } catch (_) {
+    } catch (e) {
+      if (e is ApiException && (e.statusCode == 401 || e.statusCode == 403)) {
+        rethrow;
+      }
       // Offline or request failed — no match to report, caller proceeds anyway.
     }
     return null;
@@ -111,10 +177,35 @@ class OrdersRepository {
   /// scope has been set up. Throws when the pull can't reach the server.
   Future<void> syncAllOrders() async {
     await processPendingSyncQueue();
-    final ok = await syncOrdersDelta(fromStart: true, maxBatches: 100);
+    final marker = _incompletePullKey(_captureContext().scope);
+    final ok = await syncOrdersDelta(
+      fromStart: _localCache.get(marker) != true,
+      maxBatches: 100,
+    );
+    await _localCache.put(marker, !ok);
     if (!ok) throw Exception('Failed to sync orders');
     if (_localCache.getCachedOrders() == null) {
       await _localCache.setCachedOrders([]);
+    }
+  }
+
+  /// Full silent sync of one named scope (an outlet id, or
+  /// [LocalCacheService.allScope]) into its own cache — sign-in uses this to
+  /// fill every outlet without switching to it. Does not push the queue.
+  Future<void> syncOrdersForScope(String scope) async {
+    final storeId = _localCache.getActiveStoreId();
+    final marker = _incompletePullKey(scope);
+    final ok = await _syncOrdersDelta(
+      fromStart: _localCache.get(marker) != true,
+      maxBatches: 100,
+      scope: scope,
+    );
+    await _localCache.put(marker, !ok);
+    if (!ok) throw Exception('Failed to sync orders');
+    // The store changed while the pull ran: its keys are not ours to touch.
+    if (_localCache.getActiveStoreId() != storeId) return;
+    if (_localCache.getCachedOrdersForScope(scope) == null) {
+      await _localCache.setCachedOrdersForScope(scope, []);
     }
   }
 
@@ -123,17 +214,22 @@ class OrdersRepository {
     String orderCode, {
     bool fallbackToCache = true,
   }) async {
+    final ctx = _captureContext();
     try {
       final response = await _apiClient.get(
         ApiEndpoints.orderDetail(orderCode),
       );
       if (response is Map) {
         final order = Order.fromJson(Map<String, dynamic>.from(response));
-        await _updateCachedOrder(order);
+        await _updateCachedOrder(order, ctx);
         return order;
       }
       throw Exception('Failed to load order details');
-    } catch (_) {
+    } catch (e) {
+      AppLogger.log(_tag, 'getOrderDetail($orderCode) failed', error: e);
+      if (e is ApiException && (e.statusCode == 401 || e.statusCode == 403)) {
+        rethrow;
+      }
       if (!fallbackToCache) rethrow;
       final cached = _localCache.getCachedOrders();
       if (cached != null) {
@@ -157,7 +253,11 @@ class OrdersRepository {
   Future<Order> updateStatus(String orderCode, String status) async {
     final updatedJson = await _applyLocalUpdate(
       orderCode,
-      (json) => json..['status'] = status,
+      (json) => json
+        ..['status'] = status
+        // "Delivered today" reads this date; keep it in step locally so an
+        // order handed over offline is not dropped until the server echoes it.
+        ..['completed'] = status == 'Delivered' ? _localDay() : null,
     );
 
     await _localCache.enqueueSyncAction({
@@ -176,6 +276,13 @@ class OrdersRepository {
     // a visible flicker between two different banner texts for one event.
 
     return Order.fromJson(updatedJson);
+  }
+
+  static String _localDay() {
+    final d = DateTime.now();
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
   }
 
   /// Records payment for outstanding balance (Cash or UPI). Local-first —
@@ -252,11 +359,16 @@ class OrdersRepository {
   /// just generated is fetched once and then discarded, and stays missing
   /// from the order everywhere else in the app reads it from cache.
   Future<InvoiceInfo> getOrCreateInvoice(String orderCode) async {
+    final ctx = _captureContext();
+    final invoice = await _fetchInvoice(orderCode);
+    await _mergeInvoiceIntoCachedOrder(orderCode, invoice, ctx);
+    return invoice;
+  }
+
+  Future<InvoiceInfo> _fetchInvoice(String orderCode) async {
     final response = await _apiClient.get(ApiEndpoints.orderInvoice(orderCode));
     if (response is Map) {
-      final invoice = InvoiceInfo.fromJson(Map<String, dynamic>.from(response));
-      await _mergeInvoiceIntoCachedOrder(orderCode, invoice);
-      return invoice;
+      return InvoiceInfo.fromJson(Map<String, dynamic>.from(response));
     }
     throw Exception('Failed to generate invoice');
   }
@@ -264,13 +376,14 @@ class OrdersRepository {
   Future<void> _mergeInvoiceIntoCachedOrder(
     String orderCode,
     InvoiceInfo invoice,
+    _CacheContext ctx,
   ) async {
-    final cached = _localCache.getCachedOrders();
+    final cached = _readOrdersIn(ctx);
     if (cached == null) return;
     final index = cached.indexWhere((c) => Order.jsonMatchesRef(c, orderCode));
     if (index == -1) return;
     cached[index] = {...cached[index], 'invoice': invoice.toJson()};
-    await _localCache.setCachedOrders(cached);
+    await _writeOrdersIn(ctx, cached);
   }
 
   /// Self-heals any order that reached "paid in full + delivered" but never
@@ -281,26 +394,93 @@ class OrdersRepository {
   /// getOrCreateInvoice); this never fabricates one locally, it only
   /// re-asks the server for orders the cache shows as still missing one.
   /// Called after every successful sync cycle by SyncEngine.
+  ///
+  /// Each order is asked about at most once per session and store (an order
+  /// the server refused with a 4xx is not asked again either), requests go
+  /// out a few at a time, and the run stops the moment the user signs out
+  /// or the phone goes offline. Results are merged into the cache one by
+  /// one, so parallel replies can't overwrite each other.
   Future<void> retryMissingInvoices() async {
+    final ctx = _captureContext();
     final cached = _localCache.getCachedOrders();
     if (cached == null) return;
+    final storeId = ctx.storeId;
+    if (storeId == null) return;
+
+    final codes = <String>[];
+    final nowAt = now();
     for (final raw in cached) {
       final Order order;
       try {
         order = Order.fromJson(Map<String, dynamic>.from(raw));
-      } catch (_) {
+      } catch (e) {
+        AppLogger.log(
+          _tag,
+          'retryMissingInvoices(): unreadable order',
+          error: e,
+        );
         continue;
       }
-      if (order.isDelivered && order.isPaidInFull && order.invoice == null) {
-        try {
-          await getOrCreateInvoice(order.orderCode);
-        } catch (_) {
-          // Still offline/unreachable — will be retried on the next
-          // successful sync cycle.
-        }
+      final key = '$storeId::${order.orderCode}';
+      final retryAfter = _invoiceRetryAfter[key];
+      if (order.isDelivered &&
+          order.isPaidInFull &&
+          order.invoice == null &&
+          !_invoiceAsked.contains(key) &&
+          (retryAfter == null || !nowAt.isBefore(retryAfter))) {
+        codes.add(order.orderCode);
+      }
+    }
+
+    for (var i = 0; i < codes.length; i += _invoiceBatch) {
+      // Signed out (or switched store) or offline: stop, don't keep firing.
+      if (_localCache.getActiveStoreId() != storeId ||
+          ConnectivityService.instance.isOffline) {
+        return;
+      }
+      final batch = codes.skip(i).take(_invoiceBatch);
+      final results = await Future.wait(
+        batch.map((code) async {
+          try {
+            return (code, await _fetchInvoice(code), false);
+          } on ApiException catch (e) {
+            final status = e.statusCode ?? 0;
+            AppLogger.log(
+              _tag,
+              'retryMissingInvoices($code) failed with $status',
+              error: e,
+            );
+            // 401: the session is gone.
+            if (status == 401) return (code, null, true);
+            if (status == 400) {
+              // The request itself is invalid; asking again won't change it.
+              _invoiceAsked.add('$storeId::$code');
+            } else if (status >= 400 && status < 500) {
+              // 403 (payment lapsed), 404, 409, 429...: may recover, so ask
+              // again later rather than hammering every sync cycle.
+              _invoiceRetryAfter['$storeId::$code'] = now().add(
+                _invoiceBackoff,
+              );
+            }
+            return (code, null, false);
+          } catch (e) {
+            // Unreachable — will be retried on the next successful sync.
+            AppLogger.log(_tag, 'retryMissingInvoices($code) failed', error: e);
+            return (code, null, false);
+          }
+        }),
+      );
+      for (final (code, invoice, sessionLost) in results) {
+        if (sessionLost) return;
+        if (invoice == null) continue;
+        _invoiceAsked.add('$storeId::$code');
+        await _mergeInvoiceIntoCachedOrder(code, invoice, ctx);
       }
     }
   }
+
+  static const int _invoiceBatch = 4;
+  final Set<String> _invoiceAsked = {};
 
   /// Fetches raw invoice PDF bytes
   Future<Uint8List> getInvoicePdfBytes(String orderCode) async {
@@ -422,11 +602,83 @@ class OrdersRepository {
     final failCountById = <String, int>{};
     final forbiddenDeadLetterIds = <String>{};
     var allBatchesOk = true;
+    // Where confirmed orders belong: the scope active when the push started,
+    // even if the user switches outlet while requests are in flight.
+    final ctx = _captureContext();
 
     final groups = <String?, List<Map<String, dynamic>>>{};
     for (final action in dueNow) {
       final key = _outletKeyForAction(action);
       (groups[key] ??= <Map<String, dynamic>>[]).add(action);
+    }
+
+    void countFailure(Map<String, dynamic> action, [Object? error]) {
+      final id = action['clientActionId']?.toString();
+      if (id == null) return;
+      failCountById[id] = ((action['failCount'] as num?)?.toInt() ?? 0) + 1;
+      if (error != null) lastErrorById[id] = error.toString();
+    }
+
+    // Sends [actions] in one request and applies the per-action results.
+    // Throws when the request itself fails.
+    Future<void> sendBatch(
+      String? key,
+      List<Map<String, dynamic>> batch,
+    ) async {
+      final actions = batch.map(_toBulkSyncAction).toList();
+      final response = await _apiClient.post(
+        ApiEndpoints.ordersBulkSync,
+        body: {'actions': actions},
+        headers: {'X-Outlet-Id': key ?? kNoOutletHeader},
+      );
+
+      final rawResults = (response is Map ? response['results'] : null);
+      final resultsById = <String, Map<String, dynamic>>{
+        for (final r in (rawResults is List ? rawResults : <dynamic>[]))
+          if (r is Map && r['clientActionId'] != null)
+            r['clientActionId'].toString(): Map<String, dynamic>.from(r),
+      };
+
+      for (final action in batch) {
+        final clientActionId = action['clientActionId']?.toString();
+        try {
+          final result = clientActionId != null
+              ? resultsById[clientActionId]
+              : null;
+
+          if (result == null || result['status'] != 'success') {
+            countFailure(action, result?['error']);
+            continue;
+          }
+          if (clientActionId != null) completedIds.add(clientActionId);
+
+          final orderJson = result['order'];
+          if (orderJson is Map) {
+            final confirmedOrder = Order.fromJson(
+              Map<String, dynamic>.from(orderJson),
+            );
+            final placeholderCode = action['type'] == 'create_order'
+                ? (action['offlineCode'] as String? ?? '')
+                : (action['orderCode'] as String? ?? '');
+            if (placeholderCode.isNotEmpty) {
+              confirmedOrders[placeholderCode] = confirmedOrder.toJson();
+            }
+          }
+        } catch (e) {
+          // The HTTP request itself succeeded — this is a client-side bug
+          // processing this one action's result (unexpected payload
+          // shape), not a network/connectivity failure. Count just this
+          // action as failed rather than letting it look like the whole
+          // batch/request failed.
+          AppLogger.log(
+            _tag,
+            'processPendingSyncQueue(): failed to process result for '
+            'action $clientActionId',
+            error: e,
+          );
+          countFailure(action);
+        }
+      }
     }
 
     // Send the queue as small, sequential batches per outlet group rather than
@@ -438,6 +690,49 @@ class OrdersRepository {
       final key = groupEntry.key;
       final groupDue = groupEntry.value;
 
+      // Handles a failed request. Returns true when the rest of this group
+      // must not be sent (this run), false to carry on with the next batch.
+      Future<bool> handleFailure(Object e, int start, int end) async {
+        if (e is AuthException && e.code == 'FORBIDDEN') {
+          AppLogger.log(
+            _tag,
+            'processPendingSyncQueue(): 403 FORBIDDEN on outlet '
+            '${key ?? kNoOutletHeader}, dead-lettering group',
+            error: e,
+          );
+          for (final action in groupDue.sublist(start)) {
+            final id = action['clientActionId']?.toString();
+            if (id != null && id.isNotEmpty) {
+              forbiddenDeadLetterIds.add(id);
+              lastErrorById[id] = 'outlet access changed';
+            }
+          }
+          allBatchesOk = false;
+          return true;
+        }
+        AppLogger.log(
+          _tag,
+          'processPendingSyncQueue(): batch starting at $start failed',
+          error: e,
+        );
+        // Transport / auth / server-side trouble: keep everything queued for
+        // the next sync attempt without spending any action's retry budget.
+        final unreachable =
+            e is TimeoutException ||
+            (e is ApiException && e.statusCode == null);
+        final reallyOffline = await ConnectivityService.instance
+            .checkIsOffline();
+        if (reallyOffline) {
+          SyncManager.instance.setOffline(queue.length);
+        } else if (unreachable) {
+          SyncManager.instance.setPendingOnline(queue.length);
+        } else {
+          SyncManager.instance.setError('Sync failed — tap to retry');
+        }
+        allBatchesOk = false;
+        return true;
+      }
+
       for (
         var start = 0;
         start < groupDue.length;
@@ -447,11 +742,7 @@ class OrdersRepository {
             ? start + _bulkSyncBatchSize
             : groupDue.length;
         final batch = groupDue.sublist(start, end);
-        final actions = batch.map(_toBulkSyncAction).toList();
 
-        SyncManager.instance.startSync(
-          'Syncing $end of ${groupDue.length} offline changes...',
-        );
         AppLogger.log(
           _tag,
           'processPendingSyncQueue(): sending batch ${(start ~/ _bulkSyncBatchSize) + 1} '
@@ -459,106 +750,37 @@ class OrdersRepository {
         );
 
         try {
-          final response = await _apiClient.post(
-            ApiEndpoints.ordersBulkSync,
-            body: {'actions': actions},
-            headers: {'X-Outlet-Id': key ?? kNoOutletHeader},
-          );
-
-          final rawResults = (response is Map ? response['results'] : null);
-          final resultsById = <String, Map<String, dynamic>>{
-            for (final r in (rawResults is List ? rawResults : <dynamic>[]))
-              if (r is Map && r['clientActionId'] != null)
-                r['clientActionId'].toString(): Map<String, dynamic>.from(r),
-          };
-
-          for (final action in batch) {
-            final clientActionId = action['clientActionId']?.toString();
-            try {
-              final result = clientActionId != null
-                  ? resultsById[clientActionId]
-                  : null;
-
-              if (result == null || result['status'] != 'success') {
-                if (clientActionId != null) {
-                  final currentFailCount =
-                      (action['failCount'] as num?)?.toInt() ?? 0;
-                  failCountById[clientActionId] = currentFailCount + 1;
-                  if (result != null && result['error'] != null) {
-                    lastErrorById[clientActionId] = result['error'].toString();
-                  }
-                }
-                continue;
-              }
-              if (clientActionId != null) completedIds.add(clientActionId);
-
-              final orderJson = result['order'];
-              if (orderJson is Map) {
-                final confirmedOrder = Order.fromJson(
-                  Map<String, dynamic>.from(orderJson),
-                );
-                final placeholderCode = action['type'] == 'create_order'
-                    ? (action['offlineCode'] as String? ?? '')
-                    : (action['orderCode'] as String? ?? '');
-                if (placeholderCode.isNotEmpty) {
-                  confirmedOrders[placeholderCode] = confirmedOrder.toJson();
-                }
-              }
-            } catch (e) {
-              // The HTTP request itself succeeded — this is a client-side bug
-              // processing this one action's result (unexpected payload
-              // shape), not a network/connectivity failure. Count just this
-              // action as failed rather than letting it look like the whole
-              // batch/request failed.
-              AppLogger.log(
-                _tag,
-                'processPendingSyncQueue(): failed to process result for '
-                'action $clientActionId',
-                error: e,
-              );
-              if (clientActionId != null) {
-                final currentFailCount =
-                    (action['failCount'] as num?)?.toInt() ?? 0;
-                failCountById[clientActionId] = currentFailCount + 1;
-              }
-            }
-          }
+          await sendBatch(key, batch);
         } catch (e) {
-          if (e is AuthException && e.code == 'FORBIDDEN') {
-            AppLogger.log(
-              _tag,
-              'processPendingSyncQueue(): 403 FORBIDDEN on outlet '
-              '${key ?? kNoOutletHeader}, dead-lettering group',
-              error: e,
-            );
-            for (final action in groupDue.sublist(start)) {
-              final id = action['clientActionId']?.toString();
-              if (id != null && id.isNotEmpty) {
-                forbiddenDeadLetterIds.add(id);
-                lastErrorById[id] = 'outlet access changed';
-              }
-            }
-            break;
+          if (!_isRejectedRequest(e)) {
+            if (await handleFailure(e, start, end)) break;
+            continue;
           }
-          // This batch failed outright — stop sending further batches for this
-          // group. Whatever earlier batches already succeeded stays applied
-          // below; this batch's and any later batches' actions in this group
-          // simply remain queued for the next sync attempt, same as a
-          // single-request failure used to leave the whole queue untouched.
+          // The server rejected the request itself (bad payload / too large):
+          // one poison action must not block every later action. Retry the
+          // batch action by action; only the action(s) still rejected on
+          // their own spend retry budget.
           AppLogger.log(
             _tag,
-            'processPendingSyncQueue(): batch starting at $start failed',
+            'processPendingSyncQueue(): batch rejected (${(e as ApiException).statusCode}) '
+            '-> retrying ${batch.length} action(s) individually',
             error: e,
           );
-          final reallyOffline = await ConnectivityService.instance
-              .checkIsOffline();
-          if (reallyOffline) {
-            SyncManager.instance.setOffline(queue.length);
-          } else {
-            SyncManager.instance.setError('Sync failed — tap to retry');
+          var stop = false;
+          for (var i = 0; i < batch.length; i++) {
+            final single = batch[i];
+            try {
+              await sendBatch(key, [single]);
+            } catch (e2) {
+              if (_isRejectedRequest(e2)) {
+                countFailure(single, e2);
+                continue;
+              }
+              stop = await handleFailure(e2, start + i, end);
+              if (stop) break;
+            }
           }
-          allBatchesOk = false;
-          break;
+          if (stop) break;
         }
       }
     }
@@ -571,7 +793,7 @@ class OrdersRepository {
     // no `await` in between keeps this atomic from the event loop's
     // perspective, so that other write can't land in the gap and get lost.
     if (confirmedOrders.isNotEmpty) {
-      final freshCached = _localCache.getCachedOrders() ?? [];
+      final freshCached = _readOrdersIn(ctx) ?? [];
       for (final entry in confirmedOrders.entries) {
         final idx = freshCached.indexWhere(
           (c) =>
@@ -583,12 +805,12 @@ class OrdersRepository {
             freshCached[idx],
             entry.value,
           );
-        } else if (_localCache.isAllOutletsScope() ||
-            entry.value['outletId'] == _localCache.getActiveOutletId()) {
+        } else if (ctx.allOutlets || entry.value['outletId'] == ctx.outletId) {
           freshCached.insert(0, entry.value);
         }
       }
-      await _localCache.setCachedOrders(
+      await _writeOrdersIn(
+        ctx,
         LocalCacheService.dedupeOrdersById(freshCached),
       );
     }
@@ -649,7 +871,23 @@ class OrdersRepository {
       ]);
     }
 
-    return allBatchesOk;
+    // Anything parked in the dead-letter queue is unsent data: this run did
+    // not fully succeed even though the requests reached the server.
+    return allBatchesOk && newlyDeadLettered.isEmpty;
+  }
+
+  /// A 4xx the server sent about the request itself — not an auth problem
+  /// (401/403), not a transient one (408/429). Retrying the same payload
+  /// will fail the same way.
+  static bool _isRejectedRequest(Object e) {
+    if (e is! ApiException) return false;
+    final status = e.statusCode ?? 0;
+    return status >= 400 &&
+        status < 500 &&
+        status != 401 &&
+        status != 403 &&
+        status != 408 &&
+        status != 429;
   }
 
   String? _outletKeyForAction(Map<String, dynamic> action) {
@@ -700,27 +938,88 @@ class OrdersRepository {
   ///
   /// Returns true if it reached the server (even with zero new rows), false
   /// on a network failure.
+  ///
+  /// [scope] syncs a named scope (an outlet id, or [LocalCacheService.allScope])
+  /// into that scope's own cache and cursor without touching the active
+  /// scope — how sign-in fills every outlet. It runs silently: no banner.
   Future<bool> syncOrdersDelta({
     int maxBatches = 10,
     int limit = 50,
     bool fromStart = false,
+  }) => _syncOrdersDelta(
+    maxBatches: maxBatches,
+    limit: limit,
+    fromStart: fromStart,
+  );
+
+  Future<bool> _syncOrdersDelta({
+    int maxBatches = 10,
+    int limit = 50,
+    bool fromStart = false,
+    String? scope,
   }) async {
+    // A null scope is the active one; a named scope is filled explicitly.
+    // Captured before any await: a response fetched for one outlet/store
+    // must never be written into whatever is active by the time it arrives.
+    final ctx = _captureContext();
+    List<Map<String, dynamic>>? readOrders() => scope == null
+        ? _readOrdersIn(ctx)
+        : (_sameStore(ctx) ? _localCache.getCachedOrdersForScope(scope) : null);
+    Future<void> writeOrders(List<Map<String, dynamic>> orders) async {
+      if (scope == null) return _writeOrdersIn(ctx, orders);
+      if (!_sameStore(ctx)) return;
+      await _localCache.setCachedOrdersForScope(scope, orders);
+    }
+
+    final hasCache = scope == null
+        ? hasCachedOrders()
+        : hasCachedOrders(
+            outletId: scope == LocalCacheService.allScope ? null : scope,
+            allOutlets: scope == LocalCacheService.allScope,
+          );
+    final hasPendingPush = _localCache.getTotalPendingCount() > 0;
+    final showBanner = scope == null && !hasCache && !hasPendingPush;
+    if (showBanner) {
+      SyncManager.instance.startSync('Fetching latest from cloud...');
+    }
     try {
+      var caughtUp = false;
       for (var i = 0; i < maxBatches; i++) {
         final cursor = fromStart && i == 0
             ? null
-            : _localCache.getLastSyncCursor();
+            : _localCache.getLastSyncCursorForScope(scope ?? ctx.scope);
         final query = cursor == null
             ? 'limit=$limit'
             : 'since=${Uri.encodeComponent(cursor)}&limit=$limit';
         final response = await _apiClient.get(
           '${ApiEndpoints.ordersSync}?$query',
+          headers: scope == null
+              ? null
+              : {
+                  'X-Outlet-Id': scope == LocalCacheService.allScope
+                      ? kNoOutletHeader
+                      : scope,
+                },
         );
-        if (response is! Map) break;
+        if (response is! Map) {
+          caughtUp = true;
+          break;
+        }
+        // The store changed during the request: this page is for another
+        // session's data, drop it (the next sync starts from its own cursor).
+        if (!_sameStore(ctx)) {
+          AppLogger.log(_tag, 'syncOrdersDelta(): store changed -> abort');
+          return false;
+        }
+        // Same for an outlet switch while syncing the active scope.
+        if (scope == null && !_sameScope(ctx)) {
+          AppLogger.log(_tag, 'syncOrdersDelta(): scope changed -> abort');
+          return false;
+        }
 
         final rawOrders = response['orders'];
         if (rawOrders is List && rawOrders.isNotEmpty) {
-          final cached = _localCache.getCachedOrders() ?? [];
+          final cached = readOrders() ?? [];
           final pendingSnapshot = _localCache.getPendingSyncQueue();
           final droppedClientActionIds = <String>{};
 
@@ -854,9 +1153,7 @@ class OrdersRepository {
               );
             }
           }
-          await _localCache.setCachedOrders(
-            LocalCacheService.dedupeOrdersById(cached),
-          );
+          await writeOrders(LocalCacheService.dedupeOrdersById(cached));
 
           if (droppedClientActionIds.isNotEmpty) {
             final latestQueue = _localCache.getPendingSyncQueue();
@@ -870,13 +1167,64 @@ class OrdersRepository {
 
         final nextCursor = response['nextCursor'];
         if (nextCursor is String) {
-          await _localCache.setLastSyncCursor(nextCursor);
+          if (nextCursor == cursor) {
+            AppLogger.log(_tag, 'syncOrdersDelta(): cursor did not advance');
+            return false;
+          }
+          // Explicit scope: an outlet switch during the awaits above must not
+          // move the new scope's cursor.
+          if (!_sameStore(ctx)) return false;
+          await _localCache.setLastSyncCursorForScope(
+            scope ?? ctx.scope,
+            nextCursor,
+          );
         }
-        if (nextCursor == null) break; // caught up
+        if (nextCursor == null) {
+          caughtUp = true;
+          break;
+        }
+      }
+      if (!caughtUp) {
+        // Ran out of batches with more pages waiting: the cursor saved above
+        // lets the next run continue, but this pull is not complete and must
+        // not be reported as such (bootstrap/backfill would call the scope
+        // synced).
+        AppLogger.log(
+          _tag,
+          'syncOrdersDelta(): stopped after $maxBatches batch(es) with more '
+          'pages waiting',
+        );
+        if (showBanner && SyncManager.instance.value.isSyncing) {
+          SyncManager.instance.setError('Sync incomplete — tap to retry');
+        }
+        return false;
+      }
+      if (!hasCache) {
+        if (readOrders() == null) await writeOrders([]);
+        if (scope == null) SyncManager.instance.completeSync();
       }
       return true;
-    } catch (_) {
+    } catch (e) {
+      AppLogger.log(_tag, 'syncOrdersDelta(): failed', error: e);
+      final accessLost =
+          e is ApiException && (e.statusCode == 401 || e.statusCode == 403);
+      if (showBanner) {
+        final reallyOffline = await ConnectivityService.instance
+            .checkIsOffline();
+        if (reallyOffline) {
+          SyncManager.instance.setOffline(0);
+        } else {
+          SyncManager.instance.setError('Sync failed — tap to retry');
+        }
+      }
+      // A dead session is not "unreachable": surface it so the caller
+      // (engine / backfill) can stop instead of retrying into a 401 wall.
+      if (accessLost) rethrow;
       return false;
+    } finally {
+      if (showBanner && SyncManager.instance.value.isSyncing) {
+        SyncManager.instance.setError('Sync failed — tap to retry');
+      }
     }
   }
 
@@ -917,8 +1265,8 @@ class OrdersRepository {
     };
   }
 
-  Future<void> _updateCachedOrder(Order updated) async {
-    final cached = _localCache.getCachedOrders();
+  Future<void> _updateCachedOrder(Order updated, _CacheContext ctx) async {
+    final cached = _readOrdersIn(ctx);
     if (cached == null) return;
     final updatedJson = updated.toJson();
     final index = cached.indexWhere((c) => Order.jsonSameOrder(c, updatedJson));
@@ -927,7 +1275,7 @@ class OrdersRepository {
     } else {
       cached.insert(0, updatedJson);
     }
-    await _localCache.setCachedOrders(cached);
+    await _writeOrdersIn(ctx, cached);
   }
 
   /// Checks whether a server payment calendar date matches an action's queued
@@ -959,4 +1307,21 @@ class OrdersRepository {
     );
     return sDateOnly.difference(aDateOnly).inDays.abs() <= 1;
   }
+}
+
+/// The store and outlet scope that were active when a request started.
+class _CacheContext {
+  final String? storeId;
+  final String? outletId;
+  final bool allOutlets;
+
+  const _CacheContext({
+    required this.storeId,
+    required this.outletId,
+    required this.allOutlets,
+  });
+
+  /// Same precedence as the cache's own scoped keys.
+  String get scope =>
+      outletId ?? (allOutlets ? LocalCacheService.allScope : 'none');
 }

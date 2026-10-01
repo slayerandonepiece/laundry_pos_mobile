@@ -23,6 +23,7 @@ class FakeOwnerRepository implements OwnerRepository {
   Future<DashboardMetrics> getDashboardMetrics({
     String? from,
     String? to,
+    String? granularity,
   }) async => DashboardMetrics();
 
   @override

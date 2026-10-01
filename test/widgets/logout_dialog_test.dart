@@ -23,6 +23,9 @@ class MockLocalCache extends LocalCacheService {
   String? getActiveOutletId() => null;
 
   @override
+  String? getLastSyncCursor() => null;
+
+  @override
   List<Map<String, dynamic>> getPendingSyncQueue() => queue;
 
   // SyncEngine's getTotalPendingCount() also reads the owner-action queue.

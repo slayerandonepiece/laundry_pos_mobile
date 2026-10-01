@@ -60,29 +60,34 @@ class AppEnvironmentConfig {
   /// Staging URL definition (commented by default per requirements)
   static String get stageUrl {
     // Stage URL — uncomment when ready to point to remote staging:
-    return 'https://klenpos-staging.vercel.app/';
+    return 'https://klenpos-staging.vercel.app';
   }
 
   /// Production URL definition (left empty per requirements, add when ready)
   static String get prodUrl {
     // Production URL — leave empty for now, add when ready:
-    return 'https://klenpos-prod.vercel.app/';
+    return 'https://klenpos-prod.vercel.app';
   }
 
   /// Resolves the base URL for the active environment:
   static String get baseUrl {
+    String resolved;
     if (_baseUrlOverride.isNotEmpty) {
-      return _baseUrlOverride;
+      resolved = _baseUrlOverride;
+    } else {
+      switch (current) {
+        case AppEnvironment.dev:
+          resolved = localhostUrl;
+          break;
+        case AppEnvironment.stage:
+          final url = stageUrl;
+          resolved = url.isNotEmpty ? url : localhostUrl;
+          break;
+        case AppEnvironment.prod:
+          resolved = prodUrl;
+          break;
+      }
     }
-
-    switch (current) {
-      case AppEnvironment.dev:
-        return localhostUrl;
-      case AppEnvironment.stage:
-        final url = stageUrl;
-        return url.isNotEmpty ? url : localhostUrl;
-      case AppEnvironment.prod:
-        return prodUrl;
-    }
+    return resolved.replaceAll(RegExp(r'/+$'), '');
   }
 }

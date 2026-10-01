@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/core/sync/sync_freshness.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
 
 import 'auth_event.dart';
@@ -148,6 +149,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     final current = state;
     if (current is AuthenticatedState) {
+      SyncFreshness.reset();
       await authRepository.selectStore(event.storeId);
       final newStore = current.availableStores.firstWhere(
         (s) => s.storeId == event.storeId,
@@ -226,12 +228,27 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     if (state is! AuthenticatedState) return;
-    await authRepository.logout();
+    await _signOutInvoluntarily();
     emit(
       UnauthenticatedState(
         errorMessage: 'Your session has expired. Please sign in again.',
       ),
     );
+  }
+
+  /// Session revoked / access changed: the app must always end up at the
+  /// login screen, even if the logout request or local wipe throws.
+  Future<void> _signOutInvoluntarily() async {
+    try {
+      await authRepository.logout(involuntary: true);
+    } catch (e, st) {
+      AppLogger.log(
+        _tag,
+        'involuntary logout failed',
+        error: e,
+        stackTrace: st,
+      );
+    }
   }
 
   Future<void> _onAccessForbidden(
@@ -248,7 +265,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // sign-in instead (O0.3), which also re-resolves outlet scope on the
       // next login.
       await _localCache.clearActiveOutletId();
-      await authRepository.logout();
+      await _signOutInvoluntarily();
       emit(
         UnauthenticatedState(
           errorMessage: 'Your access changed. Please sign in again.',

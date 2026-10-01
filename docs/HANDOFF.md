@@ -4,6 +4,57 @@ Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
+## Current status — 1 October 2026 (stage release 1.0.4+6 prep)
+
+Supersedes the status sections below for anything they conflict with. Branch
+`release/stage-1.0.4` (from `main`) carries all of it. `flutter analyze`
+clean, `flutter test` **800/800**. Backend (separate repo, separate branch of
+the same name): `tsc` clean, 118/118 integration tests on a disposable local
+Postgres. Device passes ran against a local sandbox only, never the shared DB.
+
+### Done in this batch
+
+- **Dashboard**: "Sales by date" and "Sales by service" each have their own
+  period filter: 7 days, current month (month-to-date, e.g. "Oct 26"),
+  previous month ("Sep 26"), custom range (366-day cap). "How orders are
+  moving" stays overall; "Collected vs Expenses" stays on the current month.
+  Headline pair is "Sales today" + "Sales this month". The default dashboard
+  request/cache key is month-to-date (`mtd|scope`); a store switch reloads the
+  same request. Tiles drill down to Orders (open / delivered today / due
+  today); "Recent orders" card sorts by valid created dates only.
+- **Orders**: Work/Payment dropdowns with an aligned Clear; summary period
+  filter; employee quick filters; Ready counts under "In progress"; search and
+  filters reset when the outlet changes; search-specific empty state; 44px
+  search clear.
+- **Staff**: outlet assignment on add/edit (`outlets` sent only when changed);
+  one-line phone text; same helper copy on Add and Edit.
+- **Sync/auth hardening**: resume guard, backfill of missing outlet caches,
+  parallel employee sign-in, dead-letter banner, floating sync bar, poison
+  batch splitting, truncated pull resumes from the last saved cursor, banner
+  never stuck on "Fetching…", queued staff toggles replay only `active`,
+  401/403 on reads propagate (network errors still use cache), logout parks
+  unsynced queues under `parked_unsynced::<storeId>`.
+- **Backend (separate repo)**: employee outlet assignment validated, invoice
+  PDF routes check outlet access, idempotency + status races closed,
+  `must_change_password` enforced, public-error whitelist, rollup span cap,
+  `GET /employees` no longer cached (a fresh list right after a save).
+
+### Pending list
+
+| # | Area | Pending |
+|---|---|---|
+| 1 | Expenses | Edit, delete, chosen paid date, outlet attribution (E1–E3); needs new backend routes |
+| 2 | Device verification | Dashboard chips + custom range, Delivered/Due-today drill-down, Recent orders, pull-to-refresh, Part-paid filter combos, offline-then-sync pass, 401/403 propagation |
+| 3 | Switcher | Outlet menu may linger over "Setting things up" after a switch (seen once); employee landed in Lake not Main (likely saved last-used outlet) |
+| 4 | Backend | Login throttle is per warm instance; session cookie id is a cuid; `billing_pending` not enforced server-side; idempotency unique keys global, not per tenant |
+| 5 | Release | Deploy backend before stage mobile (employee-list change); `SESSION_SECRET` must be set in production (user manages it) |
+| 6 | Store gating | No App Store listing yet, so `ios_app_store_id` and force-update stay dormant |
+| 7 | Data | Neon has only a stage branch given to us; two old test employees ("Test Emp Single", "Test Emp Multi") remain there |
+
+Decisions taken 2026-10-01: `MOBILE_BLOCK_TERMS_NOT_SET` stays `false`
+(unbilled organizations keep working; turning it on locks them out because
+owners have no self-serve billing). Shared Neon DB = stage branch only.
+
 ## Current status — 28 September 2026 (KlenPOS rebrand + Firebase + gating)
 
 This section supersedes the "28 September 2026" web/mobile parity section

@@ -72,7 +72,7 @@ class ClearCartDialog extends StatelessWidget {
                 Expanded(
                   child: SecondaryButton(
                     label: 'Keep it',
-                    height: 48,
+                    height: AppButtonHeight.inline,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
@@ -80,7 +80,7 @@ class ClearCartDialog extends StatelessWidget {
                 Expanded(
                   child: PrimaryButton(
                     label: 'Clear',
-                    height: 48,
+                    height: AppButtonHeight.inline,
                     backgroundColor: AppColors.danger,
                     onPressed: () {
                       Navigator.of(context).pop();

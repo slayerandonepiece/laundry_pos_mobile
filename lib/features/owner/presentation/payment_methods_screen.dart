@@ -1,3 +1,5 @@
+import 'package:myshop/shared/widgets/empty_state.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -226,6 +228,13 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                           },
                         ),
                         const SizedBox(height: 20),
+                      ] else ...[
+                        // Nothing to list and nothing loading.
+                        const EmptyState(
+                          icon: Icons.account_balance_wallet_outlined,
+                          title: 'No payment methods yet',
+                          subtitle: 'Methods set up for your organization will show here so you can switch them on.',
+                        ),
                       ],
                       Text(
                         'Payment methods are managed by the platform. Enable the ones you accept.',

@@ -19,6 +19,10 @@ class _FakeOwnerRepository implements OwnerRepository {
   List<StorePaymentMethod>? cachedMethods;
   StoreProfile? cachedProfile;
   bool shouldThrowOnStaff = false;
+
+  /// When set, a staff fetch answers with these and stores them as the cache
+  /// (as the real repository does).
+  List<StaffMember>? staffOnFetch;
   final List<String> networkCalls = [];
 
   @override
@@ -36,6 +40,7 @@ class _FakeOwnerRepository implements OwnerRepository {
   Future<DashboardMetrics> getDashboardMetrics({
     String? from,
     String? to,
+    String? granularity,
   }) async {
     networkCalls.add('dashboard ${from ?? ''}-${to ?? ''}');
     return DashboardMetrics();
@@ -51,6 +56,10 @@ class _FakeOwnerRepository implements OwnerRepository {
   Future<List<StaffMember>> listStaff() async {
     networkCalls.add('staff');
     if (shouldThrowOnStaff) throw Exception('network error');
+    if (staffOnFetch != null) {
+      cachedStaff = staffOnFetch;
+      return staffOnFetch!;
+    }
     return [];
   }
 
@@ -138,6 +147,29 @@ void main() {
       await run(LoadDashboardEvent(from: '2026-09-01', to: '2026-09-10'));
       expect(repo.networkCalls, ['dashboard 2026-09-01-2026-09-10']);
     });
+
+    test(
+      'cached staff with no outlet facts is refetched once, then trusted',
+      () async {
+        // Cached before assignments were kept: outlets unknown (null).
+        repo.cachedStaff = [StaffMember(id: 'e1', name: 'Asha', phone: '900')];
+        repo.staffOnFetch = [
+          StaffMember(
+            id: 'e1',
+            name: 'Asha',
+            phone: '900',
+            outlets: const [StaffOutlet(id: 'o1', name: 'Main')],
+          ),
+        ];
+
+        await run(LoadStaffEvent());
+        expect(repo.networkCalls, ['staff']);
+
+        // Now the cache carries the facts: opening again stays local.
+        await run(LoadStaffEvent());
+        expect(repo.networkCalls, ['staff']);
+      },
+    );
 
     test(
       'LoadStaffEvent completes done on success, failure, and cache-only path',

@@ -87,10 +87,7 @@ class OutletScopeCubit extends Cubit<OutletScope> {
       activeOutletId = null;
     }
 
-    if (!isOwner &&
-        activeOutletId == null &&
-        !_localCache.isAllOutletsScope() &&
-        allowed.length == 1) {
+    if (allowed.length == 1) {
       activeOutletId = allowed.first.id;
       _localCache.setActiveOutletId(activeOutletId);
       _localCache.setAllOutletsScope(false);
@@ -99,9 +96,13 @@ class OutletScopeCubit extends Cubit<OutletScope> {
     // Owners default to All outlets (O3) whenever nothing has been narrowed
     // yet for this store; an explicit prior selection (activeOutletId set)
     // or an explicit "All outlets" tap both stay respected.
-    final allOutlets = isOwner
-        ? (activeOutletId == null ? true : _localCache.isAllOutletsScope())
-        : _localCache.isAllOutletsScope();
+    final allOutlets = (allowed.length == 1)
+        ? false
+        : (isOwner
+              ? (activeOutletId == null
+                    ? true
+                    : _localCache.isAllOutletsScope())
+              : _localCache.isAllOutletsScope());
 
     emit(
       OutletScope(
@@ -126,12 +127,12 @@ class OutletScopeCubit extends Cubit<OutletScope> {
         .map(Outlet.fromJson)
         .toList();
 
-    if (isOwner) {
-      _localCache.setAllOutletsScope(true);
-      _localCache.clearActiveOutletId();
-    } else if (allowed.length == 1) {
+    if (allowed.length == 1) {
       _localCache.setActiveOutletId(allowed.first.id);
       _localCache.setAllOutletsScope(false);
+    } else if (isOwner) {
+      _localCache.setAllOutletsScope(true);
+      _localCache.clearActiveOutletId();
     } else {
       // 0 or >=2 outlets: reuse the outlet this employee picked last time
       // in this organization, if still allowed; otherwise O4's blocked
@@ -160,6 +161,49 @@ class OutletScopeCubit extends Cubit<OutletScope> {
       _localCache.setRememberedOutlet(key.$1, key.$2, outletId);
     }
     hydrate();
+  }
+
+  /// Actions queued offline and not yet on the server.
+  bool get hasPendingChanges => _localCache.getTotalPendingCount() > 0;
+
+  bool _switching = false;
+
+  /// True while [selectClearingPrevious] is running, so a second tap cannot
+  /// start a concurrent switch.
+  bool get isSwitching => _switching;
+
+  /// Employee switching outlets: only the outlet in use is kept on the phone,
+  /// but the outgoing outlet's cached orders, delta cursor, dashboard and
+  /// expenses are dropped only once the new outlet has synced, so a dropped
+  /// connection or a killed app mid-switch never leaves the phone with data
+  /// for neither. The pending queues are left alone — queued actions carry
+  /// their own outlet id and must still flush to it — which is why callers
+  /// flush first.
+  ///
+  /// [syncNewScope] runs after the new outlet is selected and reports whether
+  /// it synced. When it did not, the previous outlet (and its cache) is put
+  /// back and false is returned. Without it the previous outlet is cleared
+  /// straight after the switch. Returns false too when a switch is already
+  /// running.
+  Future<bool> selectClearingPrevious(
+    String outletId, {
+    Future<bool> Function()? syncNewScope,
+  }) async {
+    if (_switching) return false;
+    _switching = true;
+    try {
+      final previous = _localCache.getActiveOutletId();
+      select(outletId);
+      if (previous == null || previous == outletId) return true;
+      if (syncNewScope != null && !await syncNewScope()) {
+        if (!isClosed) select(previous);
+        return false;
+      }
+      await _localCache.clearScopeData(previous);
+      return true;
+    } finally {
+      _switching = false;
+    }
   }
 
   /// (user id, organization id) the remembered outlet is stored under, or

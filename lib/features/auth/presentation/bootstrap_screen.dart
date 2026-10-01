@@ -1,11 +1,17 @@
+import 'package:myshop/shared/widgets/app_button.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_assets.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/logging/app_logger.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
+import 'package:myshop/core/network/dio_interceptors.dart' show NetworkHealth;
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
+import 'package:myshop/core/sync/sync_freshness.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
@@ -15,6 +21,8 @@ import 'package:myshop/features/orders/data/orders_repository.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 import 'package:myshop/features/shell/presentation/main_navigation_shell.dart';
+
+const _tag = 'BOOTSTRAP';
 
 enum StepStatus { pending, active, done, error, offlineCached }
 
@@ -54,6 +62,8 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
 
   late final List<_SetupStep> _steps;
 
+  Future<bool>? _queuePush;
+  bool _running = false;
   bool _isOffline = false;
   bool _canContinueAnyway = false;
   bool _hasNavigated = false;
@@ -70,7 +80,7 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
     } else {
       try {
         _ownerRepository = context.read<OwnerRepository>();
-      } catch (_) {
+      } on ProviderNotFoundException {
         _ownerRepository = OwnerRepository();
       }
     }
@@ -100,6 +110,8 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
           subtitle: orgName.isNotEmpty ? orgName : null,
           hasCache: () => _localCache.getAllowedOutlets() != null,
           run: () async {
+            // Throws AuthException on 401/403; null means the server could
+            // not be reached (offline / 5xx).
             final outlets = await _authRepository.refreshOutletContext();
             if (outlets == null) throw Exception('No outlets returned');
           },
@@ -111,9 +123,12 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
           subtitle: _activeOutletName(),
           run: () async {},
         ),
+      // These don't depend on each other, so they run together (for an
+      // employee, orders too).
       _SetupStep(
         title: 'Syncing organization details',
         errorText: "Couldn't sync organization details",
+        parallelGroup: 1,
         hasCache: () =>
             (_localCache.getCachedStoreProfile() ??
                     _localCache.getCachedStoreDetails())
@@ -124,12 +139,14 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
       _SetupStep(
         title: 'Syncing services & prices',
         errorText: "Couldn't sync services & prices",
+        parallelGroup: 1,
         hasCache: () => _localCache.getCachedProducts()?.isNotEmpty == true,
         run: () async => _posRepository.listProducts(),
       ),
       _SetupStep(
         title: 'Syncing payment methods',
         errorText: "Couldn't sync payment methods",
+        parallelGroup: 1,
         hasCache: () => _localCache.getCachedPaymentMethods() != null,
         run: () async {
           // listPaymentMethods() falls back to the cache instead of
@@ -140,34 +157,110 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
           }
         },
       ),
-      _SetupStep(
-        title: 'Syncing orders',
-        errorText: "Couldn't sync orders",
-        hasCache: () => _localCache.getCachedOrders() != null,
-        run: _ordersRepository.syncAllOrders,
-      ),
+      if (isOwner && _ownerOutlets().length > 1)
+        ..._ownerScopeSteps()
+      else ...[
+        _SetupStep(
+          title: 'Syncing orders',
+          errorText: "Couldn't sync orders",
+          parallelGroup: 1,
+          hasCache: () => _localCache.getCachedOrders() != null,
+          isOrders: true,
+          run: _ordersRepository.syncAllOrders,
+        ),
+        if (isOwner) ...[
+          _SetupStep(
+            title: 'Syncing dashboard',
+            errorText: "Couldn't sync dashboard",
+            parallelGroup: 2,
+            hasCache: () => _localCache.getCachedDashboardMetrics() != null,
+            run: () async => _ownerRepository.getDefaultDashboardMetrics(),
+          ),
+          _SetupStep(
+            title: 'Syncing expenses',
+            errorText: "Couldn't sync expenses",
+            parallelGroup: 2,
+            hasCache: () => _localCache.getCachedExpenses() != null,
+            run: () async => _ownerRepository.listExpenses(),
+          ),
+        ],
+      ],
       if (isOwner) ...[
-        _SetupStep(
-          title: 'Syncing dashboard',
-          errorText: "Couldn't sync dashboard",
-          hasCache: () => _localCache.getCachedDashboardMetrics() != null,
-          run: () async => _ownerRepository.getDashboardMetrics(),
-        ),
-        _SetupStep(
-          title: 'Syncing expenses',
-          errorText: "Couldn't sync expenses",
-          hasCache: () => _localCache.getCachedExpenses() != null,
-          run: () async => _ownerRepository.listExpenses(),
-        ),
         _SetupStep(
           title: 'Syncing staff',
           errorText: "Couldn't sync staff",
+          parallelGroup: 2,
           hasCache: () => _localCache.getCachedStaff() != null,
           run: () async => _ownerRepository.listStaff(),
         ),
       ],
     ];
   }
+
+  /// Outlets cached at sign-in (the login response caches every allowed
+  /// outlet before this screen opens).
+  List<Map<String, dynamic>> _ownerOutlets() =>
+      _localCache.getAllowedOutlets() ?? const [];
+
+  bool _scopeCached(String scope) {
+    final all = scope == LocalCacheService.allScope;
+    return _localCache.hasCachedOrdersFor(
+          outletId: all ? null : scope,
+          allOutlets: all,
+        ) &&
+        _localCache.getCachedDashboardMetricsForScope(scope) != null &&
+        _localCache.getCachedExpensesForScope(scope) != null;
+  }
+
+  /// Owner with several outlets: one row for the combined "All outlets" view
+  /// and one per outlet, each pulling orders, the default dashboard and
+  /// expenses into that scope's own cache. A failed row does not stop the
+  /// others — its Retry re-runs just that row.
+  List<_SetupStep> _ownerScopeSteps() {
+    final scopes = <(String, String)>[
+      ('All outlets', LocalCacheService.allScope),
+      for (final o in _ownerOutlets())
+        (o['displayName']?.toString() ?? 'Outlet', o['id']?.toString() ?? ''),
+    ].where((s) => s.$2.isNotEmpty).toList();
+    return [
+      for (var i = 0; i < scopes.length; i++)
+        _SetupStep(
+          title: 'Syncing ${scopes[i].$1}',
+          errorText: "Couldn't sync ${scopes[i].$1}",
+          subtitle: 'Orders, dashboard and expenses',
+          continueOnError: true,
+          parallelGroup: 2,
+          hasCache: () => _scopeCached(scopes[i].$2),
+          isOrders: true,
+          run: () async {
+            // Queued changes go up once, before any scope pulls. Only a
+            // success is remembered, and a false result must not be pulled
+            // over: unsent local changes would be overwritten.
+            final pushed = await _pushQueueOnce();
+            if (!pushed) {
+              throw Exception('Unsent changes could not be uploaded yet');
+            }
+            await Future.wait([
+              _ordersRepository.syncOrdersForScope(scopes[i].$2),
+              _ownerRepository.syncDashboardForScope(scopes[i].$2),
+              _ownerRepository.syncExpensesForScope(scopes[i].$2),
+            ]);
+          },
+        ),
+    ];
+  }
+
+  Future<bool> _pushQueueOnce() =>
+      _queuePush ??= _ordersRepository.processPendingSyncQueue().then(
+        (ok) {
+          if (!ok) _queuePush = null;
+          return ok;
+        },
+        onError: (Object e, StackTrace st) {
+          _queuePush = null;
+          Error.throwWithStackTrace(e, st);
+        },
+      );
 
   String? _activeOutletName() {
     final activeId = _localCache.getActiveOutletId();
@@ -198,42 +291,141 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
   /// the phone, a step uses it without a network call; a failed step with
   /// cached data falls back to it and carries on; a failed step without
   /// stops here with Retry (resumes from this step) and "Continue anyway".
+  ///
+  /// Consecutive rows sharing a `parallelGroup` run at the same time and the
+  /// screen moves on once all of them have settled.
   Future<void> _runFrom(int index) async {
-    for (var i = index; i < _steps.length; i++) {
+    // One run at a time: a Retry must not re-run rows the original loop is
+    // still working on (it could also reach _finishAndNavigate twice).
+    if (_running) return;
+    _running = true;
+    final failuresBefore = NetworkHealth.failures;
+    try {
+      await _runFromUnguarded(index, failuresBefore);
+    } finally {
+      _running = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _runFromUnguarded(int index, int failuresBefore) async {
+    var i = index;
+    while (i < _steps.length) {
       if (!mounted) return;
-      final step = _steps[i];
-      setState(() {
-        step.status = StepStatus.active;
-        step.error = null;
-      });
-
-      if (_isOffline && step.hasCache?.call() == true) {
-        setState(() => step.status = StepStatus.offlineCached);
-        continue;
-      }
-
-      try {
-        await step.run();
-        if (!mounted) return;
-        setState(() => step.status = StepStatus.done);
-      } catch (_) {
-        if (!mounted) return;
-        if (step.hasCache?.call() == true) {
-          setState(() {
-            step.status = StepStatus.offlineCached;
-            _canContinueAnyway = true;
-          });
-        } else {
-          setState(() {
-            step.status = StepStatus.error;
-            step.error = step.errorText;
-            _canContinueAnyway = true;
-          });
-          return;
+      final group = <int>[i];
+      final g = _steps[i].parallelGroup;
+      if (g != null) {
+        while (i + group.length < _steps.length &&
+            _steps[i + group.length].parallelGroup == g) {
+          group.add(i + group.length);
         }
       }
+      // A retry resumes at its own row; rows after it that already finished
+      // (continue-on-error rows) are not redone.
+      final toRun = [
+        for (final j in group)
+          if (j == index ||
+              (_steps[j].status != StepStatus.done &&
+                  _steps[j].status != StepStatus.offlineCached &&
+                  _steps[j].status != StepStatus.active))
+            j,
+      ];
+      final stops = await Future.wait(toRun.map(_runStep));
+      if (!mounted || stops.any((stop) => stop)) return;
+      i += group.length;
+    }
+    // Rows that failed but let the rest run still hold the user here, with
+    // Retry on the row and "Continue anyway" below.
+    if (_steps.any((s) => s.status == StepStatus.error)) return;
+    // Repositories swallow network failures and serve their cache, so a
+    // step can look "done" without ever reaching the server: only call the
+    // phone fresh when no request failed during the run.
+    if (!_isOffline &&
+        NetworkHealth.failures == failuresBefore &&
+        _steps.every((s) => s.status == StepStatus.done) &&
+        !await _connectivityService.checkIsOffline()) {
+      SyncFreshness.mark();
     }
     await _finishAndNavigate();
+  }
+
+  /// Runs one row. Returns true when the sequence should stop here (a failed
+  /// row with nothing on the phone to fall back on, that isn't
+  /// continue-on-error) or the screen is gone.
+  Future<bool> _runStep(int i) async {
+    final step = _steps[i];
+    if (!mounted) return true;
+    setState(() {
+      step.status = StepStatus.active;
+      step.error = null;
+    });
+
+    if (_isOffline && step.hasCache?.call() == true) {
+      setState(() => step.status = StepStatus.offlineCached);
+      return false;
+    }
+
+    final failuresBefore = NetworkHealth.failures;
+    try {
+      await step.run();
+      if (!mounted) return true;
+      // The repository may have caught a failure and returned its cache.
+      final fellBack =
+          NetworkHealth.failures != failuresBefore &&
+          step.hasCache?.call() == true;
+      setState(
+        () =>
+            step.status = fellBack ? StepStatus.offlineCached : StepStatus.done,
+      );
+    } catch (e, st) {
+      AppLogger.log(
+        _tag,
+        'step "${step.title}" failed',
+        error: e,
+        stackTrace: st,
+      );
+      if (!mounted) return true;
+      if (e is AuthException && e.code == 'UNAUTHENTICATED') {
+        // The session is dead: go to login through the session-revoked flow
+        // rather than offering "Continue anyway".
+        setState(() {
+          step.status = StepStatus.error;
+          step.error = step.errorText;
+        });
+        _dispatchSessionRevoked();
+        return true;
+      }
+      if (e is AuthException) {
+        // 403: the app-level handler decides (blocked screen / re-scope).
+        setState(() {
+          step.status = StepStatus.error;
+          step.error = step.errorText;
+        });
+        return true;
+      }
+      if (step.hasCache?.call() == true) {
+        setState(() {
+          step.status = StepStatus.offlineCached;
+          _canContinueAnyway = true;
+        });
+      } else {
+        setState(() {
+          step.status = StepStatus.error;
+          step.error = step.errorText;
+          _canContinueAnyway = true;
+        });
+        return !step.continueOnError;
+      }
+    }
+    return false;
+  }
+
+  void _dispatchSessionRevoked() {
+    try {
+      context.read<AuthBloc>().add(SessionRevokedEvent());
+    } on ProviderNotFoundException catch (e) {
+      AppLogger.log(_tag, 'no AuthBloc to report revoked session', error: e);
+    }
   }
 
   bool get _allStepsCompleted => _steps.every(
@@ -261,9 +453,14 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
   }
 
   Future<void> _continueAnyway() async {
-    // An empty list marks this scope as set up, so the app doesn't route
-    // straight back here; the Orders screen syncs an empty list itself.
-    if (_localCache.getCachedOrders() == null) {
+    // Only an orders pull that really succeeded may mark the scope as
+    // "no orders". Otherwise the scope stays uncached so the Orders screen
+    // shows its "can't load" state instead of an empty list as truth (the
+    // app shell skips this setup screen for the scope once it completes).
+    final ordersPulled = _steps.any(
+      (s) => s.isOrders && s.status == StepStatus.done,
+    );
+    if (ordersPulled && _localCache.getCachedOrders() == null) {
       await _localCache.setCachedOrders([]);
     }
     await _finishAndNavigate();
@@ -278,7 +475,7 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
           subtitle: _steps[i].subtitle,
           status: _steps[i].status,
           errorText: _steps[i].error,
-          onRetry: () => _runFrom(i),
+          onRetry: _running ? null : () => _runFrom(i),
         ),
     ];
 
@@ -406,6 +603,16 @@ class _SetupStep {
   final bool Function()? hasCache;
   final Future<void> Function() run;
 
+  /// When this row fails, carry on with the rows after it instead of
+  /// stopping here.
+  final bool continueOnError;
+
+  /// Consecutive rows with the same group run concurrently.
+  final int? parallelGroup;
+
+  /// Whether this row pulls the orders list of a scope.
+  final bool isOrders;
+
   StepStatus status = StepStatus.pending;
   String? error;
 
@@ -414,6 +621,9 @@ class _SetupStep {
     required this.errorText,
     this.subtitle,
     this.hasCache,
+    this.continueOnError = false,
+    this.parallelGroup,
+    this.isOrders = false,
     required this.run,
   });
 }
@@ -546,25 +756,10 @@ class _ChecklistRow extends StatelessWidget {
             ),
           ),
           if (status == StepStatus.error && onRetry != null)
-            TextButton(
+            TextActionButton(
+              label: 'Retry',
+              height: AppButtonHeight.compact,
               onPressed: onRetry,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                minimumSize: const Size(48, 30),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text(
-                'Retry',
-                style: TextStyle(
-                  fontFamily: AppTextStyles.fontBody,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
             ),
         ],
       ),

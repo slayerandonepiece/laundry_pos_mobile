@@ -87,12 +87,17 @@ class StatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[icon!, const SizedBox(width: 5)],
-          Text(label, style: AppTextStyles.pill.copyWith(color: textColor)),
-        ],
+      // Shrinks to fit when large text or a narrow card leaves it too little
+      // room; at its natural size otherwise.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[icon!, const SizedBox(width: 5)],
+            Text(label, style: AppTextStyles.pill.copyWith(color: textColor)),
+          ],
+        ),
       ),
     );
   }
