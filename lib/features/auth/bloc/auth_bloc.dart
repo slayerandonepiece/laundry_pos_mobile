@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
@@ -18,6 +20,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     : _localCache = localCache ?? LocalCacheService(),
       super(AuthInitialState()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
+    on<RefreshAuthStatusEvent>(_onRefreshAuthStatus);
     on<LoginSubmittedEvent>(_onLoginSubmitted);
     on<StoreSelectedEvent>(_onStoreSelected);
     on<SetPasswordSubmittedEvent>(_onSetPasswordSubmitted);
@@ -55,6 +58,44 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       } else {
         emit(UnauthenticatedState());
       }
+    }
+  }
+
+  /// Silent re-check while signed in (app resume). It never shows a loading
+  /// screen and never signs the user out because the phone is offline: it only
+  /// acts when the server now says something that changes what the user may do
+  /// or see (blocked, password change forced, subscription facts changed).
+  Future<void> _onRefreshAuthStatus(
+    RefreshAuthStatusEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    final current = state;
+    if (current is! AuthenticatedState) return;
+    try {
+      final result = await authRepository.checkSession();
+      if (result == null || state is! AuthenticatedState) return;
+      final refreshed = result.stores
+          .where((s) => s.storeId == current.currentStore.storeId)
+          .firstOrNull;
+      final unchanged =
+          refreshed != null &&
+          !refreshed.isBlocked &&
+          !result.user.mustChangePassword &&
+          jsonEncode(refreshed.toJson()) ==
+              jsonEncode(current.currentStore.toJson());
+      if (unchanged) return;
+      _resolveAuthResult(result, emit);
+    } on AuthException catch (e) {
+      if (e.code == 'FORBIDDEN') {
+        add(
+          AccessForbiddenEvent(
+            reason: e.reason,
+            paidThroughDate: e.paidThroughDate,
+          ),
+        );
+      }
+    } catch (e) {
+      AppLogger.log(_tag, 'silent auth refresh failed', error: e);
     }
   }
 
@@ -274,6 +315,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
     final current = state;
+    if (reason == 'must_change_password' && current is AuthenticatedState) {
+      // The server forced a password change mid-session: take the user to the
+      // same set-password screen the login path uses, not a dead-end block.
+      emit(MustChangePasswordState(user: current.user));
+      return;
+    }
     final isOwner = current is AuthenticatedState ? current.isOwner : false;
     emit(
       AccessBlockedState(

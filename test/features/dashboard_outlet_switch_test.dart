@@ -173,7 +173,9 @@ void main() {
       await pumpScreen(tester);
       await tester.tap(inFilter(filterDate, '7 days'));
       await settle(tester);
-      await tester.tap(inFilter(filterService, PeriodRange.previousMonthLabel()));
+      await tester.tap(
+        inFilter(filterService, PeriodRange.previousMonthLabel()),
+      );
       await settle(tester);
       expect(rangeOf(tester, filterDate), PeriodRange.last7);
       expect(rangeOf(tester, filterService), PeriodRange.previousMonth);

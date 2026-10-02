@@ -263,42 +263,45 @@ void main() {
     expect(chipSelected(tester, 'Open'), isTrue);
   });
 
-  testWidgets('switching store reloads the dashboard with the default month-to-date '
-      'daily request, keyed to the outlet scope', (tester) async {
-    await pumpShell(tester);
-    ownerBloc.dashboardEvents.clear();
+  testWidgets(
+    'switching store reloads the dashboard with the default month-to-date '
+    'daily request, keyed to the outlet scope',
+    (tester) async {
+      await pumpShell(tester);
+      ownerBloc.dashboardEvents.clear();
 
-    final other = StoreSummary(
-      storeId: 's2',
-      storeName: 'Other Store',
-      role: 'OWNER',
-    );
-    authBloc.emit(
-      AuthenticatedState(
-        user: User(id: 'u1', name: 'Owner User', phone: 'owner'),
-        currentStore: other,
-        availableStores: [other],
-      ),
-    );
-    await settle(tester);
+      final other = StoreSummary(
+        storeId: 's2',
+        storeName: 'Other Store',
+        role: 'OWNER',
+      );
+      authBloc.emit(
+        AuthenticatedState(
+          user: User(id: 'u1', name: 'Owner User', phone: 'owner'),
+          currentStore: other,
+          availableStores: [other],
+        ),
+      );
+      await settle(tester);
 
-    expect(ownerBloc.dashboardEvents, hasLength(1));
-    final e = ownerBloc.dashboardEvents.single;
-    final now = DateTime.now();
-    expect(e.refresh, isTrue);
-    expect(e.isDefaultPeriod, isTrue);
-    expect(e.granularity, 'day');
-    expect(e.to, DateFormatter.toIsoDateString(now));
-    expect(
-      e.from,
-      DateFormatter.toIsoDateString(DateTime(now.year, now.month, 1)),
-    );
-    final scope = outletScopeCubit.state;
-    expect(
-      e.requestKey,
-      'mtd|${scope.allOutlets ? 'all' : (scope.activeOutletId ?? 'none')}',
-    );
-  });
+      expect(ownerBloc.dashboardEvents, hasLength(1));
+      final e = ownerBloc.dashboardEvents.single;
+      final now = DateTime.now();
+      expect(e.refresh, isTrue);
+      expect(e.isDefaultPeriod, isTrue);
+      expect(e.granularity, 'day');
+      expect(e.to, DateFormatter.toIsoDateString(now));
+      expect(
+        e.from,
+        DateFormatter.toIsoDateString(DateTime(now.year, now.month, 1)),
+      );
+      final scope = outletScopeCubit.state;
+      expect(
+        e.requestKey,
+        'mtd|${scope.allOutlets ? 'all' : (scope.activeOutletId ?? 'none')}',
+      );
+    },
+  );
 }
 
 Future<void> settle(WidgetTester tester) async {

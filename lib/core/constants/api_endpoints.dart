@@ -47,6 +47,7 @@ class ApiEndpoints {
 
   // Expenses
   static String get expenses => '$baseUrl/api/v1/expenses';
+  static String expenseById(String id) => '$baseUrl/api/v1/expenses/$id';
   static String markExpensePaid(String id) =>
       '$baseUrl/api/v1/expenses/$id/pay';
 
@@ -61,4 +62,5 @@ class ApiEndpoints {
 
   // Dashboard
   static String get dashboard => '$baseUrl/api/v1/dashboard';
+  static String get dashboardRollups => '$baseUrl/api/v1/dashboard/rollups';
 }

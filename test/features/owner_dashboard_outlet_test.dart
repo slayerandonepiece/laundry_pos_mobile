@@ -12,6 +12,7 @@ import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
+import 'package:myshop/features/owner/data/models/outlet_rollup_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
@@ -97,6 +98,8 @@ class FakeLocalCache extends LocalCacheService {
 
 class FakeDashboardOwnerRepository implements OwnerRepository {
   DashboardMetrics metrics;
+  List<OutletRollup> rollups = const [];
+  bool rollupsShouldThrow = false;
   final List<({String? from, String? to})> calls = [];
 
   FakeDashboardOwnerRepository({required this.metrics});
@@ -113,6 +116,15 @@ class FakeDashboardOwnerRepository implements OwnerRepository {
 
   @override
   DashboardMetrics? getCachedDashboardMetricsSync() => metrics;
+
+  @override
+  Future<List<OutletRollup>> getOutletRollups({
+    required String from,
+    required String to,
+  }) async {
+    if (rollupsShouldThrow) throw Exception('rollups failed');
+    return rollups;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -154,6 +166,18 @@ class FakeOrdersBloc extends Bloc<OrdersEvent, OrdersState>
 }
 
 void main() {
+  test('outlet rollup model tolerates missing numeric fields', () {
+    final rollup = OutletRollup.fromJson({
+      'outletId': 'outlet_1',
+      'businessDate': '2026-10-02',
+    });
+
+    expect(rollup.outletId, 'outlet_1');
+    expect(rollup.ordersCreatedCount, 0);
+    expect(rollup.ordersCompletedCount, 0);
+    expect(rollup.grossOrderAmount, 0);
+  });
+
   group('OwnerDashboardScreen Outlet Scope & Vocabulary (O5.2)', () {
     late FakeDashboardOwnerRepository fakeOwnerRepo;
     late TrackingOwnerBloc ownerBloc;
@@ -260,8 +284,106 @@ void main() {
         expect(find.text('All outlets'), findsNothing);
         expect(find.text('Chinnapanahalli'), findsOneWidget);
         expect(find.byIcon(Icons.unfold_more), findsNothing);
+        expect(find.text('Per-outlet performance'), findsNothing);
       },
     );
+
+    testWidgets('All-outlets cards render per-outlet performance', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final now = DateTime.now();
+      final today =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final prior = now.subtract(const Duration(days: 1));
+      final yesterday =
+          '${prior.year.toString().padLeft(4, '0')}-${prior.month.toString().padLeft(2, '0')}-${prior.day.toString().padLeft(2, '0')}';
+      fakeOwnerRepo.rollups = [
+        OutletRollup(
+          outletId: 'outlet_1',
+          businessDate: today,
+          ordersCreatedCount: 4,
+          grossOrderAmount: 50000,
+        ),
+        OutletRollup(
+          outletId: 'outlet_1',
+          businessDate: yesterday,
+          grossOrderAmount: 25000,
+        ),
+        OutletRollup(
+          outletId: 'outlet_2',
+          businessDate: today,
+          ordersCreatedCount: 2,
+          grossOrderAmount: 25000,
+        ),
+      ];
+      ordersBloc = FakeOrdersBloc([
+        Order(
+          id: 'ORD-OPEN',
+          name: 'Open',
+          phone: '1',
+          date: today,
+          due: today,
+          status: 'Pending',
+          lines: const [],
+          payments: const [],
+          outletId: 'outlet_1',
+        ),
+      ]);
+      final cubit = OutletScopeCubit(localCache: FakeLocalCache())..hydrate();
+      addTearDown(cubit.close);
+
+      await tester.pumpWidget(buildScreen(cubit));
+      await pumpDashboard(tester);
+
+      await tester.scrollUntilVisible(
+        find.text('Per-outlet performance'),
+        500,
+        scrollable: find
+            .descendant(
+              of: find.byType(CustomScrollView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+
+      expect(find.text('Per-outlet performance'), findsOneWidget);
+      expect(find.text('Chinnapanahalli'), findsWidgets);
+      expect(find.text('Marathahalli'), findsWidgets);
+      expect(find.text('₹500'), findsWidgets);
+      expect(find.text('↑ 100% vs yesterday'), findsOneWidget);
+      expect(find.text('Open orders'), findsNWidgets(3));
+    });
+
+    testWidgets('rollup failure stays local to the cards', (tester) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      fakeOwnerRepo.rollupsShouldThrow = true;
+      final cubit = OutletScopeCubit(localCache: FakeLocalCache())..hydrate();
+      addTearDown(cubit.close);
+
+      await tester.pumpWidget(buildScreen(cubit));
+      await pumpDashboard(tester);
+
+      await tester.scrollUntilVisible(
+        find.text('Outlet performance unavailable'),
+        500,
+        scrollable: find
+            .descendant(
+              of: find.byType(CustomScrollView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+
+      expect(find.text('Outlet performance unavailable'), findsOneWidget);
+      expect(find.text('Sales this month'), findsOneWidget);
+    });
 
     testWidgets('Changing outlet scope dispatches LoadDashboardEvent', (
       tester,

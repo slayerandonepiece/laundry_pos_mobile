@@ -17,12 +17,15 @@ void main() {
       expect(PeriodRange.last7.to(now), now);
     });
 
-    test('month presets run from the 1st; previous month ends on its last day', () {
-      expect(PeriodRange.thisMonth.from(now), DateTime(2026, 9, 1));
-      expect(PeriodRange.thisMonth.to(now), now);
-      expect(PeriodRange.previousMonth.from(now), DateTime(2026, 8, 1));
-      expect(PeriodRange.previousMonth.to(now), DateTime(2026, 8, 31));
-    });
+    test(
+      'month presets run from the 1st; previous month ends on its last day',
+      () {
+        expect(PeriodRange.thisMonth.from(now), DateTime(2026, 9, 1));
+        expect(PeriodRange.thisMonth.to(now), now);
+        expect(PeriodRange.previousMonth.from(now), DateTime(2026, 8, 1));
+        expect(PeriodRange.previousMonth.to(now), DateTime(2026, 8, 31));
+      },
+    );
 
     test('contains is day-inclusive at both ends', () {
       final r = PeriodRange.last7;
@@ -46,14 +49,17 @@ void main() {
       expect(custom(200).granularity, 'month');
     });
 
-    test('only the current month is the default; equal selections compare equal', () {
-      expect(PeriodRange.thisMonth.isDefault, isTrue);
-      expect(PeriodRange.previousMonth.isDefault, isFalse);
-      expect(PeriodRange.last30.isDefault, isFalse);
-      expect(PeriodRange.last7.isDefault, isFalse);
-      expect(PeriodRange.last7, const PeriodRange('7d'));
-      expect(PeriodRange.last7 == PeriodRange.last90, isFalse);
-    });
+    test(
+      'only the current month is the default; equal selections compare equal',
+      () {
+        expect(PeriodRange.thisMonth.isDefault, isTrue);
+        expect(PeriodRange.previousMonth.isDefault, isFalse);
+        expect(PeriodRange.last30.isDefault, isFalse);
+        expect(PeriodRange.last7.isDefault, isFalse);
+        expect(PeriodRange.last7, const PeriodRange('7d'));
+        expect(PeriodRange.last7 == PeriodRange.last90, isFalse);
+      },
+    );
   });
 
   group('AppDropdownField', () {

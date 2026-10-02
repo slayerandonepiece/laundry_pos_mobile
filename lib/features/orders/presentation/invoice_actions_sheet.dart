@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/theme/text_styles.dart';
@@ -12,6 +13,7 @@ import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const _tag = 'INVOICE_SHARE';
 
@@ -28,6 +30,21 @@ class InvoiceActionsSheet extends StatelessWidget {
     this.storeAddress = '',
     this.storePhone = '',
   });
+
+  /// The customer-facing web page for this invoice, or null while the invoice
+  /// is not final. The server only issues an invoice (and its access token)
+  /// once the order is paid in full and delivered, and its tokens are 43
+  /// base64url characters, so anything else is not a link we can trust.
+  static String? publicInvoiceUrl(Order order) {
+    // Not `invoice.exists`: the invoice cached from GET /orders/{code}/invoice
+    // carries the token but no `exists` field. A token is only ever issued
+    // together with the invoice.
+    final token = order.invoice?.accessToken;
+    if (token == null) return null;
+    if (!order.isPaidInFull || !order.isDelivered) return null;
+    if (!RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(token)) return null;
+    return '${ApiEndpoints.baseUrl}/i/$token/view';
+  }
 
   static Future<void> show(
     BuildContext context, {
@@ -182,6 +199,23 @@ class InvoiceActionsSheet extends StatelessWidget {
             },
           ),
           const SizedBox(height: 10),
+
+          if (publicInvoiceUrl(order) case final publicUrl?) ...[
+            _buildActionRow(
+              icon: Icons.open_in_new,
+              iconColor: AppColors.mutedText,
+              title: 'Open in browser',
+              subtitle: 'The customer-facing invoice page',
+              onTap: () async {
+                Navigator.pop(context);
+                await launchUrl(
+                  Uri.parse(publicUrl),
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
 
           _buildActionRow(
             icon: Icons.print_outlined,

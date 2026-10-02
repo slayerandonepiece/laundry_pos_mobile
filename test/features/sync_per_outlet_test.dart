@@ -321,6 +321,40 @@ void main() {
       }
     });
 
+    test('non-recoverable 403 replay stores an accurate outlet or neutral error label', () async {
+      for (final scenario in [
+        ('store_archived', 'not allowed'),
+        ('unknown_reason', 'not allowed'),
+        (null, 'outlet access changed'),
+      ]) {
+        await localCache.setPendingSyncQueue([
+          {
+            'type': 'create_order',
+            'clientActionId': 'act_${scenario.$1}',
+            'offlineCode': 'LOCAL-${scenario.$1}',
+            'storeId': 'store_1',
+            'outletId': 'o1',
+            'body': {'phone': '9000000001', 'outletId': 'o1'},
+          },
+        ]);
+        await localCache.setDeadLetterQueue([]);
+        dioHandler = (options) async => mockJsonResponse({
+          'error': 'Forbidden',
+          'reason': scenario.$1,
+        }, statusCode: 403);
+
+        final ok = await ordersRepo.processPendingSyncQueue();
+
+        expect(ok, isFalse);
+        expect(localCache.getPendingSyncQueue(), isEmpty);
+        expect(
+          localCache.getDeadLetterQueue().single['lastError'],
+          scenario.$2,
+          reason: scenario.$1,
+        );
+      }
+    });
+
     test(
       'legacy create_order without top-level outletId groups by body.outletId',
       () async {

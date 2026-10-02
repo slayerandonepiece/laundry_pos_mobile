@@ -138,6 +138,8 @@ class _ServicesScreenState extends State<ServicesScreen> {
             Text(
               _searchQuery.isNotEmpty
                   ? '${filtered.length} of ${_products.length} services'
+                  : _products.length == 1
+                  ? '1 service configured'
                   : '${_products.length} services configured',
               style: AppTextStyles.hint,
             ),
@@ -750,11 +752,20 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
 
     if (_unit == 'WEIGHT') {
       for (final t in _tiers) {
-        final limit = double.tryParse(t.limitController.text.trim()) ?? 0;
-        final priceRupees = double.tryParse(t.priceController.text.trim()) ?? 0;
-        if (limit > 0 && priceRupees > 0) {
-          slabs.add({'limit': limit, 'price': (priceRupees * 100).round()});
+        final limitText = t.limitController.text.trim();
+        final priceText = t.priceController.text.trim();
+        if (limitText.isEmpty && priceText.isEmpty) continue;
+        final limit = double.tryParse(limitText) ?? 0;
+        final priceRupees = double.tryParse(priceText) ?? 0;
+        final price = (priceRupees * 100).round();
+        if (limit <= 0 || price <= 0) {
+          setState(
+            () => _errorMessage =
+                'Slab limits must increase and prices must be positive.',
+          );
+          return;
         }
+        slabs.add({'limit': limit, 'price': price});
       }
 
       if (slabs.isEmpty) {
@@ -765,6 +776,15 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
         return;
       }
       slabs.sort((a, b) => (a['limit'] as num).compareTo(b['limit'] as num));
+      for (var i = 1; i < slabs.length; i++) {
+        if ((slabs[i]['limit'] as num) <= (slabs[i - 1]['limit'] as num)) {
+          setState(
+            () => _errorMessage =
+                'Slab limits must increase and prices must be positive.',
+          );
+          return;
+        }
+      }
       priceInPaise = slabs.first['price'] as int;
 
       final extraRupees = double.tryParse(_extraController.text.trim()) ?? 0;

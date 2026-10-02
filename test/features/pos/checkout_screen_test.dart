@@ -21,6 +21,7 @@ class _FakePosRepo implements PosRepository {
   String? lastPassedNotes;
   bool submitCalled = false;
   String? lastPaymentChoice;
+  int? lastPassedAmount;
 
   @override
   List<Product> getCachedProductsList() => [];
@@ -45,6 +46,7 @@ class _FakePosRepo implements PosRepository {
     submitCalled = true;
     lastPassedOutletId = outletId;
     lastPassedMethodName = initialPayment?['method']?.toString();
+    lastPassedAmount = (initialPayment?['amount'] as num?)?.toInt();
     lastPassedDueDate = dueDate;
     lastPassedNotes = notes;
     return Order(
@@ -243,6 +245,91 @@ void main() {
       expect(fakeRepo.submitCalled, isTrue);
       expect(fakeRepo.lastPassedMethodName, equals('UPI'));
       expect(fakeRepo.lastPassedOutletId, equals('outlet_a'));
+    });
+
+    Product bigProduct() => Product(
+      id: 'prod_big',
+      name: 'Duvet',
+      category: 'dry clean',
+      type: 'item',
+      price: 50000,
+      active: true,
+    );
+
+    void loadBigCart() {
+      cartBloc.emit(
+        cartBloc.state.copyWith(
+          items: {'prod_big': CartItem(product: bigProduct(), quantity: 1)},
+          paymentMethods: [
+            StorePaymentMethod(id: 'pm_cash', name: 'Cash', active: true),
+            StorePaymentMethod(
+              id: 'pm_cod',
+              code: 'COD',
+              name: 'Cash On Delivery',
+              active: true,
+            ),
+          ],
+          outletId: 'outlet_a',
+        ),
+      );
+    }
+
+    testWidgets(
+      'Received now sends a partial amount and rejects an amount above the total',
+      (tester) async {
+        loadBigCart();
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+
+        final receivedField = find.byKey(const Key('checkout_received_field'));
+        expect(receivedField, findsNothing);
+
+        // Pay-on-delivery takes no money now, so the field stays hidden.
+        await tester.tap(find.text('Cash On Delivery'));
+        await tester.pump();
+        expect(receivedField, findsNothing);
+
+        await tester.tap(find.text('Cash'));
+        await tester.pump();
+        expect(receivedField, findsOneWidget);
+
+        await tester.enterText(receivedField, '600');
+        await tester.pump();
+        expect(
+          find.text('Enter an amount between ₹1 and ₹500'),
+          findsOneWidget,
+        );
+        expect(
+          tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
+          isNull,
+        );
+
+        await tester.enterText(receivedField, '150');
+        await tester.pump();
+        expect(find.text('Place order · ₹150 received now'), findsOneWidget);
+
+        await tester.tap(find.byType(PrimaryButton));
+        await tester.pump();
+
+        expect(fakeRepo.submitCalled, isTrue);
+        expect(fakeRepo.lastPassedMethodName, 'Cash');
+        expect(fakeRepo.lastPassedAmount, 15000);
+      },
+    );
+
+    testWidgets('A blank Received now field still sends the full total', (
+      tester,
+    ) async {
+      loadBigCart();
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      await tester.tap(find.text('Cash'));
+      await tester.pump();
+      await tester.tap(find.byType(PrimaryButton));
+      await tester.pump();
+
+      expect(fakeRepo.lastPassedAmount, 50000);
     });
 
     testWidgets(

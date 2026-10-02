@@ -158,6 +158,48 @@ void main() {
       );
     }
 
+    testWidgets('A trial store shows the plan strip above the owner screens', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final trialStore = StoreSummary(
+        storeId: 's1',
+        storeName: 'Test Store',
+        role: 'OWNER',
+        subscriptionState: 'TRIAL',
+        trialEndsAt: '2026-10-15',
+      );
+      authBloc.emit(
+        AuthenticatedState(
+          user: User(id: 'u1', name: 'Owner User', phone: 'owner'),
+          currentStore: trialStore,
+          availableStores: [trialStore],
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('Free trial · Ends 15 Oct 2026'), findsOneWidget);
+    });
+
+    testWidgets('An ordinary store shows no plan strip', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byKey(const Key('access_notice_message')), findsNothing);
+    });
+
     testWidgets(
       'Switching away from Dashboard tab resets the card periods to default (current month)',
       (tester) async {

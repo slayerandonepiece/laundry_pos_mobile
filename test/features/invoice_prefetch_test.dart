@@ -153,7 +153,10 @@ void main() {
       MaterialApp(home: InvoiceViewerScreen(order: updated)),
     );
     expect(find.text('Paid in full'), findsOneWidget);
-    expect(find.text(CurrencyFormatter.formatPdf(23000)), findsAtLeastNWidgets(2));
+    expect(
+      find.text(CurrencyFormatter.formatPdf(23000)),
+      findsAtLeastNWidgets(2),
+    );
     expect(find.text(CurrencyFormatter.formatPdf(10000)), findsNothing);
   });
 

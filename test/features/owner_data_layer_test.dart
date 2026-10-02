@@ -464,6 +464,53 @@ void main() {
       expect(ok, isTrue);
       expect(cache.getPendingOwnerActionsQueue(), isEmpty);
     });
+
+    test('recoverable access 403 keeps owner actions unchanged and later replays the same keys once', () async {
+      await queueTwoExpenses();
+      final original = cache.getPendingOwnerActionsQueue();
+
+      for (final reason in [
+        'payment_lapsed',
+        'billing_pending',
+        'store_locked',
+        'membership_inactive',
+        'must_change_password',
+      ]) {
+        api.calls.clear();
+        api.handler = (_, _, _) async => throw AuthException(
+          code: 'FORBIDDEN',
+          reason: reason,
+          statusCode: 403,
+        );
+
+        expect(
+          await repo.processPendingOwnerActions(),
+          isFalse,
+          reason: reason,
+        );
+        expect(cache.getPendingOwnerActionsQueue(), original, reason: reason);
+        expect(cache.getDeadLetterOwnerActionsQueue(), isEmpty, reason: reason);
+        expect(api.calls, hasLength(1), reason: reason);
+      }
+
+      api.calls.clear();
+      var n = 0;
+      api.handler = (_, _, _) async => {
+        'id': 'srv${n++}',
+        'title': 'x',
+        'category': 'Ops',
+        'amount': 1,
+        'due': '2026-09-30',
+      };
+
+      expect(await repo.processPendingOwnerActions(), isTrue);
+      expect(cache.getPendingOwnerActionsQueue(), isEmpty);
+      expect(api.calls, hasLength(2));
+      expect(
+        api.calls.map((call) => call.body['idempotencyKey']),
+        original.map((action) => action['payload']['idempotencyKey']),
+      );
+    });
   });
 
   group('H5 staff changes never guess', () {
@@ -561,6 +608,51 @@ void main() {
         repo.updateStaff(employeeId: 'e9', name: ' ', phone: ''),
         throwsA(isA<ValidationException>()),
       );
+      expect(api.of('PUT'), isEmpty);
+    });
+
+    test('staff password is sent only when filled', () async {
+      await cache.setCachedStaff([row()]);
+      api.handler = (m, u, b) async => row();
+
+      await repo.updateStaff(
+        employeeId: 'e9',
+        name: 'Nia R',
+        phone: '9000000009',
+        password: 'freshpass123',
+      );
+      expect(api.of('PUT').single.body['password'], 'freshpass123');
+
+      api.calls.clear();
+      await repo.updateStaff(
+        employeeId: 'e9',
+        name: 'Nia R',
+        phone: '9000000009',
+        password: '',
+      );
+      expect(api.of('PUT').single.body, isNot(contains('password')));
+    });
+
+    test('offline staff password change refuses and queues nothing', () async {
+      await cache.setCachedStaff([row()]);
+      connectivity.offline = true;
+
+      await expectLater(
+        repo.updateStaff(
+          employeeId: 'e9',
+          name: 'Nia R',
+          phone: '9000000009',
+          password: 'freshpass123',
+        ),
+        throwsA(
+          isA<OwnerRefusedException>().having(
+            (e) => e.message,
+            'message',
+            'This needs a connection',
+          ),
+        ),
+      );
+      expect(cache.getPendingOwnerActionsQueue(), isEmpty);
       expect(api.of('PUT'), isEmpty);
     });
 
@@ -915,6 +1007,44 @@ void main() {
 
       expect(s.actionMessage, 'Staff member updated successfully');
     });
+
+    test(
+      'a password update explains session and next-sign-in effects',
+      () async {
+        await cache.setCachedStaff([
+          {'id': 'e9', 'name': 'Nia', 'phone': '9000000009', 'active': true},
+        ]);
+        api.handler = (m, u, b) async => m == 'GET'
+            ? [
+                {
+                  'id': 'e9',
+                  'name': 'Nia',
+                  'phone': '9000000009',
+                  'active': true,
+                },
+              ]
+            : {
+                'id': 'e9',
+                'name': 'Nia',
+                'phone': '9000000009',
+                'active': true,
+              };
+
+        final s = await settle(
+          UpdateStaffEvent(
+            employeeId: 'e9',
+            name: 'Nia',
+            phone: '9000000009',
+            password: 'freshpass123',
+          ),
+        );
+
+        expect(
+          s.actionMessage,
+          'Staff member updated. Sessions end; they must set a new password at next sign-in',
+        );
+      },
+    );
   });
 
   group('models tolerate malformed elements', () {

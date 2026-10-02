@@ -20,7 +20,9 @@ import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
+import 'package:myshop/features/owner/data/models/outlet_rollup_model.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
+import 'package:myshop/features/shell/data/models/outlet_model.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
@@ -46,6 +48,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   // Sales by date and Sales by service default to the current month (month-to-date);
   // each card keeps its own independent selection.
   PeriodRange _dateRange = PeriodRange.thisMonth;
+
+  /// Off by default: the comparison line costs an extra request, and opening
+  /// the dashboard must not make any when the default period is cached.
+  bool _comparePrevious = false;
   PeriodRange _serviceRange = PeriodRange.thisMonth;
 
   @override
@@ -53,7 +59,26 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     super.initState();
     widget.resetSignal?.addListener(_onTabLeft);
     context.read<OwnerBloc>().add(_currentLoadDashboardEvent(refresh: false));
+    _loadOutletRollups();
+    _loadPreviousPeriod();
     context.read<OrdersBloc>().add(LoadOrdersEvent());
+  }
+
+  void _onComparePrevious(bool on) {
+    setState(() => _comparePrevious = on);
+    if (on) _loadPreviousPeriod();
+  }
+
+  /// Asks for the window just before the date card's range, which the sales
+  /// chart draws as a faint comparison line. Only while Compare is on.
+  void _loadPreviousPeriod() {
+    if (!_comparePrevious) return;
+    context.read<OwnerBloc>().add(
+      LoadPreviousPeriodEvent(
+        range: _dateRange,
+        requestKey: _cardKey(_dateRange),
+      ),
+    );
   }
 
   @override
@@ -105,6 +130,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         LoadCardMetricsEvent(card: card, range: r, requestKey: _cardKey(r)),
       );
     }
+    if (card == DashboardCard.salesByDate) _loadPreviousPeriod();
   }
 
   /// What a card should draw for [range]: the page's data at the default
@@ -155,6 +181,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   void _refreshDashboard({Completer<void>? done}) {
     final bloc = context.read<OwnerBloc>();
     bloc.add(_currentLoadDashboardEvent(done: done));
+    _loadOutletRollups();
+    _loadPreviousPeriod();
     for (final (card, range) in [
       (DashboardCard.salesByDate, _dateRange),
       (DashboardCard.salesByService, _serviceRange),
@@ -169,6 +197,20 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         );
       }
     }
+  }
+
+  void _loadOutletRollups() {
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    final allOutlets =
+        context.read<OutletScopeCubit?>()?.state.allOutlets == true;
+    context.read<OwnerBloc>().add(
+      LoadOutletRollupsEvent(
+        allOutlets: allOutlets,
+        from: DateFormatter.toIsoDateString(yesterday),
+        to: DateFormatter.toIsoDateString(now),
+      ),
+    );
   }
 
   @override
@@ -303,9 +345,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       sliver: SliverMainAxisGroup(
                         slivers: [
                           // 2. Two Large Money Cards
-                          SliverToBoxAdapter(
-                            child: _buildMoneyCards(metrics),
-                          ),
+                          SliverToBoxAdapter(child: _buildMoneyCards(metrics)),
 
                           // 3. Compact 3-Chip Operational Row
                           SliverToBoxAdapter(
@@ -318,6 +358,14 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                               padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                               child: _SalesTrendChart(
                                 bars: dateCard.metrics?.bars ?? const [],
+                                previousBars:
+                                    _comparePrevious &&
+                                        ownerState.previousKey ==
+                                            _cardKey(_dateRange)
+                                    ? ownerState.previousBars
+                                    : const [],
+                                compare: _comparePrevious,
+                                onCompare: _onComparePrevious,
                                 cash: dateCard.metrics?.cash ?? const [],
                                 range: _dateRange,
                                 loading: dateCard.loading,
@@ -412,6 +460,97 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                 ),
                               ),
                             ),
+
+                          if (outletScopeCubit?.state.allOutlets == true)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  14,
+                                  20,
+                                  0,
+                                ),
+                                child: _OutletPerformanceSection(
+                                  outlets: outletScopeCubit!.state.allowed,
+                                  rollups: ownerState.outletRollups,
+                                  orders: allOrders,
+                                  loading: ownerState.outletRollupsLoading,
+                                  failed: ownerState.outletRollupsFailed,
+                                ),
+                              ),
+                            ),
+
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                              child: AppCard(
+                                key: const ValueKey('expenses-month-headline'),
+                                child: Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 12,
+                                  runSpacing: 4,
+                                  children: [
+                                    const Text('Expenses this month'),
+                                    Text(
+                                      CurrencyFormatter.format(
+                                        metrics.expensesThisMonth,
+                                      ),
+                                      style: const TextStyle(
+                                        fontFamily: AppTextStyles.fontDisplay,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.text,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                              child: _NeedsAttentionCard(
+                                overdue: metrics.overdue,
+                                dueToday: metrics.dueToday,
+                                onOverdue: _openOrders(OrdersDrillDown.overdue),
+                                onDueToday: _openOrders(
+                                  OrdersDrillDown.dueToday,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          if (allOrders.isEmpty &&
+                              metrics.periodOrders == 0 &&
+                              metrics.todo == 0)
+                            const SliverToBoxAdapter(
+                              child: Padding(
+                                padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
+                                child: AppCard(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'No orders yet',
+                                        style: TextStyle(
+                                          fontFamily: AppTextStyles.fontDisplay,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'Orders you create will appear here.',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -490,6 +629,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 context.read<OwnerBloc>().add(
                   _currentLoadDashboardEvent(refresh: !SyncFreshness.isFresh),
                 );
+                _loadPreviousPeriod();
               },
               child: body,
             )
@@ -514,10 +654,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   // "Sales today" and "Sales this month", both straight from the server reply.
   Widget _buildMoneyCards(DashboardMetrics metrics) {
     const periodCardTitle = 'Sales this month';
-    final int periodSalesAmount = metrics.periodSales > 0
+    final int periodSalesAmount = metrics.hasPeriodSales
         ? metrics.periodSales
         : metrics.todaySales;
-    final int periodOrderCount = metrics.periodOrders > 0
+    final int periodOrderCount = metrics.hasPeriodSales
         ? metrics.periodOrders
         : metrics.todayCount;
 
@@ -725,6 +865,221 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       ),
     );
   }
+}
+
+class _NeedsAttentionCard extends StatelessWidget {
+  final int overdue;
+  final int dueToday;
+  final VoidCallback? onOverdue;
+  final VoidCallback? onDueToday;
+
+  const _NeedsAttentionCard({
+    required this.overdue,
+    required this.dueToday,
+    this.onOverdue,
+    this.onDueToday,
+  });
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Needs attention',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontDisplay,
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: AppColors.text,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (overdue == 0 && dueToday == 0) const Text('All caught up!'),
+        if (overdue > 0)
+          _row(
+            '$overdue ${overdue == 1 ? 'order' : 'orders'} overdue',
+            onOverdue,
+            const ValueKey('overdue-orders-action'),
+          ),
+        if (dueToday > 0)
+          _row(
+            '$dueToday ${dueToday == 1 ? 'order' : 'orders'} due today',
+            onDueToday,
+            const ValueKey('due-today-orders-action'),
+          ),
+      ],
+    ),
+  );
+
+  Widget _row(String label, VoidCallback? onTap, Key actionKey) => Wrap(
+    alignment: WrapAlignment.spaceBetween,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    spacing: 8,
+    runSpacing: 4,
+    children: [
+      Text(label),
+      TextActionButton(key: actionKey, label: 'View orders', onPressed: onTap),
+    ],
+  );
+}
+
+class _OutletPerformanceSection extends StatelessWidget {
+  final List<Outlet> outlets;
+  final List<OutletRollup> rollups;
+  final List<Order> orders;
+  final bool loading;
+  final bool failed;
+
+  const _OutletPerformanceSection({
+    required this.outlets,
+    required this.rollups,
+    required this.orders,
+    required this.loading,
+    required this.failed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const AppCard(
+        child: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 10),
+            Text('Loading outlet performance…'),
+          ],
+        ),
+      );
+    }
+    if (failed) {
+      return const AppCard(child: Text('Outlet performance unavailable'));
+    }
+    if (rollups.isEmpty || outlets.isEmpty) {
+      return const AppCard(child: Text('No outlet performance yet'));
+    }
+
+    final now = DateTime.now();
+    final todayDate = DateFormatter.toIsoDateString(now);
+    final yesterdayDate = DateFormatter.toIsoDateString(
+      now.subtract(const Duration(days: 1)),
+    );
+    OutletRollup? row(String outletId, String date) {
+      for (final value in rollups) {
+        if (value.outletId == outletId && value.businessDate == date) {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    final maxSales = outlets.fold<int>(0, (best, outlet) {
+      final sales = row(outlet.id, todayDate)?.grossOrderAmount ?? 0;
+      return sales > best ? sales : best;
+    });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Per-outlet performance',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontDisplay,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: AppColors.text,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text("Today's performance · share of best outlet"),
+        const SizedBox(height: 10),
+        for (var index = 0; index < outlets.length; index++) ...[
+          _OutletPerformanceCard(
+            outlet: outlets[index],
+            today: row(outlets[index].id, todayDate),
+            yesterday: row(outlets[index].id, yesterdayDate),
+            openOrders: orders
+                .where(
+                  (order) =>
+                      order.outletId == outlets[index].id && !order.isDelivered,
+                )
+                .length,
+            maxSales: maxSales,
+          ),
+          if (index != outlets.length - 1) const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _OutletPerformanceCard extends StatelessWidget {
+  final Outlet outlet;
+  final OutletRollup? today;
+  final OutletRollup? yesterday;
+  final int openOrders;
+  final int maxSales;
+
+  const _OutletPerformanceCard({
+    required this.outlet,
+    required this.today,
+    required this.yesterday,
+    required this.openOrders,
+    required this.maxSales,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sales = today?.grossOrderAmount ?? 0;
+    final previousSales = yesterday?.grossOrderAmount ?? 0;
+    final share = maxSales == 0 ? 0.0 : sales / maxSales;
+    final growth = previousSales == 0
+        ? null
+        : ((sales - previousSales) / previousSales * 100).round();
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            outlet.displayName,
+            style: const TextStyle(
+              fontFamily: AppTextStyles.fontDisplay,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.text,
+            ),
+          ),
+          if (outlet.outletCode.isNotEmpty) Text(outlet.outletCode),
+          const SizedBox(height: 10),
+          _metric('Sales today', CurrencyFormatter.format(sales)),
+          _metric('Orders', '${today?.ordersCreatedCount ?? 0}'),
+          _metric('Open orders', '$openOrders'),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(value: share.clamp(0, 1)),
+          const SizedBox(height: 6),
+          Text(
+            share == 1 && maxSales > 0
+                ? 'Best outlet today'
+                : '${(share * 100).round()}% of best outlet',
+          ),
+          if (growth != null)
+            Text('${growth >= 0 ? '↑' : '↓'} ${growth.abs()}% vs yesterday'),
+        ],
+      ),
+    );
+  }
+
+  Widget _metric(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [Text(label), Text(value)],
+    ),
+  );
 }
 
 String _monthAbbr(String m) {
@@ -956,6 +1311,9 @@ class _SalesTrendChart extends StatelessWidget {
   final List<DashboardBar> bars;
   final List<CashPoint> cash;
   final PeriodRange range;
+  final List<DashboardBar> previousBars;
+  final bool compare;
+  final ValueChanged<bool> onCompare;
   final bool loading;
   final bool failed;
   final ValueChanged<PeriodRange> onRange;
@@ -963,6 +1321,9 @@ class _SalesTrendChart extends StatelessWidget {
 
   const _SalesTrendChart({
     this.bars = const [],
+    this.previousBars = const [],
+    required this.compare,
+    required this.onCompare,
     this.cash = const [],
     required this.range,
     required this.loading,
@@ -991,6 +1352,16 @@ class _SalesTrendChart extends StatelessWidget {
       final y = (amount / 100).toDouble();
       if (y > maxY) maxY = y;
       spots.add(FlSpot(i.toDouble(), y));
+    }
+    // The comparison line shares the axes, so it is aligned by position and
+    // cut to the current range's length.
+    final previousSpots = <FlSpot>[];
+    if (useBars) {
+      for (int i = 0; i < previousBars.length && i < dataCount; i++) {
+        final y = (previousBars[i].amount / 100).toDouble();
+        if (y > maxY) maxY = y;
+        previousSpots.add(FlSpot(i.toDouble(), y));
+      }
     }
     if (maxY == 0) maxY = 100;
 
@@ -1059,7 +1430,33 @@ class _SalesTrendChart extends StatelessWidget {
             value: range,
             onChanged: onRange,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilterChip(
+              key: const ValueKey('compare-salesByDate'),
+              label: const Text('Compare with previous period'),
+              selected: compare,
+              onSelected: onCompare,
+              visualDensity: VisualDensity.compact,
+              // Same look as the period pills above it.
+              backgroundColor: AppColors.selectedSurface,
+              selectedColor: AppColors.primary,
+              checkmarkColor: Colors.white,
+              side: BorderSide(
+                color: compare
+                    ? AppColors.primary
+                    : AppColors.primary.withValues(alpha: 0.25),
+              ),
+              labelStyle: TextStyle(
+                fontFamily: AppTextStyles.fontBody,
+                fontSize: 12,
+                fontWeight: compare ? FontWeight.w600 : FontWeight.w500,
+                color: compare ? Colors.white : AppColors.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           if (showState)
             _CardStateBox(
               loading: loading,
@@ -1176,6 +1573,17 @@ class _SalesTrendChart extends StatelessWidget {
                         ),
                         borderData: FlBorderData(show: false),
                         lineBarsData: [
+                          if (previousSpots.isNotEmpty)
+                            LineChartBarData(
+                              spots: previousSpots,
+                              isCurved: true,
+                              curveSmoothness: 0.35,
+                              preventCurveOverShooting: true,
+                              color: AppColors.primary.withValues(alpha: 0.30),
+                              barWidth: 2,
+                              isStrokeCapRound: true,
+                              dotData: const FlDotData(show: false),
+                            ),
                           LineChartBarData(
                             spots: spots,
                             isCurved: true,
@@ -1206,6 +1614,11 @@ class _SalesTrendChart extends StatelessWidget {
                             getTooltipColor: (_) => AppColors.text,
                             getTooltipItems: (touchedSpots) {
                               return touchedSpots.map((spot) {
+                                // The faint comparison line has no tooltip.
+                                if (previousSpots.isNotEmpty &&
+                                    spot.barIndex == 0) {
+                                  return null;
+                                }
                                 final idx = spot.x.toInt();
                                 final valPaise = idx < dataCount
                                     ? (useBars

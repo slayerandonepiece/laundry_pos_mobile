@@ -247,6 +247,48 @@ void main() {
     }
 
     testWidgets(
+      'dashboard polish shows attention, expenses, first use, and preserves a true zero month',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        mockOrdersRepo.cachedOrders = [];
+        fakeOwnerRepo.metrics = DashboardMetrics(
+          todaySales: 50000,
+          todayCount: 2,
+          periodSales: 0,
+          periodOrders: 0,
+          expensesThisMonth: 45000,
+          overdue: 2,
+          dueToday: 1,
+        );
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpDashboard(tester);
+
+        expect(find.text('Sales this month'), findsOneWidget);
+        expect(find.text('₹0'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('expenses-month-headline')),
+          500,
+          scrollable: find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        expect(find.text('Expenses this month'), findsWidgets);
+        expect(find.text('₹450'), findsOneWidget);
+        expect(find.text('Needs attention'), findsOneWidget);
+        expect(find.text('2 orders overdue'), findsOneWidget);
+        expect(find.text('1 order due today'), findsOneWidget);
+        expect(find.text('No orders yet'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
       '1. Two hero money cards render correct values and "Sales today" card is visually distinguished',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
@@ -601,6 +643,16 @@ void main() {
         // The old "Orders to finish" list is gone; only the Recent orders
         // card lists orders now.
         expect(find.text('Orders to finish'), findsNothing);
+        await tester.scrollUntilVisible(
+          find.text('Recent orders'),
+          500,
+          scrollable: find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
         expect(find.text('Recent orders'), findsOneWidget);
       },
     );
@@ -966,6 +1018,21 @@ void main() {
 
     group('DashboardMetrics bars parsing tests (F2)', () {
       test(
+        'parses expenses and distinguishes missing from zero period sales',
+        () {
+          final present = DashboardMetrics.fromJson({
+            'periodSales': 0,
+            'expenses': 45000,
+          });
+          final missing = DashboardMetrics.fromJson({'expenses': 0});
+
+          expect(present.hasPeriodSales, isTrue);
+          expect(present.expensesThisMonth, 45000);
+          expect(missing.hasPeriodSales, isFalse);
+        },
+      );
+
+      test(
         'fromJson without bars falls back gracefully and preserves cash',
         () {
           final json = {
@@ -1195,11 +1262,23 @@ void main() {
         await tester.tap(find.text('Open orders').first);
         await tester.tap(find.text('Delivered').first);
         await tester.tap(find.text('Due today').first);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('overdue-orders-action')),
+          500,
+          scrollable: find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.tap(find.byKey(const ValueKey('overdue-orders-action')));
 
         expect(asked, [
           OrdersDrillDown.open,
           OrdersDrillDown.deliveredToday,
           OrdersDrillDown.dueToday,
+          OrdersDrillDown.overdue,
         ]);
       });
 
@@ -1293,20 +1372,21 @@ void main() {
         },
       );
 
-      testWidgets('opening the page asks for the month-to-date daily request once', (
-        tester,
-      ) async {
-        await bigPhone(tester);
-        await tester.pumpWidget(buildTestWidget());
-        await pumpDashboard(tester);
+      testWidgets(
+        'opening the page asks for the month-to-date daily request once',
+        (tester) async {
+          await bigPhone(tester);
+          await tester.pumpWidget(buildTestWidget());
+          await pumpDashboard(tester);
 
-        expect(fakeOwnerRepo.requests.length, 1);
-        final first = fakeOwnerRepo.requests.first;
-        expect(first.granularity, 'day');
-        expect(first.from, monthStart(0));
-        expect(first.to, daysAgo(0));
-        expect(fakeOwnerRepo.periodRequests, isEmpty);
-      });
+          expect(fakeOwnerRepo.requests.length, 1);
+          final first = fakeOwnerRepo.requests.first;
+          expect(first.granularity, 'day');
+          expect(first.from, monthStart(0));
+          expect(first.to, daysAgo(0));
+          expect(fakeOwnerRepo.periodRequests, isEmpty);
+        },
+      );
 
       testWidgets(
         'one chip tap makes exactly one request and leaves the page and the other card alone',
@@ -1336,6 +1416,35 @@ void main() {
         },
       );
 
+      testWidgets(
+        'Compare is off until asked, then requests the window right before the range',
+        (tester) async {
+          await bigPhone(tester);
+          fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
+          await tester.pumpWidget(buildTestWidget());
+          await pumpDashboard(tester);
+          // Off by default: opening the page asked for nothing extra.
+          expect(fakeOwnerRepo.periodRequests, isEmpty);
+
+          await tester.tap(inFilter(filterDate, '7 days'));
+          await pumpDashboard(tester);
+          expect(fakeOwnerRepo.periodRequests.length, 1);
+
+          final chip = find.byKey(const ValueKey('compare-salesByDate'));
+          await tester.ensureVisible(chip);
+          await tester.tap(chip);
+          await pumpDashboard(tester);
+
+          // The 7 days before the last 7 days: same length, ending the day
+          // before the range starts.
+          expect(fakeOwnerRepo.periodRequests.length, 2);
+          final previous = fakeOwnerRepo.periodRequests.last;
+          expect(previous.from, daysAgo(13));
+          expect(previous.to, daysAgo(7));
+          expect(previous.granularity, 'day');
+        },
+      );
+
       testWidgets('each preset sends a daily request for its own dates', (
         tester,
       ) async {
@@ -1354,8 +1463,11 @@ void main() {
         expect(
           fakeOwnerRepo.periodRequests.last.to,
           isoDay(
-            DateTime(DateTime.now().year, DateTime.now().month, 1)
-                .subtract(const Duration(days: 1)),
+            DateTime(
+              DateTime.now().year,
+              DateTime.now().month,
+              1,
+            ).subtract(const Duration(days: 1)),
           ),
         );
 
@@ -1559,6 +1671,7 @@ void main() {
                 )
                 .first;
             var openedRange = false;
+            var sawRecentOrders = false;
             for (var i = 0; i < 12; i++) {
               await tester.drag(scroll, const Offset(0, -300));
               await tester.pumpAndSettle();
@@ -1572,9 +1685,12 @@ void main() {
                 expect(tester.takeException(), isNull);
                 openedRange = true;
               }
+              sawRecentOrders =
+                  sawRecentOrders ||
+                  find.text('Recent orders').evaluate().isNotEmpty;
             }
             expect(openedRange, isTrue);
-            expect(find.text('Recent orders'), findsOneWidget);
+            expect(sawRecentOrders, isTrue);
             expect(tester.takeException(), isNull);
           },
         );

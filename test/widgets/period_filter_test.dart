@@ -37,7 +37,10 @@ void main() {
       expect(PeriodRange.thisMonth.label, PeriodRange.currentMonthLabel());
       expect(PeriodRange.thisMonth.labelFor(now), 'Oct 26');
       expect(PeriodRange.thisMonth.isDefault, isTrue);
-      expect(PeriodRange.thisMonth.contains(DateTime(2026, 10, 1), now), isTrue);
+      expect(
+        PeriodRange.thisMonth.contains(DateTime(2026, 10, 1), now),
+        isTrue,
+      );
       expect(
         PeriodRange.thisMonth.contains(DateTime(2026, 9, 30, 23, 59), now),
         isFalse,
@@ -45,7 +48,10 @@ void main() {
       // On the 1st the range is that single day, never empty or inverted.
       final first = DateTime(2026, 10, 1, 9);
       expect(PeriodRange.thisMonth.from(first), DateTime(2026, 10, 1));
-      expect(PeriodRange.thisMonth.contains(DateTime(2026, 10, 1), first), isTrue);
+      expect(
+        PeriodRange.thisMonth.contains(DateTime(2026, 10, 1), first),
+        isTrue,
+      );
     });
 
     test('previous month in January is December of the previous year', () {
@@ -58,33 +64,39 @@ void main() {
       expect(PeriodRange.currentMonthLabel(now), 'Jan 27');
     });
 
-    test('previous month ends on Feb 29 in a leap year and Feb 28 otherwise', () {
-      final leap = DateTime(2028, 3, 10);
-      expect(PeriodRange.previousMonthLabel(leap), 'Feb 28');
-      expect(PeriodRange.previousMonth.from(leap), DateTime(2028, 2, 1));
-      expect(PeriodRange.previousMonth.to(leap), DateTime(2028, 2, 29));
+    test(
+      'previous month ends on Feb 29 in a leap year and Feb 28 otherwise',
+      () {
+        final leap = DateTime(2028, 3, 10);
+        expect(PeriodRange.previousMonthLabel(leap), 'Feb 28');
+        expect(PeriodRange.previousMonth.from(leap), DateTime(2028, 2, 1));
+        expect(PeriodRange.previousMonth.to(leap), DateTime(2028, 2, 29));
 
-      final common = DateTime(2027, 3, 10);
-      expect(PeriodRange.previousMonth.from(common), DateTime(2027, 2, 1));
-      expect(PeriodRange.previousMonth.to(common), DateTime(2027, 2, 28));
+        final common = DateTime(2027, 3, 10);
+        expect(PeriodRange.previousMonth.from(common), DateTime(2027, 2, 1));
+        expect(PeriodRange.previousMonth.to(common), DateTime(2027, 2, 28));
 
-      // Being in the leap February itself: previous month is January, and the
-      // current month-to-date starts on the 1st.
-      final inFeb = DateTime(2028, 2, 29);
-      expect(PeriodRange.previousMonth.from(inFeb), DateTime(2028, 1, 1));
-      expect(PeriodRange.previousMonth.to(inFeb), DateTime(2028, 1, 31));
-      expect(PeriodRange.thisMonth.from(inFeb), DateTime(2028, 2, 1));
-      expect(PeriodRange.thisMonth.to(inFeb), inFeb);
-    });
+        // Being in the leap February itself: previous month is January, and the
+        // current month-to-date starts on the 1st.
+        final inFeb = DateTime(2028, 2, 29);
+        expect(PeriodRange.previousMonth.from(inFeb), DateTime(2028, 1, 1));
+        expect(PeriodRange.previousMonth.to(inFeb), DateTime(2028, 1, 31));
+        expect(PeriodRange.thisMonth.from(inFeb), DateTime(2028, 2, 1));
+        expect(PeriodRange.thisMonth.to(inFeb), inFeb);
+      },
+    );
 
-    test('previous month contains its own days and nothing from this month', () {
-      final now = DateTime(2026, 10, 5);
-      final r = PeriodRange.previousMonth;
-      expect(r.contains(DateTime(2026, 9, 1), now), isTrue);
-      expect(r.contains(DateTime(2026, 9, 30, 23, 59, 59), now), isTrue);
-      expect(r.contains(DateTime(2026, 8, 31, 23, 59), now), isFalse);
-      expect(r.contains(DateTime(2026, 10, 1), now), isFalse);
-    });
+    test(
+      'previous month contains its own days and nothing from this month',
+      () {
+        final now = DateTime(2026, 10, 5);
+        final r = PeriodRange.previousMonth;
+        expect(r.contains(DateTime(2026, 9, 1), now), isTrue);
+        expect(r.contains(DateTime(2026, 9, 30, 23, 59, 59), now), isTrue);
+        expect(r.contains(DateTime(2026, 8, 31, 23, 59), now), isFalse);
+        expect(r.contains(DateTime(2026, 10, 1), now), isFalse);
+      },
+    );
 
     test('custom range is capped at 366 days, both ends counted', () {
       expect(PeriodRange.maxCustomDays, 366);

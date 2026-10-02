@@ -26,7 +26,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _selectedMethodId;
   late DateTime _selectedDueDate;
   late final TextEditingController _notesController;
+  final TextEditingController _receivedController = TextEditingController();
   String? _dueDateError;
+
+  /// Paise typed in "Received now". Null when blank (the full total is taken),
+  /// -1 when the text is not a number.
+  int? get _receivedPaise {
+    final text = _receivedController.text.trim();
+    if (text.isEmpty) return null;
+    final rupees = double.tryParse(text);
+    return rupees == null ? -1 : (rupees * 100).round();
+  }
 
   @override
   void initState() {
@@ -39,6 +49,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void dispose() {
     _notesController.dispose();
+    _receivedController.dispose();
     super.dispose();
   }
 
@@ -118,6 +129,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               .where((m) => m.id == _selectedMethodId)
               .firstOrNull;
           final hasSelection = selectedMethod != null;
+          final takesPaymentNow =
+              selectedMethod != null && !selectedMethod.isCashOnDelivery;
+          final receivedPaise = takesPaymentNow ? _receivedPaise : null;
+          final receivedError =
+              receivedPaise != null &&
+                  (receivedPaise <= 0 || receivedPaise > totalAmount)
+              ? 'Enter an amount between ₹1 and ${CurrencyFormatter.format(totalAmount)}'
+              : null;
 
           return Scaffold(
             backgroundColor: AppColors.surface,
@@ -407,6 +426,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
                           const SizedBox(height: 10),
 
+                          if (takesPaymentNow) ...[
+                            AppTextField(
+                              key: const Key('checkout_received_field'),
+                              controller: _receivedController,
+                              label: 'Received now',
+                              hintText:
+                                  'Full amount ${CurrencyFormatter.format(totalAmount)}',
+                              errorText: receivedError,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+
                           AppTextField(
                             key: const Key('checkout_notes_field'),
                             controller: _notesController,
@@ -436,9 +472,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     child: PrimaryButton(
                       label: selectedMethod?.isCashOnDelivery == true
                           ? 'Place order · Pay on delivery'
+                          : receivedPaise != null && receivedError == null
+                          ? 'Place order · ${CurrencyFormatter.format(receivedPaise)} received now'
                           : 'Place order · ${CurrencyFormatter.format(totalAmount)}',
                       isLoading: state.isSubmitting,
-                      onPressed: (state.isSubmitting || !hasSelection)
+                      onPressed:
+                          (state.isSubmitting ||
+                              !hasSelection ||
+                              receivedError != null)
                           ? null
                           : () {
                               if (selectedMethod.isCashOnDelivery) {
@@ -454,6 +495,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   SubmitOrderEvent(
                                     paymentChoice: 'prepaid',
                                     paymentMethodName: selectedMethod.name,
+                                    receivedNow: receivedPaise,
                                     dueDate: _selectedDueDate,
                                     notes: _notesController.text.trim(),
                                   ),

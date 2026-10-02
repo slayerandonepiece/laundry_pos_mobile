@@ -37,6 +37,18 @@ class LoadDashboardEvent extends OwnerEvent {
   }) : isDefaultPeriod = isDefaultPeriod ?? (from == null && to == null);
 }
 
+class LoadOutletRollupsEvent extends OwnerEvent {
+  final bool allOutlets;
+  final String from;
+  final String to;
+
+  LoadOutletRollupsEvent({
+    required this.allOutlets,
+    required this.from,
+    required this.to,
+  });
+}
+
 /// One card asks for its own period. The page's default period needs no
 /// request — send [ResetCardEvent] instead.
 class LoadCardMetricsEvent extends OwnerEvent {
@@ -51,6 +63,18 @@ class LoadCardMetricsEvent extends OwnerEvent {
     required this.range,
     required this.requestKey,
   });
+}
+
+/// Loads the same-length window just before [range] so the sales chart can
+/// draw a faint comparison line. Failures are silent: the main chart is
+/// unaffected.
+class LoadPreviousPeriodEvent extends OwnerEvent {
+  final PeriodRange range;
+
+  /// Identifies range + outlet scope; a reply for any other key is dropped.
+  final String requestKey;
+
+  LoadPreviousPeriodEvent({required this.range, required this.requestKey});
 }
 
 /// Back to the page's own data for these cards (default period, outlet switch).
@@ -74,6 +98,8 @@ class AddExpenseEvent extends OwnerEvent {
   final String due;
   final bool monthly;
   final String? idempotencyKey;
+  final String? outletId;
+  final bool orgWide;
 
   AddExpenseEvent({
     required this.title,
@@ -82,13 +108,40 @@ class AddExpenseEvent extends OwnerEvent {
     required this.due,
     this.monthly = false,
     this.idempotencyKey,
+    this.outletId,
+    this.orgWide = false,
   });
+}
+
+class UpdateExpenseEvent extends OwnerEvent {
+  final String expenseId;
+  final String title;
+  final String category;
+  final int amount;
+  final String due;
+  final String? outletId;
+
+  UpdateExpenseEvent({
+    required this.expenseId,
+    required this.title,
+    required this.category,
+    required this.amount,
+    required this.due,
+    this.outletId,
+  });
+}
+
+class DeleteExpenseEvent extends OwnerEvent {
+  final String expenseId;
+
+  DeleteExpenseEvent(this.expenseId);
 }
 
 class MarkExpensePaidEvent extends OwnerEvent {
   final String expenseId;
+  final String? paidDate;
 
-  MarkExpensePaidEvent(this.expenseId);
+  MarkExpensePaidEvent(this.expenseId, {this.paidDate});
 }
 
 class LoadStaffEvent extends OwnerEvent {
@@ -126,6 +179,7 @@ class UpdateStaffEvent extends OwnerEvent {
   final String employeeId;
   final String name;
   final String phone;
+  final String? password;
 
   /// Only set when the owner changed the employee's outlets.
   final List<String>? outletIds;
@@ -135,6 +189,7 @@ class UpdateStaffEvent extends OwnerEvent {
     required this.employeeId,
     required this.name,
     required this.phone,
+    this.password,
     this.outletIds,
     this.defaultOutletId,
   });

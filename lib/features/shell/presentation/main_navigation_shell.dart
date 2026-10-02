@@ -16,6 +16,7 @@ import 'package:myshop/features/owner/presentation/owner_orders_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
+import 'package:myshop/shared/widgets/access_notice_strip.dart';
 import 'package:myshop/shared/widgets/bottom_nav.dart';
 
 class MainNavigationShell extends StatefulWidget {
@@ -53,6 +54,17 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     );
   }
 
+  LoadOutletRollupsEvent _outletRollupsEvent(OutletScope scope) {
+    final now = DateTime.now();
+    return LoadOutletRollupsEvent(
+      allOutlets: scope.allOutlets,
+      from: DateFormatter.toIsoDateString(
+        now.subtract(const Duration(days: 1)),
+      ),
+      to: DateFormatter.toIsoDateString(now),
+    );
+  }
+
   @override
   void dispose() {
     _dashboardResetSignal.dispose();
@@ -65,6 +77,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     final isOwner = authState is AuthenticatedState && authState.isOwner;
+    final notice = authState is AuthenticatedState
+        ? resolveAccessNotice(authState.currentStore, isOwner: isOwner)
+        : null;
 
     // Orders now has its own "start new order" FAB, so New Sale is no
     // longer a separate screen at all.
@@ -125,12 +140,31 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               prev.allOutlets != curr.allOutlets,
           listener: (context, state) {
             context.read<OrdersBloc>().add(LoadOrdersEvent());
+            context.read<OwnerBloc>().add(_outletRollupsEvent(state));
           },
         ),
       ],
       child: Scaffold(
         backgroundColor: AppColors.surface,
-        body: IndexedStack(index: _currentIndex, children: screens),
+        body: notice == null
+            ? IndexedStack(index: _currentIndex, children: screens)
+            : Column(
+                children: [
+                  AccessNoticeStrip(notice: notice),
+                  // The strip already covers the status bar, so the screens
+                  // below must not pad for it a second time.
+                  Expanded(
+                    child: MediaQuery.removePadding(
+                      context: context,
+                      removeTop: true,
+                      child: IndexedStack(
+                        index: _currentIndex,
+                        children: screens,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
         bottomNavigationBar: isOwner
             ? AppBottomNav(
                 currentIndex: _currentIndex,

@@ -59,6 +59,7 @@ class FakeOwnerRepository extends OwnerRepository {
     required String employeeId,
     required String name,
     required String phone,
+    String? password,
     List<String>? outletIds,
     String? defaultOutletId,
   }) async {
@@ -66,6 +67,7 @@ class FakeOwnerRepository extends OwnerRepository {
       'employeeId': employeeId,
       'name': name,
       'phone': phone,
+      'password': password,
       'outletIds': outletIds,
       'defaultOutletId': defaultOutletId,
     };
@@ -226,6 +228,7 @@ void main() {
         final fields = find.byType(TextField);
         await tester.enterText(fields.at(0), 'Ramesh K');
         await tester.enterText(fields.at(1), '9876500003');
+        await tester.enterText(fields.at(2), 'freshpass123');
         await tester.pumpAndSettle();
 
         // Tap Save changes
@@ -241,6 +244,7 @@ void main() {
         expect(fakeRepo.lastUpdatedStaff!['employeeId'], 'emp-1');
         expect(fakeRepo.lastUpdatedStaff!['name'], 'Ramesh K');
         expect(fakeRepo.lastUpdatedStaff!['phone'], '9876500003');
+        expect(fakeRepo.lastUpdatedStaff!['password'], 'freshpass123');
 
         // Verify screen displays updated data
         expect(find.text('Ramesh K'), findsOneWidget);

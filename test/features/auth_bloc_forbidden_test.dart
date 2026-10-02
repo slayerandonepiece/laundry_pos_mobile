@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
@@ -13,6 +14,9 @@ class FakeAuthRepository extends AuthRepository {
   String? blockedReason;
   String role;
 
+  /// When set, the next session checks throw it (offline, 403, ...).
+  Object? sessionError;
+
   FakeAuthRepository({this.blockedReason, this.role = 'EMPLOYEE'})
     : super(
         apiClient: ApiClient(),
@@ -22,6 +26,7 @@ class FakeAuthRepository extends AuthRepository {
 
   @override
   Future<AuthResult?> checkSession() async {
+    if (sessionError != null) throw sessionError!;
     return AuthResult(
       user: User(id: 'u1', name: 'Priya', phone: 'priya'),
       stores: [
@@ -107,6 +112,73 @@ void main() {
 
       expect(authRepository.loggedOut, isTrue);
       expect(localCache.clearedActiveOutletId, 'cleared');
+    });
+
+    test('must_change_password 403 mid-session routes to set-password, not the blocked screen', () async {
+      authBloc.add(AccessForbiddenEvent(reason: 'must_change_password'));
+
+      await expectLater(
+        authBloc.stream,
+        emits(
+          isA<MustChangePasswordState>().having(
+            (s) => s.user.id,
+            'user id',
+            'u1',
+          ),
+        ),
+      );
+
+      expect(authRepository.loggedOut, isFalse);
+    });
+
+    group('silent refresh on resume', () {
+      Future<List<AuthState>> refreshAndCollect() async {
+        final seen = <AuthState>[];
+        final sub = authBloc.stream.listen(seen.add);
+        authBloc.add(RefreshAuthStatusEvent());
+        await pumpEventQueue();
+        await sub.cancel();
+        return seen;
+      }
+
+      test('unchanged server state emits nothing (no loading flash)', () async {
+        expect(await refreshAndCollect(), isEmpty);
+        expect(authBloc.state, isA<AuthenticatedState>());
+      });
+
+      test(
+        'a store that became blocked while backgrounded blocks the app',
+        () async {
+          authRepository.blockedReason = 'payment_lapsed';
+
+          final seen = await refreshAndCollect();
+
+          expect(seen.single, isA<AccessBlockedState>());
+          expect((seen.single as AccessBlockedState).reason, 'payment_lapsed');
+        },
+      );
+
+      test('a transient failure never signs the user out', () async {
+        authRepository.sessionError = Exception('offline');
+
+        expect(await refreshAndCollect(), isEmpty);
+        expect(authBloc.state, isA<AuthenticatedState>());
+        expect(authRepository.loggedOut, isFalse);
+      });
+
+      test(
+        'a forced password change surfaces the set-password screen',
+        () async {
+          authRepository.sessionError = AuthException(
+            code: 'FORBIDDEN',
+            reason: 'must_change_password',
+          );
+
+          final seen = await refreshAndCollect();
+
+          expect(seen.single, isA<MustChangePasswordState>());
+        },
+      );
     });
 
     test('reasoned 403 still shows the blocked screen as before', () async {

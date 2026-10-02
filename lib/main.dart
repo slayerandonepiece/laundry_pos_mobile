@@ -265,6 +265,12 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   }
 
   Future<void> _handleAppResume() async {
+    // Pick up subscription, access and password-change changes made while the
+    // app was in the background. Silent: no loading screen, no sign-out when
+    // offline.
+    if (_authBloc.state is AuthenticatedState) {
+      _authBloc.add(RefreshAuthStatusEvent());
+    }
     await FirebaseService.refreshRemoteConfig();
     final decision = await AppGateService.evaluateGate();
     if (!mounted) return;
