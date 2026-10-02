@@ -120,6 +120,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
         OrdersDrillDown.open => 'open',
         OrdersDrillDown.deliveredToday => 'delivered_today',
         OrdersDrillDown.dueToday => 'due_today',
+        OrdersDrillDown.overdue => 'late',
       };
     });
     _revealChip(_activeQuickFilter);
@@ -178,8 +179,12 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
 
     if (!context.mounted) return;
     context.read<CartBloc>().add(ResetSaleEvent(outletId: chosenOutletId));
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const CustomerDetailsScreen()));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'new_order_customer'),
+        builder: (_) => const CustomerDetailsScreen(),
+      ),
+    );
   }
 
   bool get _quickViewActive => _activeQuickFilter != 'selected_dates';
@@ -890,6 +895,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
+                    settings: const RouteSettings(name: 'order_detail'),
                     builder: (_) => OrderDetailScreen(initialOrder: order),
                   ),
                 );

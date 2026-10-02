@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:myshop/core/constants/api_endpoints.dart';
@@ -11,11 +12,14 @@ import 'package:myshop/core/storage/secure_storage.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
+import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/core/utils/idempotency.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/models/expense_model.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
+import 'package:myshop/features/owner/data/models/outlet_rollup_model.dart';
 import 'package:myshop/features/owner/data/models/staff_model.dart';
+import 'package:myshop/features/owner/data/models/subscription_invoice_model.dart';
 import 'package:myshop/features/owner/data/models/store_profile_model.dart';
 import 'package:myshop/features/pos/data/models/product_model.dart';
 
@@ -48,6 +52,52 @@ class OwnerRepository {
   }) : apiClient = apiClient ?? ApiClient(),
        localCache = localCache ?? LocalCacheService(),
        secureStorage = secureStorage ?? SecureStorageService();
+
+  String get _invoicesCacheKey =>
+      'subscription_invoices::${localCache.getActiveStoreId()}';
+
+  /// What the phone last saw of the billing history; empty when never loaded.
+  List<SubscriptionInvoice> getCachedSubscriptionInvoices() {
+    try {
+      final raw = localCache.get(_invoicesCacheKey);
+      if (raw is! List) return const [];
+      return [
+        for (final item in raw)
+          SubscriptionInvoice.fromJson(Map<String, dynamic>.from(item as Map)),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// The owner's platform billing history, newest first. A failed request
+  /// throws; callers keep showing [getCachedSubscriptionInvoices].
+  Future<List<SubscriptionInvoice>> listSubscriptionInvoices() async {
+    final response = await apiClient.get(ApiEndpoints.subscriptionInvoices);
+    final rows = response is Map ? response['invoices'] : null;
+    if (rows is! List) throw Exception('Could not load billing history');
+    final invoices = [
+      for (final row in rows)
+        SubscriptionInvoice.fromJson(Map<String, dynamic>.from(row as Map)),
+    ];
+    try {
+      await localCache.put(_invoicesCacheKey, [
+        for (final i in invoices) i.toJson(),
+      ]);
+    } catch (e) {
+      AppLogger.log('OWNER', 'could not cache billing history', error: e);
+    }
+    return invoices;
+  }
+
+  /// The invoice as the server renders it (the same PDF the web shows).
+  Future<Uint8List> getSubscriptionInvoicePdf(int invoiceSeq) async {
+    final res = await apiClient.getRaw(
+      ApiEndpoints.subscriptionInvoicePdf(invoiceSeq),
+    );
+    if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) return res.bodyBytes;
+    throw Exception('Could not load the invoice');
+  }
 
   /// Reads dashboard metrics from the local cache only — no network call.
   DashboardMetrics? getCachedDashboardMetricsSync() {
@@ -264,6 +314,25 @@ class OwnerRepository {
     return DashboardMetrics.fromJson(Map<String, dynamic>.from(response));
   }
 
+  /// Per-outlet daily performance. This is deliberately online-only and is
+  /// never written into the dashboard cache.
+  Future<List<OutletRollup>> getOutletRollups({
+    required String from,
+    required String to,
+  }) async {
+    if (await ConnectivityService.instance.checkIsOffline()) {
+      throw Exception('No network connection');
+    }
+    final uri = Uri.parse(ApiEndpoints.dashboardRollups)
+        .replace(queryParameters: {'from': from, 'to': to});
+    final response = await apiClient.get(uri.toString());
+    if (response is! List) throw Exception('Outlet rollups not loaded');
+    return [
+      for (final row in response)
+        if (row is Map) OutletRollup.fromJson(Map<String, dynamic>.from(row)),
+    ];
+  }
+
   /// The request the dashboard opens with: the current month (month-to-date)
   /// in daily buckets. A bare request (no range) or a custom range that merely
   /// uses daily buckets is not it — the response shapes differ.
@@ -313,13 +382,26 @@ class OwnerRepository {
       },
     );
     if (response is! List) throw Exception('Expenses not loaded');
-    final expenses = response
-        .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    final expenses = _withQueuedExpenseChanges(
+      scope,
+      response
+          .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
     await localCache.setCachedExpensesForScope(
       scope,
       expenses.map((e) => e.toJson()).toList(),
     );
+    _completeExpenseRefresh();
+  }
+
+  void _completeExpenseRefresh() {
+    final syncManager = SyncManager.instance;
+    if (syncManager.value.hasError) {
+      syncManager.clearError('Could not refresh expenses');
+    } else {
+      syncManager.completeSync();
+    }
   }
 
   /// Reads expenses from the local cache only — no network call.
@@ -361,16 +443,19 @@ class OwnerRepository {
       final response = await apiClient.get(ApiEndpoints.expenses);
       // Not a list (e.g. a captive-portal page): an error, not "no expenses".
       if (response is! List) throw Exception('Unexpected expenses response');
-      final expenses = response
-          .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
+      final expenses = _withQueuedExpenseChanges(
+        cap.scope,
+        response
+            .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+      );
       if (_sameStore(cap)) {
         await localCache.setCachedExpensesForScope(
           cap.scope,
           expenses.map((e) => e.toJson()).toList(),
         );
       }
-      SyncManager.instance.completeSync();
+      _completeExpenseRefresh();
       return expenses;
     } catch (e) {
       if (_isAccessFailure(e)) rethrow;
@@ -411,21 +496,34 @@ class OwnerRepository {
     bool monthly = false,
     String? idempotencyKey,
     String? outletHeader,
+    String? outletId,
+    bool orgWide = false,
   }) async {
     final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
         ? idempotencyKey.trim()
         : IdempotencyKeyGenerator.generate();
+    Map<String, String>? headers;
+    final body = <String, dynamic>{
+      'title': title.trim(),
+      'category': category.trim(),
+      'amount': amount,
+      'due': due,
+      'monthly': monthly,
+      'idempotencyKey': key,
+    };
+    if (orgWide) {
+      headers = {'X-Outlet-Id': kNoOutletHeader};
+    } else if (outletId != null && outletId.isNotEmpty) {
+      body['outletId'] = outletId;
+      headers = {'X-Outlet-Id': outletHeader ?? outletId};
+    } else if (outletHeader != null) {
+      headers = {'X-Outlet-Id': outletHeader};
+    }
+
     final response = await apiClient.post(
       ApiEndpoints.expenses,
-      headers: outletHeader != null ? {'X-Outlet-Id': outletHeader} : null,
-      body: {
-        'title': title.trim(),
-        'category': category.trim(),
-        'amount': amount,
-        'due': due,
-        'monthly': monthly,
-        'idempotencyKey': key,
-      },
+      headers: headers,
+      body: body,
     );
     return Expense.fromJson(Map<String, dynamic>.from(response as Map));
   }
@@ -438,27 +536,33 @@ class OwnerRepository {
     bool monthly = false,
     required String idempotencyKey,
     required ({String? store, String scope}) cap,
+    String? outletId,
+    bool orgWide = false,
   }) async {
     lastWriteQueued = true;
     final localId = 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
+    final targetOutletId = orgWide
+        ? null
+        : (outletId ?? _actionOutletId(cap.scope));
     final localExpense = Expense(
       id: localId,
+      outletId: targetOutletId,
       title: title.trim(),
       category: category.trim(),
       amount: amount,
       due: due,
       monthly: monthly,
     );
-    if (_sameStore(cap)) {
-      final cached = localCache.getCachedExpensesForScope(cap.scope) ?? [];
-      cached.insert(0, localExpense.toJson());
-      await localCache.setCachedExpensesForScope(cap.scope, cached);
-    }
+    await _patchCachedExpenses(
+      cap,
+      ensureCurrent: true,
+      (scope, cached) => _placeExpense(scope, cached, localExpense),
+    );
 
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'create_expense',
-      'outletId': _actionOutletId(cap.scope),
+      'outletId': orgWide ? null : (outletId ?? _actionOutletId(cap.scope)),
       'scope': cap.scope,
       'payload': {
         'localId': localId,
@@ -468,6 +572,8 @@ class OwnerRepository {
         'due': due,
         'monthly': monthly,
         'idempotencyKey': idempotencyKey,
+        if (outletId != null && outletId.isNotEmpty) 'outletId': outletId,
+        if (orgWide) 'orgWide': true,
       },
       'queuedAt': DateTime.now().toIso8601String(),
     });
@@ -484,6 +590,8 @@ class OwnerRepository {
     required String due,
     bool monthly = false,
     String? idempotencyKey,
+    String? outletId,
+    bool orgWide = false,
   }) async {
     final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
         ? idempotencyKey.trim()
@@ -500,6 +608,8 @@ class OwnerRepository {
         monthly: monthly,
         idempotencyKey: key,
         cap: cap,
+        outletId: outletId,
+        orgWide: orgWide,
       );
     }
 
@@ -511,12 +621,18 @@ class OwnerRepository {
         due: due,
         monthly: monthly,
         idempotencyKey: key,
+        outletId: outletId,
+        orgWide: orgWide,
       );
-      if (_sameStore(cap)) {
-        final cached = localCache.getCachedExpensesForScope(cap.scope) ?? [];
-        cached.insert(0, expense.toJson());
-        await localCache.setCachedExpensesForScope(cap.scope, cached);
-      }
+      final placed = _withRequestedOutlet(
+        expense,
+        orgWide ? null : (outletId ?? _actionOutletId(cap.scope)),
+      );
+      await _patchCachedExpenses(
+        cap,
+        ensureCurrent: true,
+        (scope, cached) => _placeExpense(scope, cached, placed),
+      );
       return expense;
     } catch (e) {
       if (await _shouldQueue(e)) {
@@ -528,46 +644,243 @@ class OwnerRepository {
           monthly: monthly,
           idempotencyKey: key,
           cap: cap,
+          outletId: outletId,
+          orgWide: orgWide,
         );
       }
       rethrow;
     }
   }
 
+  /// Updates an existing expense (online only)
+  Future<void> updateExpense(
+    String id, {
+    required String title,
+    required String category,
+    required int amount,
+    required String due,
+    String? outletId,
+  }) async {
+    lastWriteQueued = false;
+    _requireSyncedExpense(id);
+    final isOffline = await ConnectivityService.instance.checkIsOffline();
+    if (isOffline) {
+      throw OwnerRefusedException('This needs a connection');
+    }
+
+    final body = <String, dynamic>{
+      'title': title.trim(),
+      'category': category.trim(),
+      'amount': amount,
+      'due': due,
+      if (outletId != null && outletId.isNotEmpty) 'outletId': outletId,
+    };
+
+    final cap = _captureScope();
+    final response = await apiClient.put(
+      ApiEndpoints.expenseById(id),
+      body: body,
+    );
+    final updated = Expense.fromJson(
+      Map<String, dynamic>.from(response as Map),
+    );
+
+    // An outlet's list holds only its own bills; the combined views (All, or
+    // no outlet selected) hold every bill.
+    await _patchCachedExpenses(
+      cap,
+      (scope, cached) => _placeExpense(scope, cached, updated),
+    );
+  }
+
+  /// Deletes an expense (online only)
+  Future<void> deleteExpense(String id) async {
+    lastWriteQueued = false;
+    _requireSyncedExpense(id);
+    final isOffline = await ConnectivityService.instance.checkIsOffline();
+    if (isOffline) {
+      throw OwnerRefusedException('This needs a connection');
+    }
+
+    final cap = _captureScope();
+    await apiClient.delete(ApiEndpoints.expenseById(id));
+
+    await _patchCachedExpenses(cap, (scope, cached) {
+      final before = cached.length;
+      cached.removeWhere((e) => e['id']?.toString() == id);
+      return cached.length != before;
+    });
+  }
+
+  /// A bill created offline has no server id yet, so the server can't edit or
+  /// delete it; the owner can once it has synced.
+  void _requireSyncedExpense(String id) {
+    if (Expense.isUnsyncedId(id)) {
+      throw OwnerRefusedException(
+        'This bill is still syncing. Try again in a moment.',
+      );
+    }
+  }
+
+  /// Applies [patch] to the cached expense list of every scope of the active
+  /// store that has one (All, each allowed outlet, and the current scope), and
+  /// saves the lists it changed. A scope that was never cached is left alone,
+  /// so it is not made to look synced.
+  /// With [ensureCurrent] the current scope's list is created if it doesn't
+  /// exist yet, as a new bill is always shown where it was made.
+  Future<void> _patchCachedExpenses(
+    ({String? store, String scope}) cap,
+    bool Function(String scope, List<Map<String, dynamic>> cached) patch, {
+    bool ensureCurrent = false,
+  }) async {
+    if (!_sameStore(cap)) return;
+    final scopes = <String>{
+      cap.scope,
+      LocalCacheService.allScope,
+      for (final o in localCache.getAllowedOutlets() ?? const [])
+        if (o['id']?.toString().isNotEmpty == true) o['id'].toString(),
+    };
+    for (final scope in scopes) {
+      var cached = localCache.getCachedExpensesForScope(scope);
+      if (cached == null) {
+        if (!(ensureCurrent && scope == cap.scope)) continue;
+        cached = <Map<String, dynamic>>[];
+      }
+      if (patch(scope, cached)) {
+        await localCache.setCachedExpensesForScope(scope, cached);
+      }
+    }
+  }
+
+  /// The server names a bill's outlet in its reply; if a reply ever leaves it
+  /// out, fall back to the outlet the request was made for so the bill is still
+  /// cached where it belongs.
+  Expense _withRequestedOutlet(Expense row, String? requestedOutletId) =>
+      row.outletId != null || requestedOutletId == null
+      ? row
+      : Expense.fromJson({...row.toJson(), 'outletId': requestedOutletId});
+
+  /// Puts [row] into one scope's cached list if it belongs there, or takes it
+  /// out if it doesn't. An outlet's list holds only that outlet's bills; the
+  /// combined views (All, or no outlet selected) hold every bill. [replacingId]
+  /// is the placeholder a queued bill had before the server gave it an id.
+  /// Returns whether the list changed.
+  bool _placeExpense(
+    String scope,
+    List<Map<String, dynamic>> cached,
+    Expense row, {
+    String? replacingId,
+  }) {
+    final belongs = _actionOutletId(scope) == null || row.outletId == scope;
+    var at = 0;
+    var changed = false;
+    for (final id in {?replacingId, row.id}) {
+      final i = cached.indexWhere((e) => e['id']?.toString() == id);
+      if (i != -1) {
+        at = i;
+        cached.removeAt(i);
+        changed = true;
+      }
+    }
+    if (belongs) {
+      cached.insert(at.clamp(0, cached.length), row.toJson());
+      changed = true;
+    }
+    return changed;
+  }
+
+  /// Marks the bill (under any of [ids]) paid in every cached list that holds
+  /// it, so the combined and per-outlet views agree.
+  Future<void> _setCachedExpensePaid(
+    ({String? store, String scope}) cap,
+    Set<String> ids,
+    String paidDate,
+  ) => _patchCachedExpenses(cap, (scope, cached) {
+    var changed = false;
+    for (var i = 0; i < cached.length; i++) {
+      if (ids.contains(cached[i]['id']?.toString())) {
+        cached[i] = {...cached[i], 'paid': paidDate};
+        changed = true;
+      }
+    }
+    return changed;
+  });
+
+  /// A refresh brings the server's list, which doesn't know about changes
+  /// still waiting in the queue; put those back on top so a bill marked paid
+  /// (or created) offline doesn't flip back until the server has really taken
+  /// it.
+  List<Expense> _withQueuedExpenseChanges(String scope, List<Expense> server) {
+    final list = [for (final e in server) e.toJson()];
+    for (final action in localCache.getPendingOwnerActionsQueue()) {
+      final payload = Map<String, dynamic>.from(
+        action['payload'] as Map? ?? {},
+      );
+      switch (action['type']) {
+        case 'mark_expense_paid':
+          final id = payload['expenseId']?.toString();
+          final paid = payload['paidDate']?.toString();
+          if (id == null || paid == null) continue;
+          for (var i = 0; i < list.length; i++) {
+            if (list[i]['id']?.toString() == id) {
+              list[i] = {...list[i], 'paid': paid};
+            }
+          }
+        case 'create_expense':
+          final localId = payload['localId']?.toString();
+          if (localId == null || list.any((e) => e['id'] == localId)) continue;
+          final outletId = payload['orgWide'] == true
+              ? null
+              : (payload['outletId']?.toString() ??
+                    action['outletId'] as String?);
+          if (_actionOutletId(scope) != null && outletId != scope) continue;
+          list.insert(
+            0,
+            Expense(
+              id: localId,
+              outletId: outletId,
+              title: payload['title']?.toString() ?? '',
+              category: payload['category']?.toString() ?? 'Operations',
+              amount: (payload['amount'] as num?)?.toInt() ?? 0,
+              due: payload['due']?.toString() ?? '',
+              monthly: payload['monthly'] == true,
+            ).toJson(),
+          );
+      }
+    }
+    return [for (final e in list) Expense.fromJson(e)];
+  }
+
   Future<void> _markExpensePaidDirect(
     String expenseId, {
+    String? paidDate,
     String? outletHeader,
   }) async {
+    final body = <String, dynamic>{
+      if (paidDate != null && paidDate.isNotEmpty) 'paidDate': paidDate,
+    };
     await apiClient.post(
       ApiEndpoints.markExpensePaid(expenseId),
       headers: outletHeader != null ? {'X-Outlet-Id': outletHeader} : null,
-      body: {},
+      body: body,
     );
   }
 
   Future<void> _markExpensePaidOffline(
     String expenseId,
-    ({String? store, String scope}) cap,
-  ) async {
+    ({String? store, String scope}) cap, {
+    String? paidDate,
+  }) async {
     lastWriteQueued = true;
-    if (_sameStore(cap)) {
-      final cached = localCache.getCachedExpensesForScope(cap.scope) ?? [];
-      final idx = cached.indexWhere((e) => e['id']?.toString() == expenseId);
-      if (idx != -1) {
-        cached[idx] = {
-          ...cached[idx],
-          'paid': DateTime.now().toIso8601String(),
-        };
-        await localCache.setCachedExpensesForScope(cap.scope, cached);
-      }
-    }
+    final effectivePaidDate = paidDate ?? DateFormatter.todayIsoDateString();
+    await _setCachedExpensePaid(cap, {expenseId}, effectivePaidDate);
 
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'mark_expense_paid',
       'outletId': _actionOutletId(cap.scope),
       'scope': cap.scope,
-      'payload': {'expenseId': expenseId},
+      'payload': {'expenseId': expenseId, 'paidDate': effectivePaidDate},
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
@@ -575,31 +888,30 @@ class OwnerRepository {
   }
 
   /// Marks an expense paid
-  Future<void> markExpensePaid(String expenseId) async {
+  Future<void> markExpensePaid(String expenseId, {String? paidDate}) async {
     lastWriteQueued = false;
     final cap = _captureScope();
+    final effectivePaidDate = paidDate ?? DateFormatter.todayIsoDateString();
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
-      await _markExpensePaidOffline(expenseId, cap);
+      await _markExpensePaidOffline(
+        expenseId,
+        cap,
+        paidDate: effectivePaidDate,
+      );
       return;
     }
 
     try {
-      await _markExpensePaidDirect(expenseId);
-      if (_sameStore(cap)) {
-        final cached = localCache.getCachedExpensesForScope(cap.scope) ?? [];
-        final idx = cached.indexWhere((e) => e['id']?.toString() == expenseId);
-        if (idx != -1) {
-          cached[idx] = {
-            ...cached[idx],
-            'paid': DateTime.now().toIso8601String(),
-          };
-          await localCache.setCachedExpensesForScope(cap.scope, cached);
-        }
-      }
+      await _markExpensePaidDirect(expenseId, paidDate: paidDate);
+      await _setCachedExpensePaid(cap, {expenseId}, effectivePaidDate);
     } catch (e) {
       if (await _shouldQueue(e)) {
-        await _markExpensePaidOffline(expenseId, cap);
+        await _markExpensePaidOffline(
+          expenseId,
+          cap,
+          paidDate: effectivePaidDate,
+        );
         return;
       }
       rethrow;
@@ -864,6 +1176,7 @@ class OwnerRepository {
     required String employeeId,
     required String name,
     required String phone,
+    String? password,
     bool? active,
     bool fresh = false,
     List<String>? outletIds,
@@ -871,6 +1184,11 @@ class OwnerRepository {
   }) async {
     if (name.trim().isEmpty || phone.trim().isEmpty) {
       throw ValidationException('Employee name and phone are required');
+    }
+    if (password != null &&
+        password.isNotEmpty &&
+        (password.length < 8 || password.length > 128)) {
+      throw ValidationException('Password must be 8–128 characters');
     }
     var resolvedActive = active;
     if (resolvedActive == null) {
@@ -886,6 +1204,7 @@ class OwnerRepository {
         'name': name.trim(),
         'phone': phone.trim(),
         'active': resolvedActive,
+        if (password?.isNotEmpty == true) 'password': password,
         // Only sent when the owner changed assignments; leaving them out
         // keeps whatever the employee already has.
         'outlets': ?outletIds,
@@ -980,12 +1299,17 @@ class OwnerRepository {
     required String employeeId,
     required String name,
     required String phone,
+    String? password,
     List<String>? outletIds,
     String? defaultOutletId,
   }) async {
     lastWriteQueued = false;
     final isOffline = await ConnectivityService.instance.checkIsOffline();
+    final changesPassword = password?.isNotEmpty == true;
     if (isOffline) {
+      if (changesPassword) {
+        throw OwnerRefusedException('This needs a connection');
+      }
       return _updateStaffOffline(
         employeeId: employeeId,
         name: name,
@@ -1000,6 +1324,7 @@ class OwnerRepository {
         employeeId: employeeId,
         name: name,
         phone: phone,
+        password: password,
         outletIds: outletIds,
         defaultOutletId: defaultOutletId,
       );
@@ -1011,6 +1336,9 @@ class OwnerRepository {
       }
       return staff;
     } catch (e) {
+      if (changesPassword && await _shouldQueue(e)) {
+        throw OwnerRefusedException('This needs a connection');
+      }
       if (await _shouldQueue(e)) {
         return _updateStaffOffline(
           employeeId: employeeId,
@@ -1417,6 +1745,14 @@ class OwnerRepository {
         switch (type) {
           case 'create_expense':
             final localId = payload['localId']?.toString();
+            final payloadOrgWide = payload['orgWide'] == true;
+            final payloadOutletId = payload['outletId']?.toString();
+            final effectiveOutletId = payloadOrgWide
+                ? null
+                : (payloadOutletId ?? action['outletId'] as String?);
+            final header = payloadOrgWide
+                ? kNoOutletHeader
+                : (effectiveOutletId ?? actionHeader);
             final serverExpense = await _createExpenseDirect(
               title: payload['title']?.toString() ?? '',
               category: payload['category']?.toString() ?? 'Operations',
@@ -1424,46 +1760,48 @@ class OwnerRepository {
               due: payload['due']?.toString() ?? '',
               monthly: payload['monthly'] == true,
               idempotencyKey: payload['idempotencyKey']?.toString(),
-              outletHeader: actionHeader,
+              outletId: effectiveOutletId,
+              orgWide: payloadOrgWide,
+              outletHeader: header,
             );
             if (localId != null && localId.isNotEmpty) {
               idMap[localId] = serverExpense.id;
               await rewriteQueuedId('expenseId', localId, serverExpense.id);
-              final cached =
-                  localCache.getCachedExpensesForScope(actionScope) ?? [];
-              final idx = cached.indexWhere(
-                (e) => e['id']?.toString() == localId,
+              await _patchCachedExpenses(
+                (
+                  store: localCache.getActiveStoreId(),
+                  scope: actionScope ?? _captureScope().scope,
+                ),
+                ensureCurrent: true,
+                (scope, cached) => _placeExpense(
+                  scope,
+                  cached,
+                  _withRequestedOutlet(serverExpense, effectiveOutletId),
+                  replacingId: localId,
+                ),
               );
-              if (idx != -1) {
-                cached[idx] = serverExpense.toJson();
-              } else {
-                cached.insert(0, serverExpense.toJson());
-              }
-              await localCache.setCachedExpensesForScope(actionScope, cached);
             }
             break;
 
           case 'mark_expense_paid':
             final rawId = payload['expenseId']?.toString() ?? '';
             final resolvedId = idMap[rawId] ?? rawId;
+            final payloadPaidDate =
+                payload['paidDate']?.toString() ??
+                DateFormatter.todayIsoDateString();
             await _markExpensePaidDirect(
               resolvedId,
+              paidDate: payloadPaidDate,
               outletHeader: actionHeader,
             );
-            final cached =
-                localCache.getCachedExpensesForScope(actionScope) ?? [];
-            final idx = cached.indexWhere(
-              (e) =>
-                  e['id']?.toString() == resolvedId ||
-                  e['id']?.toString() == rawId,
+            await _setCachedExpensePaid(
+              (
+                store: localCache.getActiveStoreId(),
+                scope: actionScope ?? _captureScope().scope,
+              ),
+              {resolvedId, rawId},
+              payloadPaidDate,
             );
-            if (idx != -1) {
-              cached[idx] = {
-                ...cached[idx],
-                'paid': DateTime.now().toIso8601String(),
-              };
-              await localCache.setCachedExpensesForScope(actionScope, cached);
-            }
             break;
 
           case 'create_staff':

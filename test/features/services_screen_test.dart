@@ -219,6 +219,17 @@ void main() {
       expect(find.text('No services yet'), findsOneWidget);
     });
 
+    testWidgets('Uses singular configured-service copy for one service', (
+      tester,
+    ) async {
+      fakePosRepo.products = [testProducts.first];
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 service configured'), findsOneWidget);
+      expect(find.text('1 services configured'), findsNothing);
+    });
+
     testWidgets('Says nothing matched when a search finds no service', (
       tester,
     ) async {
@@ -377,6 +388,61 @@ void main() {
         expect(slabs[0]['price'], 30000);
         expect(slabs[1]['limit'], 10.0);
         expect(slabs[1]['price'], 55000);
+      },
+    );
+
+    testWidgets(
+      'Weight service rejects duplicate slab limits and half-filled tiers like the web editor',
+      (tester) async {
+        const message =
+            'Slab limits must increase and prices must be positive.';
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.add));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.widgetWithText(AppTextField, 'SERVICE NAME'),
+          'Duvets',
+        );
+        await tester.tap(find.text('Per piece').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Per kg').last);
+        await tester.pumpAndSettle();
+
+        // Tier 1 and tier 2 share the same limit.
+        var fields = find.byType(TextField);
+        await tester.enterText(fields.at(1), '5');
+        await tester.enterText(fields.at(2), '300');
+        await tester.ensureVisible(find.text('Add tier'));
+        await tester.tap(find.text('Add tier'));
+        await tester.pumpAndSettle();
+        fields = find.byType(TextField);
+        await tester.enterText(fields.at(3), '5');
+        await tester.enterText(fields.at(4), '400');
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Create service'));
+        await tester.tap(find.text('Create service'));
+        await tester.pumpAndSettle();
+        expect(find.text(message), findsOneWidget);
+        expect(fakeOwnerRepo.lastCreateProductParams, isNull);
+
+        // A tier with a limit but no price is rejected, not silently dropped.
+        await tester.enterText(fields.at(3), '10');
+        await tester.enterText(fields.at(4), '');
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Create service'));
+        await tester.tap(find.text('Create service'));
+        await tester.pumpAndSettle();
+        expect(find.text(message), findsOneWidget);
+        expect(fakeOwnerRepo.lastCreateProductParams, isNull);
+
+        // Fixing the second tier lets the service save.
+        await tester.enterText(fields.at(4), '550');
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Create service'));
+        await tester.tap(find.text('Create service'));
+        await tester.pumpAndSettle();
+        expect(fakeOwnerRepo.lastCreateProductParams, isNotNull);
       },
     );
 

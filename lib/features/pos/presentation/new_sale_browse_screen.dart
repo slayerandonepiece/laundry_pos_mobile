@@ -348,6 +348,9 @@ class _NewSaleBrowseScreenState extends State<NewSaleBrowseScreen> {
                             onPressed: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
+                                  settings: const RouteSettings(
+                                    name: 'checkout',
+                                  ),
                                   builder: (_) => const CheckoutScreen(),
                                 ),
                               );

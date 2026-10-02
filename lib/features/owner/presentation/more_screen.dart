@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:myshop/shared/widgets/app_version_text.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
@@ -163,6 +164,7 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(name: 'services'),
                             builder: (_) => const ServicesScreen(),
                           ),
                         ),
@@ -192,6 +194,7 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(name: 'expenses'),
                             builder: (_) => const ExpensesScreen(),
                           ),
                         ),
@@ -209,6 +212,7 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(name: 'staff'),
                             builder: (_) => const StaffScreen(),
                           ),
                         ),
@@ -226,6 +230,9 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(
+                              name: 'payment_methods',
+                            ),
                             builder: (_) => const PaymentMethodsScreen(),
                           ),
                         ),
@@ -272,6 +279,9 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(
+                              name: 'owner_profile',
+                            ),
                             builder: (_) => const OwnerProfileScreen(),
                           ),
                         ),
@@ -289,6 +299,7 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(name: 'subscription'),
                             builder: (_) => const SubscriptionScreen(),
                           ),
                         ),
@@ -327,6 +338,9 @@ class MoreScreen extends StatelessWidget {
                     onTap: () => _confirmSignOut(context),
                   ),
                 ),
+                const SizedBox(height: 20),
+                const AppVersionText(),
+                const SizedBox(height: 8),
               ],
             ),
           );

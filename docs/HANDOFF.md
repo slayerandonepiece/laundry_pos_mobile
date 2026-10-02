@@ -4,6 +4,23 @@ Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
+## Release observability and automation — 2 October 2026
+
+- **A:** Added privacy-safe crash/session context with opaque user/store/outlet identifiers, uppercase role and environment; sign-out/block clears Crashlytics and Analytics identity.
+- **B:** Added a no-throw analytics wrapper, environment-based collection, exact order/payment/invoice/sync/auth events, named pushed routes, and bottom-tab screen views.
+- **C:** Added an injected dev/stage-only diagnostics dialog on version-label long press; production cannot open it.
+- **D:** Stage arm64 R8 builds succeeded at each step. `classes.dex`: 3,721,848 bytes baseline; 3,177,968 without Flutter blanket keeps; 2,674,008 without the Firebase blanket keep. No missing-class warning was emitted. Re-measured with fresh A/B dev builds on 2 Oct: old rules 3,721,848 B (APK 22.80 MB) vs tightened 2,674,008 B (APK 22.41 MB). Logged-in release smoke test on the Pixel emulator passed (sign-in, dashboard, orders, order detail, Subscription, subscription invoice PDF; logcat free of ClassNotFound/NoSuchMethod/FATAL), so the tightened rules are kept.
+- **E:** Added executable `scripts/release.sh` with guarded interactive/flag flows, external symbol retention, exact archive validation, and a side-effect-free stage dry run; README paths now point outside `build/`.
+
+Focused tests, mutation checks, full analysis/tests, stage Android/iOS builds, and the final gate file record the verification evidence. No Firebase-console check or store upload was performed. Error handling: `runZonedGuarded` in `lib/core/error/error_reporting.dart` routes Flutter, platform and isolate errors to Crashlytics (non-debug only) with a friendly release ErrorWidget. The version label (`AppVersionText`: "Version 1.0.5 (8) · Stage") is on login and profile screens. iOS stage release build (obfuscated) succeeds, Runner.app 26.7 MB.
+
+### Prod-readiness follow-up — 2 October 2026
+
+- **API errors:** `DioLoggingInterceptor` now reports every failed API call (4xx, 5xx, timeouts, no-connection) to Crashlytics as a non-fatal (`FirebaseService.recordNonFatal`), with the real `err.stackTrace` and only `API <status or error type> <METHOD> <path>` (no query string, no body). Off in debug. Expect noise from offline use and expected 401/403/400 responses; they also stay in `NetworkHealth` and the breadcrumb log.
+- **FCM token** is logged in debug builds only (release logs go to Crashlytics).
+- iOS Firebase plists are per flavor in `ios/Firebase/{dev,stage,prod}/`. iOS has no Crashlytics Xcode build phase, so dSYMs are only uploaded by `scripts/release.sh`.
+- **Not verified:** no real fatal/non-fatal test from a prod build in the prod Firebase project, no Crashlytics alerts configured, and the prod flavor's Firebase/backend wiring was not exercised. Do these before the prod store release.
+
 ## Current status — 1 October 2026 (stage release 1.0.4+6 prep)
 
 Supersedes the status sections below for anything they conflict with. Branch
@@ -39,16 +56,24 @@ Postgres. Device passes ran against a local sandbox only, never the shared DB.
   `must_change_password` enforced, public-error whitelist, rollup span cap,
   `GET /employees` no longer cached (a fresh list right after a save).
 
+### Working tree, 2 October (uncommitted in both repos)
+
+Mobile `feat/expense-edit-and-switcher-fix`: analyze clean, 871 tests. Backend `feat/expense-routes-and-hardening-2`: tsc clean, 130 integration tests. Parity audit: `docs/PARITY-AUDIT-2026-10-01.md`.
+
+Done from the audit (Batch A, mobile-only): access-403 queue safety (recoverable reasons stay queued; a bare 403 is still "outlet access changed"), 403 labels, staff password reset, per-outlet dashboard cards, dashboard polish, "This week" period chip (Monday to today, as on the web; replaces "7 days"), public invoice link ("Open in browser", final invoices only), plan/trial strip and silent `/auth/status` refresh on resume, must_change_password mid-session, neutral `billing_pending` copy, "Received now" partial payment at checkout, slab validation, Retry-After text on change-password. Verified on the iPhone 17 Pro simulator against the local sandbox: per-outlet cards (match the DB), Open-orders drill-down and totals, order search, resume refresh (trial strip and store-locked screen, both with no relaunch), part payment (₹15 of ₹40 stored), public invoice page opens, owner password reset (flag set, sessions revoked).
+
+Skipped on purpose: PF-02 (the web has no "Organization contact" label) and OO-07 (needs the protected outlet switcher; audit lists it as deferred). Not started, needs backend endpoints first (Batch B): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts, real `passwordChangedAt`; B6 (an owner payment path for `billing_pending`) is a product decision. Not device-verified: expenses pull-to-refresh keeping a queued mark-paid (unit-tested), prepaid hand-over from Ready for an employee, EMP sign-in after the owner reset.
+
 ### Pending list
 
 | # | Area | Pending |
 |---|---|---|
-| 1 | Expenses | Edit, delete, chosen paid date, outlet attribution (E1–E3); needs new backend routes |
+| 1 | Expenses | **Done and committed (2 Oct)**: edit/delete (online only), chosen paid date, outlet attribution (E1–E3); backend routes added; queued changes survive refresh and Retry sends the queue. Device-checked on 1–2 Oct; the queued mark-paid refresh is unit-tested only |
 | 2 | Device verification | Dashboard chips + custom range, Delivered/Due-today drill-down, Recent orders, pull-to-refresh, Part-paid filter combos, offline-then-sync pass, 401/403 propagation |
-| 3 | Switcher | Outlet menu may linger over "Setting things up" after a switch (seen once); employee landed in Lake not Main (likely saved last-used outlet) |
-| 4 | Backend | Login throttle is per warm instance; session cookie id is a cuid; `billing_pending` not enforced server-side; idempotency unique keys global, not per tenant |
-| 5 | Release | Both 1.0.4 PRs are **merged to `main` but not deployed**: backend `staging` is 58 commits behind `main`, so stage still runs the old backend (including the old invoice-PDF access check). Deploy the backend before the stage mobile build (employee-list change); `SESSION_SECRET` must be set in production (user manages it) |
-| 8 | Parity gaps carried over | See "Parity gaps" under the 28 Sep status: no partial-access mode for `RESTRICTED` (a blocked 403 still shows `BlockedScreen`), no staff password reset, no all-outlet per-branch cards or "Needs attention" list, looser slab-limit validation, no session/subscription refresh on resume, billing card lacks plan/deposit/annual fee, trial/renewal banner fix never independently re-verified |
+| 3 | Switcher | Menu-lingers glitch **not reproducible**; speculative fix reverted (showMenu returns at pop start, so it can't be proven). Employee landing in Lake is **by design** (remembered outlet wins). Monitor |
+| 4 | Backend | **Done and committed in `../laundry_pos`**: DB-backed throttle, cookie carries token (one web re-login), per-tenant idempotency keys, `billing_pending` enforced behind the flag. Migration `20261001120000_…` NOT applied to Neon |
+| 5 | Release | Deploy backend before stage mobile (employee-list change); `SESSION_SECRET` must be set in production (user manages it) |
+| 8 | Parity gaps carried over | See "Parity gaps" under the 28 Sep status. Still open: no partial-access mode for `RESTRICTED` (a blocked 403 still shows `BlockedScreen`), no "Needs attention" list, billing card lacks plan/deposit/annual fee |
 | 9 | Firebase and gating | Remote Config keys not created in the dev/stage/prod consoles; `AppGateService.isMidTransaction` not device-verified; Android `in_app_update` untested (needs a Play listing) |
 | 10 | Backend/API gaps for the web team | No `/api/v1/outlets` route; no announcements endpoint; an employee omitting the outlet on rollups falls back silently instead of getting 403 |
 | 6 | Store gating | No App Store listing yet, so `ios_app_store_id` and force-update stay dormant |
@@ -413,6 +438,46 @@ now itself historical, superseded by 28 September above.
    an owner decision. Audit leftovers (plan doc §9) are all fixed (§10).
 4. Wiki last (local `.wiki/` already has `wiki/concepts/outlet-scope.md` as of
    2026-09-26; add anything durable from the tasks above).
+
+## Status — 2 Oct 2026 (end of day)
+
+Branch `feat/expense-edit-and-switcher-fix` (mobile) and `feat/expense-routes-and-hardening-2` (backend `../laundry_pos`). Neon stage migration `20261001120000_hardening_2_...` is applied and verified. Full gate: `dart format .`, `flutter analyze` clean, 880 tests.
+
+Done this round:
+- Dashboard: "This week" (Mon–today) replaces "7 days"; Sales by date opens on This week; Compare removed; per-outlet cards, expenses headline, needs-attention, first-use card removed; auto-reload when orders change; a one-day chart starts at zero.
+- Payments: Record payment is a method picker for the full balance (no typing), locked to the method already used, never Cash on Delivery. Checkout: due-date chips, methods two per row, Cash on Delivery as its own button, back returns to the items, X asks to discard. Activity & history is inline on the order page.
+- Invoices: in-app View renders the real PDF, laid out like the web invoice; public web invoice page shows the invoice first and full width with small Print/Download below. Owner Subscription screen lists subscription invoices and opens each as a PDF (new backend routes, see `.agents/MOBILE-API-CONTRACT.md`).
+- Build: unused assets and `cupertino_icons` dropped; Android res images are lossless WebP; plain HTTP is dev-flavor only (manifest overlay + Dart HTTPS rule); a stage/prod flavor can never resolve to dev; `allowBackup="false"`. Prod arm64 APK about 22.5 MB, iOS Runner.app about 27 MB.
+
+Open (in order):
+1. 401/403 data-loss edge case (section below) — not done.
+2. Encrypt the Hive cache (AES cipher, key in secure storage, one-time migration for existing installs).
+3. Play Console follow-ups: review the pre-launch report, declare analytics/crash data in the Data safety form and iOS PrivacyInfo, and confirm testers are opted in so the internal-track update appears.
+4. Batch B (needs new backend endpoints first): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts, passwordChangedAt; plus the owner payment path for `billing_pending` (a product decision).
+5. Not yet seen on a device: queued mark-paid staying Paid after refresh; employee hand-over of a prepaid order from Ready; employee sign-in after an owner password reset.
+6. Optional: a pink "previous period" line on the chart (no button), an "Organization-wide" outlet bucket (needs the protected outlet switcher file), `Renews on 2100-01-01` shows a raw ISO date on Subscription.
+
+## Open: unsynced data and auth failures (2026-10-02, owner's request)
+
+Edge case to solve, not done yet. When a 401 (or a reason-less 403) arrives
+while changes are still queued, `AuthRepository.logout(involuntary: true)`
+signs out, wipes the local cache, then writes the queues back under
+`parked_unsynced::<storeId>`. Data is lost if the app is killed between the
+wipe and that write, if the write fails, or if the person signs in somewhere
+the parked copy is not restored. A token that expires while the app is closed
+hits the same path on next launch.
+
+Rule to implement: whatever the user does is saved locally first, then synced
+in the background; the UI never waits for the API.
+- On 401/403, do not wipe. Keep local data and the outbox, show "sign in
+  again" over the app, resume sync after sign-in.
+- Wipe only on a deliberate sign-out, and only when the outbox and dead-letter
+  lists are empty, or the person confirms losing them.
+- Move the parking write before any wipe (or drop parking entirely), and make
+  it atomic.
+- Audit the remaining direct API calls (profile, change password, customer
+  lookup, owner actions) and move any user-visible write onto the outbox.
+- Tests: kill-between-steps, parking write failing, different user signing in.
 
 ## Durable knowledge (mirror of the local Wiki article)
 

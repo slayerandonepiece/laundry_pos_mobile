@@ -115,7 +115,9 @@ void main() {
         await tester.pumpWidget(
           buildTestApp(child: const OwnerDashboardScreen(), ownerBloc: bloc),
         );
-        await tester.pumpAndSettle();
+        // This bloc never answers, so the week card keeps its spinner and the
+        // page never goes idle: step a frame instead of settling.
+        await tester.pump();
 
         expect(find.byType(SyncStatusBar), findsOneWidget);
         final refreshIcon = find.byIcon(Icons.refresh_rounded);

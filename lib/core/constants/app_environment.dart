@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/services.dart' show appFlavor;
 
 /// Application deployment environments
 enum AppEnvironment { dev, stage, prod }
@@ -13,11 +14,8 @@ class AppEnvironmentConfig {
   static const String appName = 'KlenPOS';
 
   /// Reads compile-time environment from `--dart-define=ENV=<dev|stage|prod>`.
-  /// Defaults to `dev` if not specified.
-  static const String _rawEnv = String.fromEnvironment(
-    'ENV',
-    defaultValue: 'dev',
-  );
+  /// Empty when not given; the build flavor then decides (see [current]).
+  static const String _rawEnv = String.fromEnvironment('ENV');
 
   /// Optional base URL override from `--dart-define=BASE_URL=<url>`.
   static const String _baseUrlOverride = String.fromEnvironment(
@@ -25,9 +23,8 @@ class AppEnvironmentConfig {
     defaultValue: '',
   );
 
-  /// Active environment enum
-  static AppEnvironment get current {
-    switch (_rawEnv.toLowerCase()) {
+  static AppEnvironment? _parse(String? value) {
+    switch (value?.toLowerCase()) {
       case 'stage':
       case 'staging':
         return AppEnvironment.stage;
@@ -36,10 +33,27 @@ class AppEnvironmentConfig {
         return AppEnvironment.prod;
       case 'dev':
       case 'development':
-      default:
         return AppEnvironment.dev;
+      default:
+        return null;
     }
   }
+
+  /// A stage or prod flavor can never run as dev, whatever `ENV` says: a
+  /// release built with `--flavor prod` and no `--dart-define` must not talk to
+  /// localhost. Otherwise an explicit `ENV` wins, then the dev default.
+  @visibleForTesting
+  static AppEnvironment resolveEnvironment({String? flavor, String? explicit}) {
+    final fromFlavor = _parse(flavor);
+    if (fromFlavor != null && fromFlavor != AppEnvironment.dev) {
+      return fromFlavor;
+    }
+    return _parse(explicit) ?? fromFlavor ?? AppEnvironment.dev;
+  }
+
+  /// Active environment enum
+  static AppEnvironment get current =>
+      resolveEnvironment(flavor: appFlavor, explicit: _rawEnv);
 
   static String get name => current.name;
 
@@ -69,25 +83,34 @@ class AppEnvironmentConfig {
     return 'https://klenpos-prod.vercel.app';
   }
 
-  /// Resolves the base URL for the active environment:
-  static String get baseUrl {
-    String resolved;
-    if (_baseUrlOverride.isNotEmpty) {
-      resolved = _baseUrlOverride;
-    } else {
-      switch (current) {
-        case AppEnvironment.dev:
-          resolved = localhostUrl;
-          break;
-        case AppEnvironment.stage:
-          final url = stageUrl;
-          resolved = url.isNotEmpty ? url : localhostUrl;
-          break;
-        case AppEnvironment.prod:
-          resolved = prodUrl;
-          break;
-      }
+  /// Plain HTTP is for dev only. Stage and prod ignore any `BASE_URL` that is
+  /// not HTTPS and use their own HTTPS URL instead.
+  @visibleForTesting
+  static String resolveBaseUrl({
+    required AppEnvironment env,
+    String override = '',
+  }) {
+    final String fallback;
+    switch (env) {
+      case AppEnvironment.dev:
+        fallback = localhostUrl;
+        break;
+      case AppEnvironment.stage:
+        fallback = stageUrl.isNotEmpty ? stageUrl : localhostUrl;
+        break;
+      case AppEnvironment.prod:
+        fallback = prodUrl;
+        break;
+    }
+    var resolved = override.isNotEmpty ? override : fallback;
+    if (env != AppEnvironment.dev &&
+        !resolved.toLowerCase().startsWith('https://')) {
+      resolved = fallback;
     }
     return resolved.replaceAll(RegExp(r'/+$'), '');
   }
+
+  /// Resolves the base URL for the active environment.
+  static String get baseUrl =>
+      resolveBaseUrl(env: current, override: _baseUrlOverride);
 }

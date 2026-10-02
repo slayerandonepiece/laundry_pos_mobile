@@ -1,8 +1,10 @@
-import 'dart:ui' show PlatformDispatcher;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_analytics/observer.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_environment.dart';
+import 'package:myshop/core/error/crash_context.dart';
+import 'package:myshop/core/error/error_reporting.dart';
 import 'package:myshop/core/gate/app_gate_service.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
@@ -39,25 +41,21 @@ import 'package:myshop/features/shell/presentation/main_navigation_shell.dart';
 import 'package:myshop/features/shell/presentation/outlet_required_screen.dart';
 import 'package:myshop/shared/widgets/blocked_screen.dart';
 
-void main() async {
+void main() {
+  // Startup and runApp share one guarded zone: an error anywhere in startup,
+  // or an uncaught async error later, is reported instead of lost.
+  ErrorReporting.runGuarded(_start);
+}
+
+Future<void> _start() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase (Crashlytics, Analytics, Cloud Messaging, Remote Config)
   await FirebaseService.initialize();
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    AppLogger.log(
-      'FLUTTER_ERROR',
-      '${details.exceptionAsString()}${details.stack != null ? '\n${details.stack}' : ''}',
-      error: details.exception,
-    );
-  };
-
-  PlatformDispatcher.instance.onError = (error, stack) {
-    AppLogger.log('PLATFORM_ERROR', '$error\n$stack', error: error);
-    return true;
-  };
+  // After Firebase, and never overwritten later: Flutter, platform and isolate
+  // errors all end up in Crashlytics as fatal in non-debug builds.
+  ErrorReporting.install();
 
   // Initialize Hive local cache (without adapters or code-gen)
   await LocalCacheService.init();
@@ -139,6 +137,7 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _rescoping = false;
+  bool _hasAuthenticatedContext = false;
   late bool _splashAnimationCompleted = WidgetsBinding.instance.runtimeType
       .toString()
       .contains('Test');
@@ -265,6 +264,12 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   }
 
   Future<void> _handleAppResume() async {
+    // Pick up subscription, access and password-change changes made while the
+    // app was in the background. Silent: no loading screen, no sign-out when
+    // offline.
+    if (_authBloc.state is AuthenticatedState) {
+      _authBloc.add(RefreshAuthStatusEvent());
+    }
     await FirebaseService.refreshRemoteConfig();
     final decision = await AppGateService.evaluateGate();
     if (!mounted) return;
@@ -444,6 +449,13 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
         child: MaterialApp(
           navigatorKey: _navigatorKey,
           scaffoldMessengerKey: _messengerKey,
+          navigatorObservers: FirebaseService.analytics == null
+              ? const []
+              : [
+                  FirebaseAnalyticsObserver(
+                    analytics: FirebaseService.analytics!,
+                  ),
+                ],
           title: AppEnvironmentConfig.appName,
           debugShowCheckedModeBanner: false,
           theme: AppTheme.theme,
@@ -465,10 +477,25 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
                       BlocListener<AuthBloc, AuthState>(
                         listener: (context, state) {
                           if (state is UnauthenticatedState) {
+                            if (_hasAuthenticatedContext) {
+                              AppAnalytics.logout();
+                            }
+                            _hasAuthenticatedContext = false;
+                            CrashContext.clear();
                             _outletScopeCubit.reset();
                             Navigator.of(context)
                                 .popUntil((route) => route.isFirst);
+                          } else if (state is AccessBlockedState) {
+                            if (_hasAuthenticatedContext) {
+                              AppAnalytics.logout();
+                            }
+                            _hasAuthenticatedContext = false;
+                            CrashContext.clear();
                           } else if (state is AuthenticatedState) {
+                            if (!_hasAuthenticatedContext) {
+                              AppAnalytics.login();
+                            }
+                            _hasAuthenticatedContext = true;
                             if (state.isFreshLogin) {
                               // Resolve the O3 initial outlet scope before
                               // BootstrapScreen (which fetches orders directly) ever
@@ -480,20 +507,26 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
                               if (_outletScopeCubit.state.missingCache) {
                                 _authBloc.add(SessionRevokedEvent());
                               }
-                              return;
+                            } else {
+                              // Cold start (or post-bootstrap re-entry): re-read
+                              // whatever outlet scope is already cached. Preloading
+                              // catalog/orders/dashboard itself happens in the
+                              // OutletScopeCubit listener below, once scope is
+                              // actually resolved — that also covers the case where a
+                              // cold-start employee has to pick from
+                              // OutletRequiredScreen first.
+                              _outletScopeCubit.hydrate();
+                              if (_outletScopeCubit.state.missingCache) {
+                                _authBloc.add(SessionRevokedEvent());
+                              }
                             }
-
-                            // Cold start (or post-bootstrap re-entry): re-read
-                            // whatever outlet scope is already cached. Preloading
-                            // catalog/orders/dashboard itself happens in the
-                            // OutletScopeCubit listener below, once scope is
-                            // actually resolved — that also covers the case where a
-                            // cold-start employee has to pick from
-                            // OutletRequiredScreen first.
-                            _outletScopeCubit.hydrate();
-                            if (_outletScopeCubit.state.missingCache) {
-                              _authBloc.add(SessionRevokedEvent());
-                            }
+                            CrashContext.setAuthenticated(
+                              userId: state.user.id,
+                              storeId: state.currentStore.storeId,
+                              outletId: _outletScopeCubit.state.activeOutletId,
+                              role: state.currentStore.role,
+                              environment: AppEnvironmentConfig.name,
+                            );
                           }
                         },
                       ),

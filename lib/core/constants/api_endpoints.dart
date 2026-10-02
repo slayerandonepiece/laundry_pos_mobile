@@ -38,6 +38,12 @@ class ApiEndpoints {
   static String orderInvoicePdf(String orderCode) =>
       '$baseUrl/api/v1/orders/$orderCode/invoice/pdf';
 
+  // Subscription (owner billing history)
+  static String get subscriptionInvoices =>
+      '$baseUrl/api/v1/subscription/invoices';
+  static String subscriptionInvoicePdf(int invoiceSeq) =>
+      '$baseUrl/api/v1/subscription/invoices/$invoiceSeq/pdf';
+
   // Payment Methods
   static String get paymentMethods => '$baseUrl/api/v1/payment-methods';
   static String get paymentMethodsAll =>
@@ -47,6 +53,7 @@ class ApiEndpoints {
 
   // Expenses
   static String get expenses => '$baseUrl/api/v1/expenses';
+  static String expenseById(String id) => '$baseUrl/api/v1/expenses/$id';
   static String markExpensePaid(String id) =>
       '$baseUrl/api/v1/expenses/$id/pay';
 
@@ -61,4 +68,5 @@ class ApiEndpoints {
 
   // Dashboard
   static String get dashboard => '$baseUrl/api/v1/dashboard';
+  static String get dashboardRollups => '$baseUrl/api/v1/dashboard/rollups';
 }

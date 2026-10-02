@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../analytics/app_analytics.dart';
 import '../logging/app_logger.dart';
 import '../network/api_exceptions.dart';
 import '../storage/local_cache.dart';
@@ -129,6 +130,7 @@ class SyncEngine {
       await _runSyncImpl();
     } catch (e) {
       AppLogger.log(_tag, '_runSync(): unexpected error', error: e);
+      await AppAnalytics.syncFailed(reason: _failureReason(e));
       _lastRunSucceeded = false;
       _leaveSyncingState(_safePendingCount());
     }
@@ -170,12 +172,14 @@ class SyncEngine {
       );
       _lastRunSucceeded = false;
       SyncManager.instance.setOffline(count);
+      await AppAnalytics.syncFailed(reason: 'offline');
       return;
     }
 
     var ok = false;
     var sessionLost = false;
     var pullAdvanced = false;
+    Object? failure;
     try {
       if (_localCache.getTotalPendingCount() > 0) {
         SyncManager.instance.startSync('Saving changes to cloud...', true);
@@ -194,6 +198,7 @@ class SyncEngine {
 
       ok = pushOk && pullOk && ownerOk;
     } catch (e) {
+      failure = e;
       AppLogger.log(_tag, '_runSync(): unexpected error during sync', error: e);
       // A dead session is handled by the auth layer (the 401 already
       // signed the user out); it says nothing about connectivity, so it
@@ -223,6 +228,9 @@ class SyncEngine {
         '_runSync(): $deadLetterCount dead-lettered -> setDeadLettered',
       );
       if (!ok) _failureStreak++;
+      await AppAnalytics.syncFailed(
+        reason: ok ? 'unknown' : _failureReason(failure),
+      );
       SyncManager.instance.setDeadLettered(deadLetterCount);
       return;
     }
@@ -281,6 +289,7 @@ class SyncEngine {
       _failureStreak++;
     }
     AppLogger.log(_tag, '_runSync(): failed, failureStreak=$_failureStreak');
+    await AppAnalytics.syncFailed(reason: _failureReason(failure));
     if (_failureStreak >= _maxSilentFailures) {
       AppLogger.log(
         _tag,
@@ -290,6 +299,16 @@ class SyncEngine {
     } else {
       _leaveSyncingState(pendingCount);
     }
+  }
+
+  String _failureReason(Object? error) {
+    if (error is ApiException) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        return 'forbidden';
+      }
+      if ((error.statusCode ?? 0) >= 500) return 'server';
+    }
+    return error == null ? 'server' : 'unknown';
   }
 
   /// Called after a user-initiated "Sync now" / "Retry" tap — gives the

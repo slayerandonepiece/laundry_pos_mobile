@@ -77,3 +77,6 @@ ios/Firebase/**/*.plist
 *.keystore
 *.jks
 **/key.properties
+
+# Firebase CLI downloads its symbol tool here on first symbols:upload
+/.crashlytics/

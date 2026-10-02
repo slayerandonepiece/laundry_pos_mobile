@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/sync/sync_freshness.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
@@ -249,7 +250,18 @@ class CartBloc extends Bloc<CartEvent, CartState> {
           );
           return;
         }
-        initialPayment = {'amount': state.totalAmount, 'method': methodName};
+        final received = event.receivedNow ?? state.totalAmount;
+        if (event.receivedNow != null &&
+            (received <= 0 || received > state.totalAmount)) {
+          emit(
+            state.copyWith(
+              isSubmitting: false,
+              submissionError: 'Amount received must be more than zero and at most the order total',
+            ),
+          );
+          return;
+        }
+        initialPayment = {'amount': received, 'method': methodName};
       }
 
       // Optimistic: saves locally & returns immediately; API fires in background
@@ -262,6 +274,14 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         entries: entries,
         initialPayment: initialPayment,
         outletId: state.outletId,
+      );
+
+      await AppAnalytics.orderPlaced(
+        paymentChoice: event.paymentChoice == 'delivery'
+            ? 'delivery'
+            : 'prepaid',
+        itemCount: state.totalItemCount,
+        valuePaise: state.totalAmount,
       );
 
       emit(state.copyWith(isSubmitting: false, placedOrder: order));

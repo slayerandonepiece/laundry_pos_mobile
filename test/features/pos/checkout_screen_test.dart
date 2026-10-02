@@ -21,6 +21,7 @@ class _FakePosRepo implements PosRepository {
   String? lastPassedNotes;
   bool submitCalled = false;
   String? lastPaymentChoice;
+  int? lastPassedAmount;
 
   @override
   List<Product> getCachedProductsList() => [];
@@ -45,6 +46,7 @@ class _FakePosRepo implements PosRepository {
     submitCalled = true;
     lastPassedOutletId = outletId;
     lastPassedMethodName = initialPayment?['method']?.toString();
+    lastPassedAmount = (initialPayment?['amount'] as num?)?.toInt();
     lastPassedDueDate = dueDate;
     lastPassedNotes = notes;
     return Order(
@@ -113,15 +115,47 @@ void main() {
       outletCubit.close();
     });
 
-    Widget createWidgetUnderTest() {
+    Widget createWidgetUnderTest({Widget home = const CheckoutScreen()}) {
       return MultiBlocProvider(
         providers: [
           BlocProvider<CartBloc>.value(value: cartBloc),
           BlocProvider<OutletScopeCubit>.value(value: outletCubit),
         ],
-        child: const MaterialApp(home: CheckoutScreen()),
+        child: MaterialApp(home: home),
       );
     }
+
+    // Checkout sits on top of a page that stands in for the items screen.
+    Widget checkoutOnTopOfItems() => createWidgetUnderTest(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const CheckoutScreen())),
+              child: const Text('Open checkout'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    void seedCart() => cartBloc.emit(
+      cartBloc.state.copyWith(
+        items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
+        paymentMethods: [
+          StorePaymentMethod(id: 'pm_cash', name: 'Cash', active: true),
+          StorePaymentMethod(id: 'pm_upi', name: 'UPI', active: true),
+          StorePaymentMethod(
+            id: 'pm_cod',
+            name: 'Cash On Delivery',
+            code: 'COD',
+            active: true,
+          ),
+        ],
+      ),
+    );
 
     testWidgets(
       'Renders resolved outlet name when outletId is set in CartState',
@@ -243,6 +277,91 @@ void main() {
       expect(fakeRepo.submitCalled, isTrue);
       expect(fakeRepo.lastPassedMethodName, equals('UPI'));
       expect(fakeRepo.lastPassedOutletId, equals('outlet_a'));
+    });
+
+    Product bigProduct() => Product(
+      id: 'prod_big',
+      name: 'Duvet',
+      category: 'dry clean',
+      type: 'item',
+      price: 50000,
+      active: true,
+    );
+
+    void loadBigCart() {
+      cartBloc.emit(
+        cartBloc.state.copyWith(
+          items: {'prod_big': CartItem(product: bigProduct(), quantity: 1)},
+          paymentMethods: [
+            StorePaymentMethod(id: 'pm_cash', name: 'Cash', active: true),
+            StorePaymentMethod(
+              id: 'pm_cod',
+              code: 'COD',
+              name: 'Cash On Delivery',
+              active: true,
+            ),
+          ],
+          outletId: 'outlet_a',
+        ),
+      );
+    }
+
+    testWidgets(
+      'Received now sends a partial amount and rejects an amount above the total',
+      (tester) async {
+        loadBigCart();
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+
+        final receivedField = find.byKey(const Key('checkout_received_field'));
+        expect(receivedField, findsNothing);
+
+        // Pay-on-delivery takes no money now, so the field stays hidden.
+        await tester.tap(find.text('Cash On Delivery'));
+        await tester.pump();
+        expect(receivedField, findsNothing);
+
+        await tester.tap(find.text('Cash'));
+        await tester.pump();
+        expect(receivedField, findsOneWidget);
+
+        await tester.enterText(receivedField, '600');
+        await tester.pump();
+        expect(
+          find.text('Enter an amount between ₹1 and ₹500'),
+          findsOneWidget,
+        );
+        expect(
+          tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
+          isNull,
+        );
+
+        await tester.enterText(receivedField, '150');
+        await tester.pump();
+        expect(find.text('Place order · ₹150 received now'), findsOneWidget);
+
+        await tester.tap(find.byType(PrimaryButton));
+        await tester.pump();
+
+        expect(fakeRepo.submitCalled, isTrue);
+        expect(fakeRepo.lastPassedMethodName, 'Cash');
+        expect(fakeRepo.lastPassedAmount, 15000);
+      },
+    );
+
+    testWidgets('A blank Received now field still sends the full total', (
+      tester,
+    ) async {
+      loadBigCart();
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      await tester.tap(find.text('Cash'));
+      await tester.pump();
+      await tester.tap(find.byType(PrimaryButton));
+      await tester.pump();
+
+      expect(fakeRepo.lastPassedAmount, 50000);
     });
 
     testWidgets(
@@ -456,5 +575,72 @@ void main() {
         );
       },
     );
+
+    testWidgets('Back returns to the items without asking to discard', (
+      tester,
+    ) async {
+      seedCart();
+      await tester.pumpWidget(checkoutOnTopOfItems());
+      await tester.tap(find.text('Open checkout'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('checkout_notes_field')),
+        'Starch the collars',
+      );
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard this order?'), findsNothing);
+      expect(find.byType(CheckoutScreen), findsNothing);
+      expect(find.text('Open checkout'), findsOneWidget);
+      // The cart is untouched and keeps what was typed.
+      expect(cartBloc.state.items, isNotEmpty);
+      expect(cartBloc.state.notes, 'Starch the collars');
+    });
+
+    testWidgets('Closing with X asks first, and Cancel keeps the order', (
+      tester,
+    ) async {
+      seedCart();
+      await tester.pumpWidget(checkoutOnTopOfItems());
+      await tester.tap(find.text('Open checkout'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard this order?'), findsOneWidget);
+      expect(find.byType(CheckoutScreen), findsOneWidget);
+    });
+
+    testWidgets('Methods sit two to a row and Cash on Delivery stands apart', (
+      tester,
+    ) async {
+      seedCart();
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      final cash = tester.getTopLeft(find.text('Cash').first);
+      final upi = tester.getTopLeft(find.text('UPI'));
+      final cod = tester.getTopLeft(find.text('Cash On Delivery'));
+      expect(upi.dy, cash.dy); // same row
+      expect(upi.dx, greaterThan(cash.dx));
+      expect(cod.dy, greaterThan(cash.dy)); // below, on its own
+      expect(find.text('Customer pays at delivery'), findsOneWidget);
+    });
+
+    testWidgets('Quick due-date chips set the date', (tester) async {
+      seedCart();
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      await tester.tap(find.text('Tomorrow'));
+      await tester.pump();
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      expect(
+        find.text('Due date: ${DateFormatter.formatDate(tomorrow)}'),
+        findsOneWidget,
+      );
+    });
   });
 }

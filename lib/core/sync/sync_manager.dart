@@ -188,6 +188,21 @@ class SyncManager extends ValueNotifier<SyncState> {
     value = value.copyWith(status: SyncStatus.error, message: error);
   }
 
+  void clearError(String messagePrefix) {
+    if (!value.hasError ||
+        !(value.message?.startsWith(messagePrefix) ?? false)) {
+      return;
+    }
+    final unresolved = _localUnresolved();
+    if (unresolved.deadLetter > 0) {
+      setDeadLettered(unresolved.deadLetter);
+    } else if (unresolved.pending > 0) {
+      setPendingOnline(unresolved.pending);
+    } else {
+      completeSync();
+    }
+  }
+
   /// Several sync attempts in a row failed to even reach the server (not a
   /// per-action validation failure — the whole request didn't go through).
   /// Auto-retry stops here; the user has to tap "Sync now" to try again, so

@@ -91,3 +91,54 @@
 ```
 - **Could not verify**:
   - Live external browser launch of checkout URLs on real physical device for `billing_pending` (contract specifies no web checkout route currently exists, and unit/widget tests verified URL launcher guard and web dashboard notice).
+
+## Session 2026-10-01 (M2 & M1: Switcher fix and Expense edit/delete/paid date/outlet attribution)
+- **Baseline flutter analyze**: No issues found! (0 issues)
+- **Baseline flutter test**: All 800 tests passed! (800 passed, 0 failed)
+
+[11:36] STARTED M2
+[11:54] DONE M2 — files: lib/shared/widgets/outlet_title_switcher.dart | tests added/run: test/widgets/outlet_switcher_test.dart (1 added, 7 passed), full suite 801/801 passed | analyze: pass | assumptions: popup menu route closed before handling selection to prevent menu lingering over bootstrap screen
+
+[11:55] STARTED M1.1
+[11:57] DONE M1.1 — files: lib/features/owner/data/models/expense_model.dart | tests added/run: test/features/expenses_outlet_test.dart (1 added, 6 passed) | analyze: pass | assumptions: outletId nullable, legacy JSON without outletId parses to null
+
+[11:57] STARTED M1.2
+[12:07] DONE M1.2 — files: lib/core/constants/api_endpoints.dart, lib/features/owner/data/owner_repository.dart | tests added/run: test/features/expenses_outlet_test.dart (4 added) | analyze: pass | assumptions: updateExpense/deleteExpense throw clear exception when offline and never enqueue; createExpense and markExpensePaid handle outletId and paidDate in online, offline queue, and replay
+[12:07] STARTED M1.3
+[12:08] DONE M1.3 — files: lib/features/owner/bloc/owner_event.dart, lib/features/owner/bloc/owner_bloc.dart | tests added/run: test/features/expenses_outlet_test.dart | analyze: pass | assumptions: UpdateExpenseEvent & DeleteExpenseEvent registered, offline errors mapped to 'This needs a connection', AddExpenseEvent & MarkExpensePaidEvent updated with parameters
+[12:08] STARTED M1.4
+[12:09] DONE M1.4 — files: test/features/expenses_outlet_test.dart, test/features/expenses_screen_test.dart | tests added/run: test/features/expenses_outlet_test.dart (6 added, 12/12 passed), test/features/expenses_screen_test.dart (5/5 passed) | analyze: pass | assumptions: verified update/delete online/offline cache behavior, markExpensePaid date handling and replay fallback, OwnerBloc event emission and error handling
+
+[12:10] STARTED M1.5
+[12:12] DONE M1.5 — files: lib/features/owner/presentation/expense_detail_screen.dart | tests added/run: test/features/expenses_ui_details_edit_test.dart (3 tests) | analyze: pass | assumptions: full-screen expense details route with title, category, MoneyText amount, due, paid status, monthly badge, outlet attribution, and offline-disabled edit/delete with 'Needs a connection'
+[12:12] STARTED M1.6
+[12:14] DONE M1.6 — files: lib/features/owner/presentation/edit_expense_screen.dart | tests added/run: test/features/expenses_ui_details_edit_test.dart (2 tests) | analyze: pass | assumptions: full-screen edit route with month-clamped due date for monthly expenses, disabled monthly toggle, CentredDialog delete confirmation with monthly warning
+[12:14] STARTED M1.7
+[12:15] DONE M1.7 — files: lib/features/owner/presentation/expenses_screen.dart, lib/features/owner/presentation/expense_detail_screen.dart | tests added/run: test/features/expenses_ui_details_edit_test.dart (1 test) | analyze: pass | assumptions: mark as paid date picker defaulting to today with maxDate = today and minDate = 1 year back, dispatching MarkExpensePaidEvent with 'YYYY-MM-DD'
+[12:15] STARTED M1.8
+[12:16] DONE M1.8 — files: lib/features/owner/presentation/expenses_screen.dart, lib/features/owner/presentation/edit_expense_screen.dart | tests added/run: test/features/expenses_ui_details_edit_test.dart (2 tests) | analyze: pass | assumptions: 'Applies to' selector in Add and Edit screens defaulting to active outlet, small muted attribution subtext in expenses list
+[12:17] STARTED M1.9
+[12:19] DONE M1.9 — files: lib/features/owner/presentation/expenses_screen.dart | tests added/run: test/features/expenses_screen_test.dart (1 test) | analyze: pass | assumptions: _parseDate and _startOfDay support both ISO-8601 with time and YYYY-MM-DD dates in period total calculations
+
+[12:25] DONE M1 — files: lib/core/constants/api_endpoints.dart, lib/features/owner/bloc/owner_bloc.dart, lib/features/owner/bloc/owner_event.dart, lib/features/owner/data/models/expense_model.dart, lib/features/owner/data/owner_repository.dart, lib/features/owner/presentation/expenses_screen.dart, lib/features/owner/presentation/expense_detail_screen.dart, lib/features/owner/presentation/edit_expense_screen.dart | tests added/run: test/features/expenses_outlet_test.dart, test/features/expenses_screen_test.dart, test/features/expenses_ui_details_edit_test.dart, full suite 817/817 passed | analyze: pass | assumptions: full M1 suite verified with online/offline semantics, chosen paid date, outlet attribution, edit & delete flows, and R5 date parsing fix
+
+## Final Verification Summary (Session 2026-10-01: M2 & M1)
+- **flutter analyze**: No issues found! (0 issues, ran in 3.1s)
+- **flutter test**: All 817 tests passed! (817 passed, 0 failed — baseline 800 + 17 net new tests across M2 & M1)
+- **graft check**: OK — the wiring graph is in sync with the code.
+- **git status**:
+  - `lib/core/constants/api_endpoints.dart`
+  - `lib/features/owner/bloc/owner_bloc.dart`
+  - `lib/features/owner/bloc/owner_event.dart`
+  - `lib/features/owner/data/models/expense_model.dart`
+  - `lib/features/owner/data/owner_repository.dart`
+  - `lib/features/owner/presentation/edit_expense_screen.dart` (new)
+  - `lib/features/owner/presentation/expense_detail_screen.dart` (new)
+  - `lib/features/owner/presentation/expenses_screen.dart`
+  - `lib/shared/widgets/outlet_title_switcher.dart`
+  - `test/features/expenses_outlet_test.dart`
+  - `test/features/expenses_screen_test.dart`
+  - `test/features/expenses_ui_details_edit_test.dart` (new)
+  - `test/widgets/outlet_switcher_test.dart`
+
+[13:45] BLOCKED final-check — M2 test 'M2: popup route is closed before OutletScopeCubit emits new scope; All outlets and tapping same outlet work' in test/widgets/outlet_switcher_test.dart times out under FakeAsync post-test teardown when cubit.stream is subscribed to during testWidgets.

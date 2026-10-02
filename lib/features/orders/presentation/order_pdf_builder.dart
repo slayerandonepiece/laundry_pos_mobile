@@ -19,12 +19,11 @@ Future<Uint8List> buildOrderPdfBytes({
 }) async {
   final pdf = pw.Document();
   final invoiceNo = order.invoice?.invoiceNumber ?? 'INV-${order.displayCode}';
-  final dateStr = order.invoice != null
-      ? DateFormatter.formatFull(order.invoice!.issuedAt)
+  // The server invoice dates the order, not the day the PDF was made.
+  final dateStr = order.date.isNotEmpty
+      ? DateFormatter.formatFull(order.date)
       : DateFormatter.formatFull(DateTime.now());
-  final headerLabel = isFinalInvoice
-      ? 'Invoice: $invoiceNo'
-      : 'Bill for: ${order.displayCode}';
+  final headerTitle = isFinalInvoice ? invoiceNo : 'Bill';
 
   // Distinct payment methods calculation
   String formatMethod(String method) {
@@ -65,10 +64,11 @@ Future<Uint8List> buildOrderPdfBytes({
   const tableHeadBg = PdfColor.fromInt(0xfff6f8fb);
   const kvBorderColor = PdfColor.fromInt(0xfff0f2f5);
   const footerColor = PdfColor.fromInt(0xff9aa4b2);
+  const headerMuted = PdfColor.fromInt(0xff6b7684);
 
   pw.Widget kvRow(String label, String value) {
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+      padding: const pw.EdgeInsets.symmetric(vertical: 6),
       decoration: const pw.BoxDecoration(
         border: pw.Border(
           bottom: pw.BorderSide(color: kvBorderColor, width: 0.8),
@@ -117,7 +117,7 @@ Future<Uint8List> buildOrderPdfBytes({
   pdf.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 36),
+      margin: const pw.EdgeInsets.fromLTRB(40, 40, 40, 32),
       footer: (pw.Context context) {
         return pw.Container(
           alignment: pw.Alignment.center,
@@ -129,51 +129,66 @@ Future<Uint8List> buildOrderPdfBytes({
         );
       },
       build: (pw.Context context) => [
-        // 1. Header
-        pw.Center(
-          child: pw.Column(
-            children: [
-              pw.Text(
-                storeName,
-                style: pw.TextStyle(
-                  fontSize: 22,
-                  fontWeight: pw.FontWeight.bold,
-                  color: textDark,
-                ),
-              ),
-              if (storeContact.isNotEmpty) ...[
-                pw.SizedBox(height: 4),
-                pw.Text(
-                  storeContact,
-                  style: const pw.TextStyle(fontSize: 10, color: textMuted),
-                ),
-              ],
-            ],
-          ),
-        ),
-        pw.SizedBox(height: 18),
-        pw.Divider(thickness: 2),
-        pw.SizedBox(height: 8),
+        // 1. Header — same layout as the server invoice: store on the left,
+        // number and order/date on the right.
         pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text(
-              headerLabel,
-              style: const pw.TextStyle(fontSize: 11, color: textDark),
+            pw.Expanded(
+              flex: 58,
+              child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 16),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      storeName,
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: textDark,
+                      ),
+                    ),
+                    if (storeContact.isNotEmpty) ...[
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        storeContact,
+                        style: const pw.TextStyle(
+                          fontSize: 9,
+                          color: headerMuted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            pw.Text(
-              'Order: ${order.displayCode}',
-              style: const pw.TextStyle(fontSize: 11, color: textDark),
-            ),
-            pw.Text(
-              'Date: $dateStr',
-              style: const pw.TextStyle(fontSize: 11, color: textDark),
+            pw.Expanded(
+              flex: 42,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    headerTitle,
+                    style: pw.TextStyle(
+                      fontSize: 18,
+                      fontWeight: pw.FontWeight.bold,
+                      color: textDark,
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Order ${order.displayCode} - $dateStr',
+                    textAlign: pw.TextAlign.right,
+                    style: const pw.TextStyle(fontSize: 9, color: headerMuted),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-        pw.SizedBox(height: 16),
-        pw.Divider(),
-        pw.SizedBox(height: 12),
+        pw.SizedBox(height: 24),
 
         // 2. Two-column "Billed to" / "Order" section
         pw.Row(
@@ -231,7 +246,7 @@ Future<Uint8List> buildOrderPdfBytes({
             ),
           ],
         ),
-        pw.SizedBox(height: 16),
+        pw.SizedBox(height: 24),
 
         // 3. Items table with FOUR columns: Service, Qty, Rate, Amount
         sectionLabel('Items'),
@@ -247,8 +262,8 @@ Future<Uint8List> buildOrderPdfBytes({
               pw.Container(
                 color: tableHeadBg,
                 padding: const pw.EdgeInsets.symmetric(
-                  vertical: 6,
-                  horizontal: 4,
+                  vertical: 8,
+                  horizontal: 0,
                 ),
                 child: pw.Row(
                   children: [
@@ -295,8 +310,8 @@ Future<Uint8List> buildOrderPdfBytes({
 
                 return pw.Container(
                   padding: const pw.EdgeInsets.symmetric(
-                    vertical: 6,
-                    horizontal: 4,
+                    vertical: 10,
+                    horizontal: 0,
                   ),
                   decoration: const pw.BoxDecoration(
                     border: pw.Border(
@@ -310,7 +325,7 @@ Future<Uint8List> buildOrderPdfBytes({
                         child: pw.Text(
                           line.productName,
                           style: pw.TextStyle(
-                            fontSize: 10,
+                            fontSize: 10.5,
                             fontWeight: pw.FontWeight.bold,
                             color: textDark,
                           ),
@@ -322,7 +337,7 @@ Future<Uint8List> buildOrderPdfBytes({
                           line.displayQuantity,
                           textAlign: pw.TextAlign.right,
                           style: const pw.TextStyle(
-                            fontSize: 10,
+                            fontSize: 10.5,
                             color: textDark,
                           ),
                         ),
@@ -333,7 +348,7 @@ Future<Uint8List> buildOrderPdfBytes({
                           rateText,
                           textAlign: pw.TextAlign.right,
                           style: const pw.TextStyle(
-                            fontSize: 10,
+                            fontSize: 10.5,
                             color: textDark,
                           ),
                         ),
@@ -344,7 +359,7 @@ Future<Uint8List> buildOrderPdfBytes({
                           CurrencyFormatter.formatPdf(line.totalAmount),
                           textAlign: pw.TextAlign.right,
                           style: pw.TextStyle(
-                            fontSize: 10,
+                            fontSize: 10.5,
                             fontWeight: pw.FontWeight.bold,
                             color: textDark,
                           ),
@@ -428,8 +443,8 @@ Future<Uint8List> buildOrderPdfBytes({
                       pw.Container(
                         color: tableHeadBg,
                         padding: const pw.EdgeInsets.symmetric(
-                          vertical: 6,
-                          horizontal: 4,
+                          vertical: 8,
+                          horizontal: 0,
                         ),
                         child: pw.Row(
                           children: [
@@ -458,8 +473,8 @@ Future<Uint8List> buildOrderPdfBytes({
                             : '-';
                         return pw.Container(
                           padding: const pw.EdgeInsets.symmetric(
-                            vertical: 6,
-                            horizontal: 4,
+                            vertical: 10,
+                            horizontal: 0,
                           ),
                           decoration: const pw.BoxDecoration(
                             border: pw.Border(
@@ -476,7 +491,7 @@ Future<Uint8List> buildOrderPdfBytes({
                                 child: pw.Text(
                                   paymentDateStr,
                                   style: const pw.TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 10.5,
                                     color: textDark,
                                   ),
                                 ),
@@ -486,7 +501,7 @@ Future<Uint8List> buildOrderPdfBytes({
                                 child: pw.Text(
                                   formatMethod(payment.method),
                                   style: const pw.TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 10.5,
                                     color: textDark,
                                   ),
                                 ),
@@ -497,7 +512,7 @@ Future<Uint8List> buildOrderPdfBytes({
                                   CurrencyFormatter.formatPdf(payment.amount),
                                   textAlign: pw.TextAlign.right,
                                   style: pw.TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 10.5,
                                     fontWeight: pw.FontWeight.bold,
                                     color: textDark,
                                   ),

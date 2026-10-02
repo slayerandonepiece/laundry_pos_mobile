@@ -175,8 +175,8 @@ void main() {
 
         final text = extractPdfText(bytes);
         expect(text, contains('Elite Laundromat'));
-        expect(text, contains('Invoice: INV-000042'));
-        expect(text, contains('Order: ORD-101'));
+        expect(text, contains('INV-000042'));
+        expect(text, contains('Order ORD-101 - 20 Sep 2026'));
 
         // Verify Billed to & Order section
         expect(text, contains('BILLED TO'));
@@ -263,7 +263,7 @@ void main() {
         final text = extractPdfText(bytes);
 
         // Pre-delivery bill header
-        expect(text, contains('Bill for: ORD-102'));
+        expect(text, contains('Order ORD-102'));
         expect(text, contains('Walk-in customer'));
 
         // Method label for zero payments should be '-'

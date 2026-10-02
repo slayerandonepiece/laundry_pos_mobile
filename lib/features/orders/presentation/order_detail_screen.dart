@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
@@ -659,9 +660,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           icon: Icons.visibility_outlined,
                           label: 'View',
                           onTap: () {
+                            AppAnalytics.invoiceViewed(kind: 'order');
                             Navigator.push(
                               context,
                               MaterialPageRoute(
+                                settings: const RouteSettings(
+                                  name: 'invoice_viewer',
+                                ),
                                 builder: (_) => InvoiceViewerScreen(
                                   order: order,
                                   storeName: storeName,
@@ -725,61 +730,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 ],
                 const SizedBox(height: 14),
 
-                // 6. Activity & History Button Card
-                AppCard(
-                  padding: EdgeInsets.zero,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => OrderActivityScreen(order: order),
-                      ),
-                    );
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.history_outlined,
-                          size: 20,
-                          color: AppColors.primary,
-                        ),
-                        SizedBox(width: 13),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Activity & history',
-                                style: TextStyle(
-                                  fontFamily: AppTextStyles.fontBody,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.text,
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Delivery commitment, who changed what',
-                                style: TextStyle(
-                                  fontFamily: AppTextStyles.fontBody,
-                                  fontSize: 11,
-                                  color: AppColors.mutedText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.chevron_right,
-                          size: 18,
-                          color: AppColors.faintText,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                // 6. Activity & history, on the same page
+                OrderActivitySection(order: order),
               ],
             ),
           ),

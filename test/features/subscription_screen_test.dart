@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,8 +10,10 @@ import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/auth/data/models/user_model.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
+import 'package:myshop/features/owner/data/models/subscription_invoice_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/more_screen.dart';
+import 'package:myshop/features/owner/presentation/subscription_invoice_viewer_screen.dart';
 import 'package:myshop/features/owner/presentation/subscription_screen.dart';
 
 class MockAuthBloc extends Bloc<AuthEvent, AuthState> implements AuthBloc {
@@ -29,6 +34,50 @@ class FakeOwnerRepository implements OwnerRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+class FakeBillingRepository implements OwnerRepository {
+  List<SubscriptionInvoice> cached = const [];
+  List<SubscriptionInvoice> remote = const [];
+  bool failList = false;
+  int pdfAsked = 0;
+
+  @override
+  List<SubscriptionInvoice> getCachedSubscriptionInvoices() => cached;
+
+  @override
+  Future<List<SubscriptionInvoice>> listSubscriptionInvoices() async {
+    if (failList) throw Exception('offline');
+    return remote;
+  }
+
+  @override
+  Future<Uint8List> getSubscriptionInvoicePdf(int invoiceSeq) {
+    pdfAsked = invoiceSeq;
+    return Completer<Uint8List>().future; // never answers: spinner stays
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+const _renewal = SubscriptionInvoice(
+  invoiceSeq: 2,
+  number: 'INV-000002',
+  type: 'RENEWAL',
+  amount: 1200000,
+  method: 'CASH',
+  paidAt: '2026-09-25',
+  coversFrom: '2026-09-25',
+  coversTo: '2027-09-24',
+);
+const _deposit = SubscriptionInvoice(
+  invoiceSeq: 1,
+  number: 'INV-000001',
+  type: 'DEPOSIT',
+  amount: 500000,
+  method: 'UPI',
+  paidAt: '2026-09-20',
+);
 
 AuthState createAuthState({
   String? paidThroughDate,
@@ -82,13 +131,10 @@ void main() {
         expect(find.text('Your plan is active'), findsOneWidget);
         expect(find.text('Renews on $dateStr'), findsOneWidget);
 
-        // Billing history placeholder
-        expect(find.text('Billing history'), findsOneWidget);
-        expect(
-          find.text("Invoice downloads aren't available in the app yet."),
-          findsOneWidget,
-        );
-        expect(find.text('Contact support'), findsOneWidget);
+        // No repository (or no payments yet): an honest empty state.
+        expect(find.text('INVOICES'), findsOneWidget);
+        expect(find.text('No invoices yet'), findsOneWidget);
+        expect(find.text('Contact support about billing'), findsOneWidget);
       },
     );
 
@@ -279,5 +325,77 @@ void main() {
         expect(find.text('Your plan is active'), findsOneWidget);
       },
     );
+
+    Widget billingApp(FakeBillingRepository repo) => MultiRepositoryProvider(
+      providers: [RepositoryProvider<OwnerRepository>.value(value: repo)],
+      child: BlocProvider<AuthBloc>.value(
+        value: MockAuthBloc(createAuthState(paidThroughDate: '2100-01-01')),
+        child: const MaterialApp(home: SubscriptionScreen()),
+      ),
+    );
+
+    testWidgets('Shows every subscription invoice with its amount and dates', (
+      tester,
+    ) async {
+      final repo = FakeBillingRepository()..remote = [_renewal, _deposit];
+      await tester.pumpWidget(billingApp(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 invoices · ₹17,000 paid in total'), findsOneWidget);
+      expect(find.text('Annual renewal'), findsOneWidget);
+      expect(find.text('Subscription deposit'), findsOneWidget);
+      expect(find.text('₹12,000'), findsOneWidget);
+      expect(find.text('INV-000002'), findsOneWidget);
+      expect(find.text('Paid 25 Sep 2026 · Cash'), findsOneWidget);
+      expect(find.text('Covers 25 Sep 2026 – 24 Sep 2027'), findsOneWidget);
+      expect(find.text('Paid 20 Sep 2026 · UPI'), findsOneWidget);
+    });
+
+    testWidgets('A failed refresh keeps showing what the phone already has', (
+      tester,
+    ) async {
+      final repo = FakeBillingRepository()
+        ..cached = [_renewal]
+        ..failList = true;
+      await tester.pumpWidget(billingApp(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Annual renewal'), findsOneWidget);
+      expect(
+        find.text("Showing what's saved on this phone. Couldn't refresh."),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Nothing saved and the request fails: says so, with retry', (
+      tester,
+    ) async {
+      final repo = FakeBillingRepository()..failList = true;
+      await tester.pumpWidget(billingApp(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't load your invoices"), findsOneWidget);
+      repo.failList = false;
+      repo.remote = [_deposit];
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(find.text('Subscription deposit'), findsOneWidget);
+    });
+
+    testWidgets('Tapping an invoice opens it and asks the server for its PDF', (
+      tester,
+    ) async {
+      final repo = FakeBillingRepository()..remote = [_renewal];
+      await tester.pumpWidget(billingApp(repo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('subscription-invoice-2')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(repo.pdfAsked, 2);
+      expect(find.byType(SubscriptionInvoiceViewerScreen), findsOneWidget);
+      expect(find.byTooltip('Share'), findsOneWidget);
+    });
   });
 }

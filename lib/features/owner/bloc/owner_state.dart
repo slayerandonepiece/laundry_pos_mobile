@@ -1,6 +1,7 @@
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/models/expense_model.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
+import 'package:myshop/features/owner/data/models/outlet_rollup_model.dart';
 import 'package:myshop/features/owner/data/models/staff_model.dart';
 import 'package:myshop/features/owner/data/models/store_profile_model.dart';
 
@@ -41,6 +42,9 @@ class OwnerState {
   /// Per-card data for a non-default period; a card that isn't here shows the
   /// page's [metrics].
   final Map<DashboardCard, CardMetrics> cards;
+  final List<OutletRollup> outletRollups;
+  final bool outletRollupsLoading;
+  final bool outletRollupsFailed;
 
   OwnerState({
     bool? isLoading,
@@ -56,6 +60,9 @@ class OwnerState {
     this.dashboardPeriod = 'today',
     this.dashboardKey,
     this.cards = const {},
+    this.outletRollups = const [],
+    this.outletRollupsLoading = false,
+    this.outletRollupsFailed = false,
   }) : isLoading = isLoading ?? loading.isNotEmpty,
        metrics = metrics ?? DashboardMetrics();
 
@@ -73,6 +80,9 @@ class OwnerState {
     String? dashboardPeriod,
     String? dashboardKey,
     Map<DashboardCard, CardMetrics>? cards,
+    List<OutletRollup>? outletRollups,
+    bool? outletRollupsLoading,
+    bool? outletRollupsFailed,
   }) {
     final nextLoading = loading ?? this.loading;
     return OwnerState(
@@ -91,6 +101,9 @@ class OwnerState {
       dashboardPeriod: dashboardPeriod ?? this.dashboardPeriod,
       dashboardKey: dashboardKey ?? this.dashboardKey,
       cards: cards ?? this.cards,
+      outletRollups: outletRollups ?? this.outletRollups,
+      outletRollupsLoading: outletRollupsLoading ?? this.outletRollupsLoading,
+      outletRollupsFailed: outletRollupsFailed ?? this.outletRollupsFailed,
     );
   }
 }

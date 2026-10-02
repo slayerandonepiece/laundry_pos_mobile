@@ -101,8 +101,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   void _startNewOrder(BuildContext context) {
     final outletId = context.read<OutletScopeCubit>().state.activeOutletId;
     context.read<CartBloc>().add(ResetSaleEvent(outletId: outletId));
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const CustomerDetailsScreen()));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'new_order_customer'),
+        builder: (_) => const CustomerDetailsScreen(),
+      ),
+    );
   }
 
   @override
@@ -143,9 +147,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
             padding: const EdgeInsets.only(right: 16),
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  settings: const RouteSettings(name: 'profile'),
+                  builder: (_) => const ProfileScreen(),
+                ),
+              ),
               child: Container(
                 width: 34,
                 height: 34,
@@ -604,6 +611,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
+            settings: const RouteSettings(name: 'order_detail'),
             builder: (_) => OrderDetailScreen(initialOrder: order),
           ),
         );

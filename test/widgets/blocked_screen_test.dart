@@ -156,7 +156,7 @@ void main() {
 
     group('billing_pending (F4)', () {
       testWidgets(
-        'Owner copy, web dashboard notice, Retry button, and no Complete payment button',
+        'Owner copy points to the platform administrator, makes no payment promise, and keeps Retry',
         (tester) async {
           bool retried = false;
           await tester.pumpWidget(
@@ -172,13 +172,15 @@ void main() {
 
           expect(find.text('Billing not completed'), findsOneWidget);
           expect(
-            find.text('Complete payment to start using your organization.'),
+            find.text(
+              'Your store account setup is pending billing completion. Contact your platform administrator to complete setup.',
+            ),
             findsOneWidget,
           );
-          expect(
-            find.text('Complete payment on the KlenPOS web dashboard'),
-            findsOneWidget,
-          );
+          // No self-serve payment route exists for owners, so the screen must
+          // not promise one.
+          expect(find.textContaining('Complete payment'), findsNothing);
+          expect(find.textContaining('web dashboard'), findsNothing);
           expect(
             find.text('Ask your owner to complete billing.'),
             findsNothing,

@@ -6,6 +6,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_environment.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 
@@ -17,6 +18,9 @@ class FirebaseService {
   static FirebaseMessaging? messaging;
   static FirebaseRemoteConfig? remoteConfig;
   static bool hasSuccessfulFetch = false;
+
+  /// True once Crashlytics is initialized; until then reports are dropped.
+  static bool crashlyticsReady = false;
 
   /// Initializes all configured Firebase services according to the active flavor/environment.
   static Future<void> initialize() async {
@@ -40,27 +44,15 @@ class FirebaseService {
       // Disable Crashlytics in debug mode to prevent polluting development metrics
       await crashlytics.setCrashlyticsCollectionEnabled(!kDebugMode);
 
-      // Route Flutter framework errors to Crashlytics in non-debug builds
-      final originalFlutterError = FlutterError.onError;
-      FlutterError.onError = (FlutterErrorDetails details) {
-        if (!kDebugMode) {
-          crashlytics.recordFlutterFatalError(details);
-        }
-        originalFlutterError?.call(details);
-      };
-
-      // Route uncaught platform dispatcher errors to Crashlytics
-      final originalPlatformError = PlatformDispatcher.instance.onError;
-      PlatformDispatcher.instance.onError = (error, stack) {
-        if (!kDebugMode) {
-          crashlytics.recordError(error, stack, fatal: true);
-        }
-        originalPlatformError?.call(error, stack);
-        return true;
-      };
+      crashlyticsReady = true;
+      // The error handlers that feed Crashlytics live in ErrorReporting.
 
       // 3. Analytics Setup
       analytics = FirebaseAnalytics.instance;
+      AppAnalytics.configure(analytics);
+      await analytics?.setAnalyticsCollectionEnabled(
+        !AppEnvironmentConfig.isDev,
+      );
       await analytics?.setUserProperty(
         name: 'environment',
         value: AppEnvironmentConfig.name,
@@ -117,12 +109,15 @@ class FirebaseService {
       );
 
       // Fetch and log APNs/FCM token safely (APNs might not be immediate on iOS / Simulators)
+      // The token is only logged in debug: release logs go to Crashlytics.
       try {
         if (Platform.isIOS) {
           final apnsToken = await messaging?.getAPNSToken();
           if (apnsToken != null) {
             final fcmToken = await messaging?.getToken();
-            AppLogger.log('FIREBASE_MESSAGING', 'FCM Token: $fcmToken');
+            if (kDebugMode) {
+              AppLogger.log('FIREBASE_MESSAGING', 'FCM Token: $fcmToken');
+            }
           } else {
             AppLogger.log(
               'FIREBASE_MESSAGING',
@@ -131,7 +126,9 @@ class FirebaseService {
           }
         } else {
           final fcmToken = await messaging?.getToken();
-          AppLogger.log('FIREBASE_MESSAGING', 'FCM Token: $fcmToken');
+          if (kDebugMode) {
+            AppLogger.log('FIREBASE_MESSAGING', 'FCM Token: $fcmToken');
+          }
         }
       } catch (tokenError) {
         AppLogger.log(
@@ -158,6 +155,28 @@ class FirebaseService {
         error: e,
       );
     }
+  }
+
+  /// Reports an uncaught error to Crashlytics as fatal (no-op until ready).
+  static void recordFatal(Object error, StackTrace? stack) {
+    if (!crashlyticsReady) return;
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+  }
+
+  /// Reports a handled error to Crashlytics as non-fatal (no-op until ready).
+  static void recordNonFatal(
+    Object error,
+    StackTrace? stack, {
+    String? reason,
+  }) {
+    if (!crashlyticsReady) return;
+    FirebaseCrashlytics.instance.recordError(error, stack, reason: reason);
+  }
+
+  /// Reports an uncaught Flutter framework error as fatal (no-op until ready).
+  static void recordFlutterFatal(FlutterErrorDetails details) {
+    if (!crashlyticsReady) return;
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
   }
 
   /// Re-fetches and activates Remote Config values. Returns true if the network fetch succeeded.
