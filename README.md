@@ -34,6 +34,25 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
 
 Use `scripts/release.sh` for a guarded stage or production release preparation. It runs the quality gates, builds Android and/or guides the Xcode archive, stores Dart symbols under `$HOME/klenpos-symbols/<env>/<version>/`, uploads Crashlytics symbols, and leaves every store upload manual. Run `scripts/release.sh --help` for flags; use `--dry-run` to inspect the complete flow without building or uploading.
 
+```bash
+# Interactive: asks for platform (android / ios / both) and environment (stage / prod)
+scripts/release.sh
+
+# Preview the whole flow, no builds or uploads
+scripts/release.sh --platform both --env stage --dry-run
+
+# Stage, both platforms (clean, format, test, build, symbols, then opens Xcode)
+scripts/release.sh --platform both --env stage
+
+# Android only, stage
+scripts/release.sh --platform android --env stage
+
+# Production: you must type "prod" to confirm (or pass --confirm-prod with --yes)
+scripts/release.sh --platform both --env prod
+```
+
+For iOS the script opens Xcode: choose Product > Archive, distribute from the Organizer, then return to the terminal and press Enter so it can verify the archive and upload the dSYMs.
+
 ### 1. Android Release Commands (with Obfuscation & R8)
 
 > [!NOTE]
