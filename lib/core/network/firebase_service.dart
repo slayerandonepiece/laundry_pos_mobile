@@ -109,12 +109,15 @@ class FirebaseService {
       );
 
       // Fetch and log APNs/FCM token safely (APNs might not be immediate on iOS / Simulators)
+      // The token is only logged in debug: release logs go to Crashlytics.
       try {
         if (Platform.isIOS) {
           final apnsToken = await messaging?.getAPNSToken();
           if (apnsToken != null) {
             final fcmToken = await messaging?.getToken();
-            AppLogger.log('FIREBASE_MESSAGING', 'FCM Token: $fcmToken');
+            if (kDebugMode) {
+              AppLogger.log('FIREBASE_MESSAGING', 'FCM Token: $fcmToken');
+            }
           } else {
             AppLogger.log(
               'FIREBASE_MESSAGING',
@@ -123,7 +126,9 @@ class FirebaseService {
           }
         } else {
           final fcmToken = await messaging?.getToken();
-          AppLogger.log('FIREBASE_MESSAGING', 'FCM Token: $fcmToken');
+          if (kDebugMode) {
+            AppLogger.log('FIREBASE_MESSAGING', 'FCM Token: $fcmToken');
+          }
         }
       } catch (tokenError) {
         AppLogger.log(
@@ -156,6 +161,16 @@ class FirebaseService {
   static void recordFatal(Object error, StackTrace? stack) {
     if (!crashlyticsReady) return;
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+  }
+
+  /// Reports a handled error to Crashlytics as non-fatal (no-op until ready).
+  static void recordNonFatal(
+    Object error,
+    StackTrace? stack, {
+    String? reason,
+  }) {
+    if (!crashlyticsReady) return;
+    FirebaseCrashlytics.instance.recordError(error, stack, reason: reason);
   }
 
   /// Reports an uncaught Flutter framework error as fatal (no-op until ready).

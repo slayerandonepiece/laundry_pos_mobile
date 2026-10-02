@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 
 import '../logging/app_logger.dart';
 import '../storage/local_cache.dart';
 import '../storage/secure_storage.dart';
 import 'api_exceptions.dart';
+import 'firebase_service.dart';
 
 const _tag = 'DIO';
 
@@ -119,6 +120,16 @@ class DioLoggingInterceptor extends Interceptor {
   final bool printBody;
   final int maxBodyLength;
 
+  /// Report only outside debug builds; debug runs would pollute the stats.
+  @visibleForTesting
+  static bool reportingEnabled = !kDebugMode;
+
+  /// Where 5xx failures go; replaced in tests.
+  @visibleForTesting
+  static void Function(Object error, StackTrace? stack, String reason)
+  nonFatalReporter = (error, stack, reason) =>
+      FirebaseService.recordNonFatal(error, stack, reason: reason);
+
   DioLoggingInterceptor({
     this.printHeaders = true,
     this.printBody = true,
@@ -207,6 +218,16 @@ class DioLoggingInterceptor extends Interceptor {
       } catch (_) {
         AppLogger.log(_tag, '    Error Body: [unserializable]');
       }
+    }
+
+    final isServerError = statusCode != null && statusCode >= 500;
+    if (reportingEnabled && isServerError) {
+      // Method, path and status only: no query string, no body.
+      nonFatalReporter(
+        Exception('API $statusCode $method $path'),
+        err.stackTrace,
+        '[$_tag] server error',
+      );
     }
 
     handler.next(err);
