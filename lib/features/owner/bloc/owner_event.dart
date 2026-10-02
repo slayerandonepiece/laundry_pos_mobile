@@ -65,18 +65,6 @@ class LoadCardMetricsEvent extends OwnerEvent {
   });
 }
 
-/// Loads the same-length window just before [range] so the sales chart can
-/// draw a faint comparison line. Failures are silent: the main chart is
-/// unaffected.
-class LoadPreviousPeriodEvent extends OwnerEvent {
-  final PeriodRange range;
-
-  /// Identifies range + outlet scope; a reply for any other key is dropped.
-  final String requestKey;
-
-  LoadPreviousPeriodEvent({required this.range, required this.requestKey});
-}
-
 /// Back to the page's own data for these cards (default period, outlet switch).
 class ResetCardEvent extends OwnerEvent {
   final Set<DashboardCard> cards;

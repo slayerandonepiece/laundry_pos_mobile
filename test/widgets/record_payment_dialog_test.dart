@@ -138,6 +138,12 @@ void main() {
           type: 'UPI',
           active: true,
         ),
+        StorePaymentMethod(
+          id: 'pm_cod',
+          name: 'Cash On Delivery',
+          code: 'COD',
+          active: true,
+        ),
       ]);
     });
 
@@ -170,7 +176,7 @@ void main() {
     }
 
     testWidgets(
-      'Validates amount (rejects 0, rejects > balanceDue, accepts valid partial amount)',
+      'Shows the full balance with no amount field; choosing a method records it',
       (tester) async {
         await tester.pumpWidget(createTestDialog());
 
@@ -179,91 +185,19 @@ void main() {
 
         expect(find.byType(RecordPaymentDialog), findsOneWidget);
         expect(find.text('EL-350 · Ramesh Patel'), findsOneWidget);
+        expect(find.byType(TextField), findsNothing);
+        expect(find.text('Pay balance'), findsNothing);
+        // Pay-on-delivery is not money received, so it is not offered here.
+        expect(find.text('Cash On Delivery'), findsNothing);
+        expect(find.text('₹350'), findsWidgets);
 
-        // Submit button starts disabled (empty amount, no method)
-        final submitFinder = find.widgetWithText(
-          PrimaryButton,
-          'Record payment',
-        );
+        // Nothing can be submitted until a method is chosen.
+        final submitFinder = find.widgetWithText(PrimaryButton, 'Record ₹350');
         expect(submitFinder, findsOneWidget);
         expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNull);
 
-        // Select payment method
-        await tester.tap(find.text('Cash'));
-        await tester.pumpAndSettle();
-        expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNull);
-
-        // Enter 0 -> should show error and keep disabled
-        await tester.enterText(find.byType(TextField), '0');
-        await tester.pumpAndSettle();
-        expect(find.text('Amount must be greater than zero'), findsOneWidget);
-        expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNull);
-
-        // Enter amount > balanceDue (35000 paise = 350 rupees)
-        await tester.enterText(find.byType(TextField), '400');
-        await tester.pumpAndSettle();
-        expect(
-          find.textContaining('Amount cannot exceed balance'),
-          findsOneWidget,
-        );
-        expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNull);
-
-        // Enter valid partial amount (₹150)
-        await tester.enterText(find.byType(TextField), '150');
-        await tester.pumpAndSettle();
-        expect(find.text('Amount must be greater than zero'), findsNothing);
-        expect(
-          find.textContaining('Amount cannot exceed balance'),
-          findsNothing,
-        );
-        expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNotNull);
-
-        // Submit
-        await tester.tap(submitFinder);
-        await tester.runAsync(() async {
-          await ordersBloc.stream.firstWhere(
-            (s) => s.actionSuccessMessage != null,
-          );
-        });
-        await tester.pumpAndSettle();
-
-        // Verifies RecordPaymentEvent dispatched with right orderCode, amount (15000 paise), and method
-        expect(mockRepo.recordedOrderCode, 'EL-350');
-        expect(mockRepo.recordedAmount, 15000);
-        expect(mockRepo.recordedMethod, 'Cash');
-        // Verifies order status was NOT changed
-        expect(mockRepo.updatedStatus, isNull);
-        expect(mockRepo.updatedStatusOrderCode, isNull);
-
-        // Dialog popped
-        expect(find.byType(RecordPaymentDialog), findsNothing);
-      },
-    );
-
-    testWidgets(
-      'Pay balance quick-fill sets full balanceDue and dispatches without changing status',
-      (tester) async {
-        await tester.pumpWidget(createTestDialog());
-
-        await tester.tap(find.text('Open Record Dialog'));
-        await tester.pumpAndSettle();
-
-        // Tap "Pay balance"
-        await tester.tap(find.text('Pay balance'));
-        await tester.pumpAndSettle();
-
-        // TextField should now contain "350"
-        final textField = tester.widget<TextField>(find.byType(TextField));
-        expect(textField.controller?.text, '350');
-
-        // Select UPI
         await tester.tap(find.text('Upi'));
         await tester.pumpAndSettle();
-
-        final submitFinder = find.widgetWithText(
-          PrimaryButton,
-          'Record payment',
-        );
         expect(tester.widget<PrimaryButton>(submitFinder).onPressed, isNotNull);
 
         await tester.tap(submitFinder);
@@ -274,16 +208,65 @@ void main() {
         });
         await tester.pumpAndSettle();
 
-        // Verifies full balance (35000 paise) dispatched with UPI
+        // The whole balance (35000 paise) goes out with the chosen method.
         expect(mockRepo.recordedOrderCode, 'EL-350');
         expect(mockRepo.recordedAmount, 35000);
         expect(mockRepo.recordedMethod, 'Upi');
         // Order status is NOT changed
         expect(mockRepo.updatedStatus, isNull);
+        expect(mockRepo.updatedStatusOrderCode, isNull);
 
-        // Dialog popped
+        // Sheet closed
         expect(find.byType(RecordPaymentDialog), findsNothing);
       },
     );
+
+    testWidgets('After a part payment, only that same method is offered', (
+      tester,
+    ) async {
+      final partPaid = Order(
+        id: 'EL-351',
+        name: 'Ramesh Patel',
+        phone: '9876543210',
+        date: '2026-09-10',
+        due: '2026-09-12',
+        status: 'Ready',
+        lines: [
+          OrderLine(
+            productId: 'p1',
+            name: 'Suit Dry Clean',
+            quantity: 1,
+            unit: 'pcs',
+            amount: 35000,
+          ),
+        ],
+        payments: [
+          OrderPayment(
+            id: 'pay_0',
+            amount: 10000,
+            date: '2026-09-10',
+            method: 'Upi',
+          ),
+        ],
+      );
+      await tester.pumpWidget(createTestDialog(order: partPaid));
+      await tester.tap(find.text('Open Record Dialog'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upi'), findsOneWidget);
+      expect(find.text('Cash'), findsNothing);
+      final submit = find.widgetWithText(PrimaryButton, 'Record ₹250');
+      expect(tester.widget<PrimaryButton>(submit).onPressed, isNotNull);
+
+      await tester.tap(submit);
+      await tester.runAsync(() async {
+        await ordersBloc.stream.firstWhere(
+          (s) => s.actionSuccessMessage != null,
+        );
+      });
+      await tester.pumpAndSettle();
+      expect(mockRepo.recordedAmount, 25000);
+      expect(mockRepo.recordedMethod, 'Upi');
+    });
   });
 }

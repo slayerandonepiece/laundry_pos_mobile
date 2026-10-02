@@ -246,47 +246,28 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets(
-      'dashboard polish shows attention, expenses, first use, and preserves a true zero month',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 2400);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        mockOrdersRepo.cachedOrders = [];
-        fakeOwnerRepo.metrics = DashboardMetrics(
-          todaySales: 50000,
-          todayCount: 2,
-          periodSales: 0,
-          periodOrders: 0,
-          expensesThisMonth: 45000,
-          overdue: 2,
-          dueToday: 1,
-        );
+    testWidgets('dashboard preserves a true zero month', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      mockOrdersRepo.cachedOrders = [];
+      fakeOwnerRepo.metrics = DashboardMetrics(
+        todaySales: 50000,
+        todayCount: 2,
+        periodSales: 0,
+        periodOrders: 0,
+        expensesThisMonth: 45000,
+        overdue: 2,
+        dueToday: 1,
+      );
 
-        await tester.pumpWidget(buildTestWidget());
-        await pumpDashboard(tester);
+      await tester.pumpWidget(buildTestWidget());
+      await pumpDashboard(tester);
 
-        expect(find.text('Sales this month'), findsOneWidget);
-        expect(find.text('₹0'), findsOneWidget);
-        await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('expenses-month-headline')),
-          500,
-          scrollable: find
-              .descendant(
-                of: find.byType(CustomScrollView),
-                matching: find.byType(Scrollable),
-              )
-              .first,
-        );
-        expect(find.text('Expenses this month'), findsWidgets);
-        expect(find.text('₹450'), findsOneWidget);
-        expect(find.text('Needs attention'), findsOneWidget);
-        expect(find.text('2 orders overdue'), findsOneWidget);
-        expect(find.text('1 order due today'), findsOneWidget);
-        expect(find.text('No orders yet'), findsOneWidget);
-      },
-    );
+      expect(find.text('Sales this month'), findsOneWidget);
+      expect(find.text('₹0'), findsOneWidget);
+    });
 
     testWidgets(
       '1. Two hero money cards render correct values and "Sales today" card is visually distinguished',
@@ -442,7 +423,7 @@ void main() {
         await pumpDashboard(tester);
 
         // Sales by date and Sales by service — nothing else.
-        expect(find.text('7 days'), findsNWidgets(2));
+        expect(find.text('This week'), findsNWidgets(2));
         expect(find.text(PeriodRange.currentMonthLabel()), findsNWidgets(2));
         expect(find.text(PeriodRange.previousMonthLabel()), findsNWidgets(2));
         // The old rolling 30 / 90 day chips are gone.
@@ -457,6 +438,43 @@ void main() {
       },
     );
 
+    testWidgets('A new order reloads the dashboard without a manual refresh', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(buildTestWidget());
+      await pumpDashboard(tester);
+      final before = fakeOwnerRepo.requests.length;
+
+      // A sale lands in the orders list (placed here or synced from elsewhere).
+      mockOrdersRepo.cachedOrders = [
+        ...mockOrdersRepo.cachedOrders,
+        Order(
+          id: 'EL-900',
+          name: 'New sale',
+          phone: '9000000900',
+          date: '2026-09-10',
+          due: '2026-09-12',
+          status: 'Pending',
+          lines: [],
+          payments: [],
+        ),
+      ];
+      ordersBloc.add(LoadOrdersEvent());
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      // The reload waits a moment so a burst of changes becomes one request.
+      await tester.pump(const Duration(seconds: 1));
+      await pumpDashboard(tester);
+
+      expect(fakeOwnerRepo.requests.length, greaterThan(before));
+    });
+
     testWidgets(
       '4. "Sales by date" trend chart renders with muted color and empty-guard works',
       (tester) async {
@@ -469,22 +487,25 @@ void main() {
         await pumpDashboard(tester);
 
         expect(find.text('Sales by date'), findsOneWidget);
-        expect(find.text('How your sales moved this month'), findsOneWidget);
+        expect(find.text('How your sales moved this week'), findsOneWidget);
         expect(find.byType(LineChart), findsOneWidget);
 
         // Check line color matches app theme (AppColors.primary)
         final lineChart = tester.widget<LineChart>(find.byType(LineChart));
         expect(lineChart.data.lineBarsData.first.color, AppColors.primary);
 
-        // Empty cash case
+        // Empty cash case: the week card and the page both come back empty
         fakeOwnerRepo.metrics = DashboardMetrics(todaySales: 10000, cash: []);
-        ownerBloc.add(LoadDashboardEvent());
+        fakeOwnerRepo.periodMetrics = DashboardMetrics(
+          todaySales: 10000,
+          cash: [],
+        );
+        await tester.tap(find.byTooltip('Refresh'));
         await pumpDashboard(tester);
 
         // The card stays so its filter does; it says there is nothing.
         expect(find.text('Sales by date'), findsOneWidget);
         expect(find.byType(LineChart), findsNothing);
-        // Both cards read the same (now empty) page data.
         expect(find.text('No sales in this period'), findsNWidgets(2));
       },
     );
@@ -624,8 +645,9 @@ void main() {
 
         expect(find.text('Sales by service'), findsOneWidget);
         expect(find.text('Wash & Fold'), findsNothing);
-        // Both cards read the same (now empty) page data.
-        expect(find.text('No sales in this period'), findsNWidgets(2));
+        // The service card reads the (now empty) page data; Sales by date has
+        // its own week data.
+        expect(find.text('No sales in this period'), findsOneWidget);
       },
     );
 
@@ -820,7 +842,7 @@ void main() {
         expect(find.text('₹9,999'), findsNothing);
 
         // A card's own filter never moves it.
-        await tester.tap(inFilter(filterDate, '7 days'));
+        await tester.tap(inFilter(filterDate, 'This week'));
         await pumpDashboard(tester);
         expect(find.text('Last 30 days'), findsNothing);
         expect(find.text(PeriodRange.currentMonthLabel()), findsWidgets);
@@ -891,6 +913,7 @@ void main() {
       await tester.pumpWidget(buildTestWidget());
       await pumpDashboard(tester);
       expect(find.text('FROM'), findsNothing);
+      final requestsBefore = fakeOwnerRepo.periodRequests.length;
 
       await tester.tap(
         find.descendant(
@@ -903,7 +926,7 @@ void main() {
       // Only that card opened one; nothing requested until both are picked.
       expect(find.text('FROM'), findsOneWidget);
       expect(find.text('TO'), findsOneWidget);
-      expect(fakeOwnerRepo.periodRequests, isEmpty);
+      expect(fakeOwnerRepo.periodRequests.length, requestsBefore);
     });
 
     testWidgets(
@@ -1262,23 +1285,11 @@ void main() {
         await tester.tap(find.text('Open orders').first);
         await tester.tap(find.text('Delivered').first);
         await tester.tap(find.text('Due today').first);
-        await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('overdue-orders-action')),
-          500,
-          scrollable: find
-              .descendant(
-                of: find.byType(CustomScrollView),
-                matching: find.byType(Scrollable),
-              )
-              .first,
-        );
-        await tester.tap(find.byKey(const ValueKey('overdue-orders-action')));
 
         expect(asked, [
           OrdersDrillDown.open,
           OrdersDrillDown.deliveredToday,
           OrdersDrillDown.dueToday,
-          OrdersDrillDown.overdue,
         ]);
       });
 
@@ -1346,6 +1357,24 @@ void main() {
         isoDay(DateTime.now().subtract(Duration(days: days))),
       );
 
+      // Monday of this week: what the "This week" chip starts from.
+      Matcher weekStart() => anyOf(
+        isoDay(
+          DateTime(
+            testStart.year,
+            testStart.month,
+            testStart.day - (testStart.weekday - 1),
+          ),
+        ),
+        isoDay(
+          DateTime(
+            DateTime.now().year,
+            DateTime.now().month,
+            DateTime.now().day - (DateTime.now().weekday - 1),
+          ),
+        ),
+      );
+
       // First day of the month [back] months before this one.
       Matcher monthStart(int back) => anyOf(
         isoDay(DateTime(testStart.year, testStart.month - back, 1)),
@@ -1368,7 +1397,9 @@ void main() {
           await pumpDashboard(tester);
 
           expect(fakeOwnerRepo.requests, isEmpty);
-          expect(fakeOwnerRepo.periodRequests, isEmpty);
+          // Only Sales by date, which opens on this week, asks the server.
+          expect(fakeOwnerRepo.periodRequests.length, 1);
+          expect(fakeOwnerRepo.periodRequests.single.from, weekStart());
         },
       );
 
@@ -1384,7 +1415,8 @@ void main() {
           expect(first.granularity, 'day');
           expect(first.from, monthStart(0));
           expect(first.to, daysAgo(0));
-          expect(fakeOwnerRepo.periodRequests, isEmpty);
+          // ... plus the one week request for Sales by date.
+          expect(fakeOwnerRepo.periodRequests.length, 1);
         },
       );
 
@@ -1400,12 +1432,15 @@ void main() {
           await tester.pumpWidget(buildTestWidget());
           await pumpDashboard(tester);
 
-          await tester.tap(inFilter(filterDate, '7 days'));
+          expect(fakeOwnerRepo.periodRequests.length, 1); // the opening week
+          await tester.tap(
+            inFilter(filterDate, PeriodRange.previousMonthLabel()),
+          );
           await pumpDashboard(tester);
 
-          expect(fakeOwnerRepo.periodRequests.length, 1);
-          expect(fakeOwnerRepo.periodRequests.single.granularity, 'day');
-          expect(fakeOwnerRepo.periodRequests.single.from, daysAgo(6));
+          expect(fakeOwnerRepo.periodRequests.length, 2);
+          expect(fakeOwnerRepo.periodRequests.last.granularity, 'day');
+          expect(fakeOwnerRepo.periodRequests.last.from, monthStart(1));
           // The page itself was not asked again ...
           expect(fakeOwnerRepo.requests, isEmpty);
           // ... the other card still shows the page's services ...
@@ -1413,35 +1448,6 @@ void main() {
           expect(find.text('Only Ironing'), findsNothing);
           // ... and the money cards did not change label.
           expect(find.text('Sales this month'), findsOneWidget);
-        },
-      );
-
-      testWidgets(
-        'Compare is off until asked, then requests the window right before the range',
-        (tester) async {
-          await bigPhone(tester);
-          fakeOwnerRepo.cachedDefault = fakeOwnerRepo.metrics;
-          await tester.pumpWidget(buildTestWidget());
-          await pumpDashboard(tester);
-          // Off by default: opening the page asked for nothing extra.
-          expect(fakeOwnerRepo.periodRequests, isEmpty);
-
-          await tester.tap(inFilter(filterDate, '7 days'));
-          await pumpDashboard(tester);
-          expect(fakeOwnerRepo.periodRequests.length, 1);
-
-          final chip = find.byKey(const ValueKey('compare-salesByDate'));
-          await tester.ensureVisible(chip);
-          await tester.tap(chip);
-          await pumpDashboard(tester);
-
-          // The 7 days before the last 7 days: same length, ending the day
-          // before the range starts.
-          expect(fakeOwnerRepo.periodRequests.length, 2);
-          final previous = fakeOwnerRepo.periodRequests.last;
-          expect(previous.from, daysAgo(13));
-          expect(previous.to, daysAgo(7));
-          expect(previous.granularity, 'day');
         },
       );
 
@@ -1471,10 +1477,10 @@ void main() {
           ),
         );
 
-        await tester.tap(inFilter(filterService, '7 days'));
+        await tester.tap(inFilter(filterService, 'This week'));
         await pumpDashboard(tester);
         expect(fakeOwnerRepo.periodRequests.last.granularity, 'day');
-        expect(fakeOwnerRepo.periodRequests.last.from, daysAgo(6));
+        expect(fakeOwnerRepo.periodRequests.last.from, weekStart());
       });
 
       testWidgets(
@@ -1485,15 +1491,18 @@ void main() {
           await tester.pumpWidget(buildTestWidget());
           await pumpDashboard(tester);
 
-          await tester.tap(inFilter(filterDate, '7 days'));
+          expect(fakeOwnerRepo.periodRequests.length, 1); // the opening week
+          await tester.tap(
+            inFilter(filterDate, PeriodRange.previousMonthLabel()),
+          );
           await pumpDashboard(tester);
-          expect(fakeOwnerRepo.periodRequests.length, 1);
+          expect(fakeOwnerRepo.periodRequests.length, 2);
 
           await tester.tap(
             inFilter(filterDate, PeriodRange.currentMonthLabel()),
           );
           await pumpDashboard(tester);
-          expect(fakeOwnerRepo.periodRequests.length, 1);
+          expect(fakeOwnerRepo.periodRequests.length, 2);
           expect(find.byType(LineChart), findsOneWidget);
         },
       );
@@ -1510,7 +1519,7 @@ void main() {
               tester.widget<SliverOpacity>(find.byType(SliverOpacity)).opacity;
 
           fakeOwnerRepo.periodGate = Completer<void>();
-          await tester.tap(inFilter(filterDate, '7 days'));
+          await tester.tap(inFilter(filterDate, 'This week'));
           await tester.pump();
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 20)),
@@ -1541,7 +1550,7 @@ void main() {
         await pumpDashboard(tester);
 
         fakeOwnerRepo.periodShouldThrow = true;
-        await tester.tap(inFilter(filterService, '7 days'));
+        await tester.tap(inFilter(filterService, 'This week'));
         await pumpDashboard(tester);
         expect(find.text('Could not load this period'), findsOneWidget);
         // Never the month-to-date figures under a 7-day label.
@@ -1550,7 +1559,7 @@ void main() {
         fakeOwnerRepo.periodShouldThrow = false;
         await tester.tap(find.text('Retry'));
         await pumpDashboard(tester);
-        expect(fakeOwnerRepo.periodRequests.length, 2);
+        expect(fakeOwnerRepo.periodRequests.length, 3);
         expect(find.text('Could not load this period'), findsNothing);
         expect(find.text('Wash & Fold'), findsOneWidget);
       });
@@ -1580,16 +1589,29 @@ void main() {
         );
         await pumpDashboard(tester);
 
-        await tester.tap(inFilter(filterDate, '7 days'));
+        await tester.tap(inFilter(filterService, 'This week'));
         await pumpDashboard(tester);
-        expect(ownerBloc.state.cards, isNotEmpty);
+        expect(
+          ownerBloc.state.cards.containsKey(DashboardCard.salesByService),
+          isTrue,
+        );
 
         // Leaving the tab uses the same reset an outlet switch does.
         signal.value++;
         await pumpDashboard(tester);
-        expect(ownerBloc.state.cards, isEmpty);
-        final chip = tester.widget<PeriodFilter>(find.byKey(filterDate));
-        expect(chip.value, PeriodRange.thisMonth);
+        expect(
+          ownerBloc.state.cards.containsKey(DashboardCard.salesByService),
+          isFalse,
+        );
+        expect(
+          tester.widget<PeriodFilter>(find.byKey(filterService)).value,
+          PeriodRange.thisMonth,
+        );
+        // Sales by date goes back to its own default, this week.
+        expect(
+          tester.widget<PeriodFilter>(find.byKey(filterDate)).value,
+          PeriodRange.last7,
+        );
       });
     });
 
@@ -1615,18 +1637,21 @@ void main() {
           await tester.pumpWidget(buildTestWidget());
           await pumpDashboard(tester);
 
-          await tester.tap(inFilter(filterDate, '7 days'));
+          expect(fakeOwnerRepo.periodRequests.length, 1); // the opening week
+          await tester.tap(
+            inFilter(filterDate, PeriodRange.previousMonthLabel()),
+          );
           await pumpDashboard(tester);
-          expect(fakeOwnerRepo.periodRequests.length, 1);
+          expect(fakeOwnerRepo.periodRequests.length, 2);
 
           await tester.tap(find.byTooltip('Refresh'));
           await pumpDashboard(tester);
-          // The page reloaded, and so did the 7-day card (only that one).
+          // The page reloaded, and so did the card on last month (only it).
           expect(fakeOwnerRepo.requests, isNotEmpty);
-          expect(fakeOwnerRepo.periodRequests.length, 2);
+          expect(fakeOwnerRepo.periodRequests.length, 3);
           expect(
-            fakeOwnerRepo.periodRequests.last.granularity,
-            fakeOwnerRepo.periodRequests.first.granularity,
+            fakeOwnerRepo.periodRequests.last.from,
+            fakeOwnerRepo.periodRequests[1].from,
           );
         },
       );
@@ -1639,11 +1664,16 @@ void main() {
           bars: [DashboardBar(label: '23 Sep', amount: 4000)],
           serviceMix: [ServiceMixItem(label: 'Only Ironing', amount: 4000)],
         );
+        fakeOwnerRepo.periodMetrics = fakeOwnerRepo.cachedDefault;
         await tester.pumpWidget(buildTestWidget());
         await pumpDashboard(tester);
 
+        // One day starts the line at zero instead of drawing a lone dot.
         final chart = tester.widget<LineChart>(find.byType(LineChart));
-        expect(chart.data.lineBarsData.single.spots.length, 1);
+        final spots = chart.data.lineBarsData.single.spots;
+        expect(spots.length, 2);
+        expect(spots.first.y, 0);
+        expect(spots.last.y, 40);
         expect(chart.data.maxX, greaterThan(chart.data.minX));
         expect(tester.takeException(), isNull);
       });
@@ -1676,7 +1706,7 @@ void main() {
               await tester.drag(scroll, const Offset(0, -300));
               await tester.pumpAndSettle();
               expect(tester.takeException(), isNull);
-              final seven = inFilter(filterService, '7 days');
+              final seven = inFilter(filterService, 'This week');
               if (!openedRange && seven.evaluate().isNotEmpty) {
                 await tester.ensureVisible(seven);
                 await tester.pumpAndSettle();

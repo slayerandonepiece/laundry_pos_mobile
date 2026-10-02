@@ -13,6 +13,7 @@ import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
+import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/presentation/orders_drill_down.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
@@ -20,9 +21,7 @@ import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
-import 'package:myshop/features/owner/data/models/outlet_rollup_model.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
-import 'package:myshop/features/shell/data/models/outlet_model.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
@@ -47,56 +46,81 @@ class OwnerDashboardScreen extends StatefulWidget {
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   // Sales by date and Sales by service default to the current month (month-to-date);
   // each card keeps its own independent selection.
-  PeriodRange _dateRange = PeriodRange.thisMonth;
-
-  /// Off by default: the comparison line costs an extra request, and opening
-  /// the dashboard must not make any when the default period is cached.
-  bool _comparePrevious = false;
+  PeriodRange _dateRange = PeriodRange.last7;
   PeriodRange _serviceRange = PeriodRange.thisMonth;
+
+  StreamSubscription<OrdersState>? _ordersSub;
+  Timer? _ordersRefreshTimer;
+  int? _ordersSignature;
 
   @override
   void initState() {
     super.initState();
     widget.resetSignal?.addListener(_onTabLeft);
     context.read<OwnerBloc>().add(_currentLoadDashboardEvent(refresh: false));
-    _loadOutletRollups();
-    _loadPreviousPeriod();
-    context.read<OrdersBloc>().add(LoadOrdersEvent());
+    _loadSalesByDate();
+    final ordersBloc = context.read<OrdersBloc>();
+    ordersBloc.add(LoadOrdersEvent());
+    _ordersSub = ordersBloc.stream.listen(_onOrdersChanged);
   }
 
-  void _onComparePrevious(bool on) {
-    setState(() => _comparePrevious = on);
-    if (on) _loadPreviousPeriod();
+  @override
+  void dispose() {
+    widget.resetSignal?.removeListener(_onTabLeft);
+    _ordersSub?.cancel();
+    _ordersRefreshTimer?.cancel();
+    super.dispose();
   }
 
-  /// Asks for the window just before the date card's range, which the sales
-  /// chart draws as a faint comparison line. Only while Compare is on.
-  void _loadPreviousPeriod() {
-    if (!_comparePrevious) return;
+  /// Orders, their status and what was paid; anything that moves the figures.
+  int _signatureOf(OrdersState s) => Object.hashAll([
+    s.allOrders.length,
+    for (final o in s.allOrders) Object.hash(o.id, o.status, o.paidAmount),
+  ]);
+
+  /// A sale (or a payment, or a status change) must show on the dashboard
+  /// without a manual refresh; the dashboard figures come from the server.
+  void _onOrdersChanged(OrdersState s) {
+    if (s.isLoading) return;
+    final signature = _signatureOf(s);
+    final previous = _ordersSignature;
+    _ordersSignature = signature;
+    // The first loaded state is only the baseline (opening the screen already
+    // loads the dashboard); changes after it are what need a reload.
+    if (previous == null || previous == signature) return;
+    _ordersRefreshTimer?.cancel();
+    _ordersRefreshTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) _refreshDashboard();
+    });
+  }
+
+  void _onTabLeft() => _resetCards();
+
+  /// Sales by date opens on this week; it needs its own request because the
+  /// page's own data is the whole month.
+  void _loadSalesByDate() {
     context.read<OwnerBloc>().add(
-      LoadPreviousPeriodEvent(
+      LoadCardMetricsEvent(
+        card: DashboardCard.salesByDate,
         range: _dateRange,
         requestKey: _cardKey(_dateRange),
       ),
     );
   }
 
-  @override
-  void dispose() {
-    widget.resetSignal?.removeListener(_onTabLeft);
-    super.dispose();
-  }
-
-  void _onTabLeft() => _resetCards();
-
-  /// Both cards back to the default period and the page's own data.
+  /// Both cards back to their default period: this week for Sales by date,
+  /// the page's own data (this month) for Sales by service.
   void _resetCards() {
-    if (_dateRange.isDefault && _serviceRange.isDefault) return;
+    if (_dateRange.key == PeriodRange.last7.key && _serviceRange.isDefault) {
+      return;
+    }
     setState(() {
-      _dateRange = PeriodRange.thisMonth;
+      _dateRange = PeriodRange.last7;
       _serviceRange = PeriodRange.thisMonth;
     });
-    context.read<OwnerBloc>().add(ResetCardEvent(DashboardCard.values.toSet()));
+    final bloc = context.read<OwnerBloc>();
+    bloc.add(ResetCardEvent({DashboardCard.salesByService}));
+    _loadSalesByDate();
   }
 
   String get _scopeKey {
@@ -130,7 +154,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         LoadCardMetricsEvent(card: card, range: r, requestKey: _cardKey(r)),
       );
     }
-    if (card == DashboardCard.salesByDate) _loadPreviousPeriod();
   }
 
   /// What a card should draw for [range]: the page's data at the default
@@ -181,8 +204,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   void _refreshDashboard({Completer<void>? done}) {
     final bloc = context.read<OwnerBloc>();
     bloc.add(_currentLoadDashboardEvent(done: done));
-    _loadOutletRollups();
-    _loadPreviousPeriod();
     for (final (card, range) in [
       (DashboardCard.salesByDate, _dateRange),
       (DashboardCard.salesByService, _serviceRange),
@@ -197,20 +218,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         );
       }
     }
-  }
-
-  void _loadOutletRollups() {
-    final now = DateTime.now();
-    final yesterday = now.subtract(const Duration(days: 1));
-    final allOutlets =
-        context.read<OutletScopeCubit?>()?.state.allOutlets == true;
-    context.read<OwnerBloc>().add(
-      LoadOutletRollupsEvent(
-        allOutlets: allOutlets,
-        from: DateFormatter.toIsoDateString(yesterday),
-        to: DateFormatter.toIsoDateString(now),
-      ),
-    );
   }
 
   @override
@@ -358,14 +365,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                               padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                               child: _SalesTrendChart(
                                 bars: dateCard.metrics?.bars ?? const [],
-                                previousBars:
-                                    _comparePrevious &&
-                                        ownerState.previousKey ==
-                                            _cardKey(_dateRange)
-                                    ? ownerState.previousBars
-                                    : const [],
-                                compare: _comparePrevious,
-                                onCompare: _onComparePrevious,
                                 cash: dateCard.metrics?.cash ?? const [],
                                 range: _dateRange,
                                 loading: dateCard.loading,
@@ -460,97 +459,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                 ),
                               ),
                             ),
-
-                          if (outletScopeCubit?.state.allOutlets == true)
-                            SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  14,
-                                  20,
-                                  0,
-                                ),
-                                child: _OutletPerformanceSection(
-                                  outlets: outletScopeCubit!.state.allowed,
-                                  rollups: ownerState.outletRollups,
-                                  orders: allOrders,
-                                  loading: ownerState.outletRollupsLoading,
-                                  failed: ownerState.outletRollupsFailed,
-                                ),
-                              ),
-                            ),
-
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                              child: AppCard(
-                                key: const ValueKey('expenses-month-headline'),
-                                child: Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 12,
-                                  runSpacing: 4,
-                                  children: [
-                                    const Text('Expenses this month'),
-                                    Text(
-                                      CurrencyFormatter.format(
-                                        metrics.expensesThisMonth,
-                                      ),
-                                      style: const TextStyle(
-                                        fontFamily: AppTextStyles.fontDisplay,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.text,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                              child: _NeedsAttentionCard(
-                                overdue: metrics.overdue,
-                                dueToday: metrics.dueToday,
-                                onOverdue: _openOrders(OrdersDrillDown.overdue),
-                                onDueToday: _openOrders(
-                                  OrdersDrillDown.dueToday,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          if (allOrders.isEmpty &&
-                              metrics.periodOrders == 0 &&
-                              metrics.todo == 0)
-                            const SliverToBoxAdapter(
-                              child: Padding(
-                                padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
-                                child: AppCard(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'No orders yet',
-                                        style: TextStyle(
-                                          fontFamily: AppTextStyles.fontDisplay,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        'Orders you create will appear here.',
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -629,7 +537,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 context.read<OwnerBloc>().add(
                   _currentLoadDashboardEvent(refresh: !SyncFreshness.isFresh),
                 );
-                _loadPreviousPeriod();
               },
               child: body,
             )
@@ -867,221 +774,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 }
 
-class _NeedsAttentionCard extends StatelessWidget {
-  final int overdue;
-  final int dueToday;
-  final VoidCallback? onOverdue;
-  final VoidCallback? onDueToday;
-
-  const _NeedsAttentionCard({
-    required this.overdue,
-    required this.dueToday,
-    this.onOverdue,
-    this.onDueToday,
-  });
-
-  @override
-  Widget build(BuildContext context) => AppCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Needs attention',
-          style: TextStyle(
-            fontFamily: AppTextStyles.fontDisplay,
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: AppColors.text,
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (overdue == 0 && dueToday == 0) const Text('All caught up!'),
-        if (overdue > 0)
-          _row(
-            '$overdue ${overdue == 1 ? 'order' : 'orders'} overdue',
-            onOverdue,
-            const ValueKey('overdue-orders-action'),
-          ),
-        if (dueToday > 0)
-          _row(
-            '$dueToday ${dueToday == 1 ? 'order' : 'orders'} due today',
-            onDueToday,
-            const ValueKey('due-today-orders-action'),
-          ),
-      ],
-    ),
-  );
-
-  Widget _row(String label, VoidCallback? onTap, Key actionKey) => Wrap(
-    alignment: WrapAlignment.spaceBetween,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    spacing: 8,
-    runSpacing: 4,
-    children: [
-      Text(label),
-      TextActionButton(key: actionKey, label: 'View orders', onPressed: onTap),
-    ],
-  );
-}
-
-class _OutletPerformanceSection extends StatelessWidget {
-  final List<Outlet> outlets;
-  final List<OutletRollup> rollups;
-  final List<Order> orders;
-  final bool loading;
-  final bool failed;
-
-  const _OutletPerformanceSection({
-    required this.outlets,
-    required this.rollups,
-    required this.orders,
-    required this.loading,
-    required this.failed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading) {
-      return const AppCard(
-        child: Row(
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            SizedBox(width: 10),
-            Text('Loading outlet performance…'),
-          ],
-        ),
-      );
-    }
-    if (failed) {
-      return const AppCard(child: Text('Outlet performance unavailable'));
-    }
-    if (rollups.isEmpty || outlets.isEmpty) {
-      return const AppCard(child: Text('No outlet performance yet'));
-    }
-
-    final now = DateTime.now();
-    final todayDate = DateFormatter.toIsoDateString(now);
-    final yesterdayDate = DateFormatter.toIsoDateString(
-      now.subtract(const Duration(days: 1)),
-    );
-    OutletRollup? row(String outletId, String date) {
-      for (final value in rollups) {
-        if (value.outletId == outletId && value.businessDate == date) {
-          return value;
-        }
-      }
-      return null;
-    }
-
-    final maxSales = outlets.fold<int>(0, (best, outlet) {
-      final sales = row(outlet.id, todayDate)?.grossOrderAmount ?? 0;
-      return sales > best ? sales : best;
-    });
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Per-outlet performance',
-          style: TextStyle(
-            fontFamily: AppTextStyles.fontDisplay,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: AppColors.text,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text("Today's performance · share of best outlet"),
-        const SizedBox(height: 10),
-        for (var index = 0; index < outlets.length; index++) ...[
-          _OutletPerformanceCard(
-            outlet: outlets[index],
-            today: row(outlets[index].id, todayDate),
-            yesterday: row(outlets[index].id, yesterdayDate),
-            openOrders: orders
-                .where(
-                  (order) =>
-                      order.outletId == outlets[index].id && !order.isDelivered,
-                )
-                .length,
-            maxSales: maxSales,
-          ),
-          if (index != outlets.length - 1) const SizedBox(height: 10),
-        ],
-      ],
-    );
-  }
-}
-
-class _OutletPerformanceCard extends StatelessWidget {
-  final Outlet outlet;
-  final OutletRollup? today;
-  final OutletRollup? yesterday;
-  final int openOrders;
-  final int maxSales;
-
-  const _OutletPerformanceCard({
-    required this.outlet,
-    required this.today,
-    required this.yesterday,
-    required this.openOrders,
-    required this.maxSales,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final sales = today?.grossOrderAmount ?? 0;
-    final previousSales = yesterday?.grossOrderAmount ?? 0;
-    final share = maxSales == 0 ? 0.0 : sales / maxSales;
-    final growth = previousSales == 0
-        ? null
-        : ((sales - previousSales) / previousSales * 100).round();
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            outlet.displayName,
-            style: const TextStyle(
-              fontFamily: AppTextStyles.fontDisplay,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.text,
-            ),
-          ),
-          if (outlet.outletCode.isNotEmpty) Text(outlet.outletCode),
-          const SizedBox(height: 10),
-          _metric('Sales today', CurrencyFormatter.format(sales)),
-          _metric('Orders', '${today?.ordersCreatedCount ?? 0}'),
-          _metric('Open orders', '$openOrders'),
-          const SizedBox(height: 10),
-          LinearProgressIndicator(value: share.clamp(0, 1)),
-          const SizedBox(height: 6),
-          Text(
-            share == 1 && maxSales > 0
-                ? 'Best outlet today'
-                : '${(share * 100).round()}% of best outlet',
-          ),
-          if (growth != null)
-            Text('${growth >= 0 ? '↑' : '↓'} ${growth.abs()}% vs yesterday'),
-        ],
-      ),
-    );
-  }
-
-  Widget _metric(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text(label), Text(value)],
-    ),
-  );
-}
-
 String _monthAbbr(String m) {
   final lower = m.toLowerCase();
   if (lower.startsWith('jan')) return 'Jan';
@@ -1311,9 +1003,6 @@ class _SalesTrendChart extends StatelessWidget {
   final List<DashboardBar> bars;
   final List<CashPoint> cash;
   final PeriodRange range;
-  final List<DashboardBar> previousBars;
-  final bool compare;
-  final ValueChanged<bool> onCompare;
   final bool loading;
   final bool failed;
   final ValueChanged<PeriodRange> onRange;
@@ -1321,9 +1010,6 @@ class _SalesTrendChart extends StatelessWidget {
 
   const _SalesTrendChart({
     this.bars = const [],
-    this.previousBars = const [],
-    required this.compare,
-    required this.onCompare,
     this.cash = const [],
     required this.range,
     required this.loading,
@@ -1345,23 +1031,18 @@ class _SalesTrendChart extends StatelessWidget {
     final int dataCount = useBars ? bars.length : cash.length;
     final showState = loading || failed || dataCount == 0;
 
-    final spots = <FlSpot>[];
+    // A single day with sales would be one lonely dot: start the line at
+    // zero so it reads as "from nothing to this much".
+    final lead = dataCount == 1 ? 1 : 0;
+    final pointCount = dataCount + lead;
+
+    final spots = <FlSpot>[if (lead == 1) const FlSpot(0, 0)];
     double maxY = 0;
     for (int i = 0; i < dataCount; i++) {
       final amount = useBars ? bars[i].amount : cash[i].income;
       final y = (amount / 100).toDouble();
       if (y > maxY) maxY = y;
-      spots.add(FlSpot(i.toDouble(), y));
-    }
-    // The comparison line shares the axes, so it is aligned by position and
-    // cut to the current range's length.
-    final previousSpots = <FlSpot>[];
-    if (useBars) {
-      for (int i = 0; i < previousBars.length && i < dataCount; i++) {
-        final y = (previousBars[i].amount / 100).toDouble();
-        if (y > maxY) maxY = y;
-        previousSpots.add(FlSpot(i.toDouble(), y));
-      }
+      spots.add(FlSpot((i + lead).toDouble(), y));
     }
     if (maxY == 0) maxY = 100;
 
@@ -1410,9 +1091,9 @@ class _SalesTrendChart extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Text(
+                    Text(
                       'Collected',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontFamily: AppTextStyles.fontBody,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -1430,33 +1111,7 @@ class _SalesTrendChart extends StatelessWidget {
             value: range,
             onChanged: onRange,
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilterChip(
-              key: const ValueKey('compare-salesByDate'),
-              label: const Text('Compare with previous period'),
-              selected: compare,
-              onSelected: onCompare,
-              visualDensity: VisualDensity.compact,
-              // Same look as the period pills above it.
-              backgroundColor: AppColors.selectedSurface,
-              selectedColor: AppColors.primary,
-              checkmarkColor: Colors.white,
-              side: BorderSide(
-                color: compare
-                    ? AppColors.primary
-                    : AppColors.primary.withValues(alpha: 0.25),
-              ),
-              labelStyle: TextStyle(
-                fontFamily: AppTextStyles.fontBody,
-                fontSize: 12,
-                fontWeight: compare ? FontWeight.w600 : FontWeight.w500,
-                color: compare ? Colors.white : AppColors.primary,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           if (showState)
             _CardStateBox(
               loading: loading,
@@ -1471,6 +1126,90 @@ class _SalesTrendChart extends StatelessWidget {
                 final chartHeight = (screenHeight * 0.28).clamp(170.0, 240.0);
                 final yInterval = (maxY * 1.15) / 3;
 
+                final grid = FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: yInterval > 0 ? yInterval : 25,
+                  getDrawingHorizontalLine: (value) =>
+                      const FlLine(color: AppColors.divider, strokeWidth: 1),
+                );
+                final titles = FlTitlesData(
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 44,
+                      interval: yInterval > 0 ? yInterval : 25,
+                      getTitlesWidget: (value, meta) {
+                        String label;
+                        if (value.round() == 0) {
+                          label = '₹0';
+                        } else if (value >= 1000) {
+                          final inK = value / 1000;
+                          label = inK % 1 == 0
+                              ? '₹${inK.toInt()}k'
+                              : '₹${inK.toStringAsFixed(1)}k';
+                        } else {
+                          label = '₹${value.toInt()}';
+                        }
+                        return SideTitleWidget(
+                          meta: meta,
+                          fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
+                          child: Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 38,
+                      interval: 1,
+                      getTitlesWidget: (value, meta) {
+                        final raw = value.toInt();
+                        final idx = raw - lead;
+                        if (value != raw.toDouble() ||
+                            idx < 0 ||
+                            idx >= dataCount) {
+                          return const SizedBox.shrink();
+                        }
+                        if (!_shouldShowChartLabel(idx, dataCount)) {
+                          return const SizedBox.shrink();
+                        }
+                        final rawLabel = useBars
+                            ? bars[idx].label
+                            : cash[idx].label;
+                        return SideTitleWidget(
+                          meta: meta,
+                          space: 6,
+                          child: Text(
+                            _formatChartLabel(rawLabel),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 11,
+                              height: 1.15,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                );
+
                 return SizedBox(
                   height: chartHeight,
                   child: Padding(
@@ -1481,109 +1220,13 @@ class _SalesTrendChart extends StatelessWidget {
                         minX: 0,
                         // A single point (one-day custom range) would make
                         // minX == maxX, which fl_chart can't scale.
-                        maxX: dataCount > 1 ? (dataCount - 1).toDouble() : 1,
+                        maxX: pointCount > 1 ? (pointCount - 1).toDouble() : 1,
                         minY: 0,
                         maxY: maxY * 1.15,
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: yInterval > 0 ? yInterval : 25,
-                          getDrawingHorizontalLine: (value) => const FlLine(
-                            color: AppColors.divider,
-                            strokeWidth: 1,
-                          ),
-                        ),
-                        titlesData: FlTitlesData(
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 44,
-                              interval: yInterval > 0 ? yInterval : 25,
-                              getTitlesWidget: (value, meta) {
-                                String label;
-                                if (value.round() == 0) {
-                                  label = '₹0';
-                                } else if (value >= 1000) {
-                                  final inK = value / 1000;
-                                  label = inK % 1 == 0
-                                      ? '₹${inK.toInt()}k'
-                                      : '₹${inK.toStringAsFixed(1)}k';
-                                } else {
-                                  label = '₹${value.toInt()}';
-                                }
-                                return SideTitleWidget(
-                                  meta: meta,
-                                  fitInside:
-                                      SideTitleFitInsideData.fromTitleMeta(
-                                        meta,
-                                      ),
-                                  child: Text(
-                                    label,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.mutedText,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 38,
-                              interval: 1,
-                              getTitlesWidget: (value, meta) {
-                                final idx = value.toInt();
-                                if (value != idx.toDouble() ||
-                                    idx < 0 ||
-                                    idx >= dataCount) {
-                                  return const SizedBox.shrink();
-                                }
-                                if (!_shouldShowChartLabel(idx, dataCount)) {
-                                  return const SizedBox.shrink();
-                                }
-                                final rawLabel = useBars
-                                    ? bars[idx].label
-                                    : cash[idx].label;
-                                return SideTitleWidget(
-                                  meta: meta,
-                                  space: 6,
-                                  child: Text(
-                                    _formatChartLabel(rawLabel),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontFamily: AppTextStyles.fontBody,
-                                      fontSize: 11,
-                                      height: 1.15,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.mutedText,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
+                        gridData: grid,
+                        titlesData: titles,
                         borderData: FlBorderData(show: false),
                         lineBarsData: [
-                          if (previousSpots.isNotEmpty)
-                            LineChartBarData(
-                              spots: previousSpots,
-                              isCurved: true,
-                              curveSmoothness: 0.35,
-                              preventCurveOverShooting: true,
-                              color: AppColors.primary.withValues(alpha: 0.30),
-                              barWidth: 2,
-                              isStrokeCapRound: true,
-                              dotData: const FlDotData(show: false),
-                            ),
                           LineChartBarData(
                             spots: spots,
                             isCurved: true,
@@ -1614,18 +1257,13 @@ class _SalesTrendChart extends StatelessWidget {
                             getTooltipColor: (_) => AppColors.text,
                             getTooltipItems: (touchedSpots) {
                               return touchedSpots.map((spot) {
-                                // The faint comparison line has no tooltip.
-                                if (previousSpots.isNotEmpty &&
-                                    spot.barIndex == 0) {
-                                  return null;
-                                }
-                                final idx = spot.x.toInt();
-                                final valPaise = idx < dataCount
+                                final idx = spot.x.toInt() - lead;
+                                final valPaise = idx >= 0 && idx < dataCount
                                     ? (useBars
                                           ? bars[idx].amount
                                           : cash[idx].income)
                                     : 0;
-                                final period = idx < dataCount
+                                final period = idx >= 0 && idx < dataCount
                                     ? _formatChartLabel(
                                         useBars
                                             ? bars[idx].label
@@ -1683,7 +1321,7 @@ class _StaleChartPlaceholder extends StatelessWidget {
 class _CashFlowChart extends StatelessWidget {
   final List<CashPoint> cash;
 
-  /// Which period the totals cover, e.g. "Last 7 days".
+  /// Which period the totals cover, e.g. "This week".
   final String periodLabel;
 
   const _CashFlowChart({required this.cash, required this.periodLabel});

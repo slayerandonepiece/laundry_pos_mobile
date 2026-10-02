@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:myshop/core/constants/api_endpoints.dart';
@@ -18,6 +19,7 @@ import 'package:myshop/features/owner/data/models/expense_model.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/features/owner/data/models/outlet_rollup_model.dart';
 import 'package:myshop/features/owner/data/models/staff_model.dart';
+import 'package:myshop/features/owner/data/models/subscription_invoice_model.dart';
 import 'package:myshop/features/owner/data/models/store_profile_model.dart';
 import 'package:myshop/features/pos/data/models/product_model.dart';
 
@@ -50,6 +52,52 @@ class OwnerRepository {
   }) : apiClient = apiClient ?? ApiClient(),
        localCache = localCache ?? LocalCacheService(),
        secureStorage = secureStorage ?? SecureStorageService();
+
+  String get _invoicesCacheKey =>
+      'subscription_invoices::${localCache.getActiveStoreId()}';
+
+  /// What the phone last saw of the billing history; empty when never loaded.
+  List<SubscriptionInvoice> getCachedSubscriptionInvoices() {
+    try {
+      final raw = localCache.get(_invoicesCacheKey);
+      if (raw is! List) return const [];
+      return [
+        for (final item in raw)
+          SubscriptionInvoice.fromJson(Map<String, dynamic>.from(item as Map)),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// The owner's platform billing history, newest first. A failed request
+  /// throws; callers keep showing [getCachedSubscriptionInvoices].
+  Future<List<SubscriptionInvoice>> listSubscriptionInvoices() async {
+    final response = await apiClient.get(ApiEndpoints.subscriptionInvoices);
+    final rows = response is Map ? response['invoices'] : null;
+    if (rows is! List) throw Exception('Could not load billing history');
+    final invoices = [
+      for (final row in rows)
+        SubscriptionInvoice.fromJson(Map<String, dynamic>.from(row as Map)),
+    ];
+    try {
+      await localCache.put(_invoicesCacheKey, [
+        for (final i in invoices) i.toJson(),
+      ]);
+    } catch (e) {
+      AppLogger.log('OWNER', 'could not cache billing history', error: e);
+    }
+    return invoices;
+  }
+
+  /// The invoice as the server renders it (the same PDF the web shows).
+  Future<Uint8List> getSubscriptionInvoicePdf(int invoiceSeq) async {
+    final res = await apiClient.getRaw(
+      ApiEndpoints.subscriptionInvoicePdf(invoiceSeq),
+    );
+    if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) return res.bodyBytes;
+    throw Exception('Could not load the invoice');
+  }
 
   /// Reads dashboard metrics from the local cache only — no network call.
   DashboardMetrics? getCachedDashboardMetricsSync() {

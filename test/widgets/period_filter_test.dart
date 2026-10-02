@@ -24,7 +24,7 @@ void main() {
       expect(span(91).granularity, 'month');
     });
 
-    test('presets: 7 days and both month presets are daily', () {
+    test('presets: this week and both month presets are daily', () {
       expect(PeriodRange.last7.granularity, 'day');
       expect(PeriodRange.thisMonth.granularity, 'day');
       expect(PeriodRange.previousMonth.granularity, 'day');
@@ -135,9 +135,9 @@ void main() {
 
     test('presets with an injected midnight now', () {
       final now = DateTime(2026, 9, 30); // 00:00
-      expect(PeriodRange.last7.contains(DateTime(2026, 9, 24), now), isTrue);
+      expect(PeriodRange.last7.contains(DateTime(2026, 9, 28), now), isTrue);
       expect(
-        PeriodRange.last7.contains(DateTime(2026, 9, 23, 23, 59, 59), now),
+        PeriodRange.last7.contains(DateTime(2026, 9, 27, 23, 59, 59), now),
         isFalse,
       );
       expect(PeriodRange.last7.contains(DateTime(2026, 9, 30), now), isTrue);
@@ -147,7 +147,7 @@ void main() {
       );
       final lateNow = DateTime(2026, 9, 30, 23, 59, 59);
       expect(
-        PeriodRange.last7.contains(DateTime(2026, 9, 24), lateNow),
+        PeriodRange.last7.contains(DateTime(2026, 9, 28), lateNow),
         isTrue,
       );
       expect(
@@ -334,7 +334,7 @@ void main() {
         'expose selected button semantics', (tester) async {
       await tester.pumpWidget(host());
       for (final label in [
-        '7 days',
+        'This week',
         PeriodRange.currentMonthLabel(),
         PeriodRange.previousMonthLabel(),
       ]) {
@@ -350,9 +350,9 @@ void main() {
 
       final handle = tester.ensureSemantics();
       expect(
-        tester.getSemantics(find.text('7 days')),
+        tester.getSemantics(find.text('This week')),
         matchesSemantics(
-          label: '7 days',
+          label: 'This week',
           isButton: true,
           isSelected: true,
           hasTapAction: true,

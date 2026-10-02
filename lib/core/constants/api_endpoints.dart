@@ -38,6 +38,12 @@ class ApiEndpoints {
   static String orderInvoicePdf(String orderCode) =>
       '$baseUrl/api/v1/orders/$orderCode/invoice/pdf';
 
+  // Subscription (owner billing history)
+  static String get subscriptionInvoices =>
+      '$baseUrl/api/v1/subscription/invoices';
+  static String subscriptionInvoicePdf(int invoiceSeq) =>
+      '$baseUrl/api/v1/subscription/invoices/$invoiceSeq/pdf';
+
   // Payment Methods
   static String get paymentMethods => '$baseUrl/api/v1/payment-methods';
   static String get paymentMethodsAll =>

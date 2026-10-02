@@ -201,7 +201,7 @@ void main() {
     });
 
     testWidgets(
-      'Switching away from Dashboard tab resets the card periods to default (current month)',
+      'Switching away from Dashboard tab resets Sales by date to this week',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -211,40 +211,48 @@ void main() {
         await tester.pumpWidget(buildTestWidget());
         ownerBloc.add(LoadDashboardEvent());
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
         await tester.pumpAndSettle();
 
-        // Sales by date starts on the current month.
+        // Sales by date starts on this week.
         PeriodRange dateRange() => tester
             .widget<PeriodFilter>(
               find.byKey(const ValueKey('filter-salesByDate')),
             )
             .value;
-        expect(dateRange(), PeriodRange.thisMonth);
+        expect(dateRange(), PeriodRange.last7);
 
-        // Change its period to "7 days"
+        // Change its period to the current month
         await tester.tap(
           find.descendant(
             of: find.byKey(const ValueKey('filter-salesByDate')),
-            matching: find.text('7 days'),
+            matching: find.text(PeriodRange.currentMonthLabel()),
           ),
         );
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 50)),
         );
         await tester.pumpAndSettle();
-        expect(dateRange(), PeriodRange.last7);
+        expect(dateRange(), PeriodRange.thisMonth);
 
         // Tap Orders bottom nav tab
         await tester.tap(find.text('Orders'));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
         await tester.pumpAndSettle();
 
         // Now on Orders tab. Tap Dashboard bottom nav tab to return
         await tester.tap(find.text('Dashboard'));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
         await tester.pumpAndSettle();
 
-        // The card's period has reset back to the current month
-        expect(dateRange(), PeriodRange.thisMonth);
+        // The card's period has reset back to this week
+        expect(dateRange(), PeriodRange.last7);
       },
     );
 
@@ -257,6 +265,9 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(buildTestWidget());
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
       await tester.pumpAndSettle();
 
       // Switch to Orders tab

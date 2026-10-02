@@ -13,6 +13,7 @@ import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
+import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/models/expense_model.dart';
@@ -160,6 +161,7 @@ void main() {
   });
 
   const filterDate = ValueKey('filter-salesByDate');
+  const filterService = ValueKey('filter-salesByService');
 
   Future<void> pumpShell(WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 2400);
@@ -187,6 +189,10 @@ void main() {
         find.widgetWithText(AppFilterChip, label, skipOffstage: false),
       )
       .isSelected;
+
+  PeriodRange serviceRange(WidgetTester tester) => tester
+      .widget<PeriodFilter>(find.byKey(filterService, skipOffstage: false))
+      .value;
 
   PeriodRange dateRange(WidgetTester tester) => tester
       .widget<PeriodFilter>(find.byKey(filterDate, skipOffstage: false))
@@ -244,22 +250,33 @@ void main() {
   testWidgets('a drill-down from a dashboard on a custom period resets its '
       'cards', (tester) async {
     await pumpShell(tester);
+    // Sales by date opens on this week.
+    expect(dateRange(tester), PeriodRange.last7);
+
+    // Move Sales by service off its default.
     await tester.tap(
       find.descendant(
-        of: find.byKey(filterDate),
-        matching: find.text('7 days'),
+        of: find.byKey(filterService),
+        matching: find.text('This week'),
       ),
     );
     await settle(tester);
-    expect(dateRange(tester), PeriodRange.last7);
-    expect(ownerBloc.state.cards, isNotEmpty);
+    expect(serviceRange(tester), PeriodRange.last7);
+    expect(
+      ownerBloc.state.cards.containsKey(DashboardCard.salesByService),
+      isTrue,
+    );
 
     await tester.tap(find.text('Open orders'));
     await settle(tester);
 
     // Reset on the way out, not only when the owner comes back.
-    expect(dateRange(tester), PeriodRange.thisMonth);
-    expect(ownerBloc.state.cards, isEmpty);
+    expect(dateRange(tester), PeriodRange.last7);
+    expect(serviceRange(tester), PeriodRange.thisMonth);
+    expect(
+      ownerBloc.state.cards.containsKey(DashboardCard.salesByService),
+      isFalse,
+    );
     expect(chipSelected(tester, 'Open'), isTrue);
   });
 

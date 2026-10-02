@@ -16,7 +16,6 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     on<LoadDashboardEvent>(_onLoadDashboard);
     on<LoadOutletRollupsEvent>(_onLoadOutletRollups);
     on<LoadCardMetricsEvent>(_onLoadCardMetrics);
-    on<LoadPreviousPeriodEvent>(_onLoadPreviousPeriod);
     on<ResetCardEvent>(_onResetCard);
     on<LoadExpensesEvent>(_onLoadExpenses);
     on<AddExpenseEvent>(_onAddExpense);
@@ -228,37 +227,6 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
           },
         ),
       );
-    }
-  }
-
-  /// The comparison window is as long as the selected range (its end capped at
-  /// today) and ends the day before the range starts, like the web dashboard.
-  /// UTC dates keep a daylight-saving change from shifting a day.
-  Future<void> _onLoadPreviousPeriod(
-    LoadPreviousPeriodEvent event,
-    Emitter<OwnerState> emit,
-  ) async {
-    emit(state.copyWith(previousKey: event.requestKey, previousBars: const []));
-    try {
-      DateTime day(DateTime d) => DateTime.utc(d.year, d.month, d.day);
-      final from = day(DateTime.parse(event.range.fromIso));
-      final to = day(DateTime.parse(event.range.toIso));
-      final today = day(DateTime.now());
-      final end = to.isBefore(today) ? to : today;
-      final span = end.difference(from).inDays + 1;
-      final length = span < 1 ? 1 : span;
-      String iso(DateTime d) => d.toIso8601String().substring(0, 10);
-      final metrics = await ownerRepository.getPeriodMetrics(
-        from: iso(from.subtract(Duration(days: length))),
-        to: iso(from.subtract(const Duration(days: 1))),
-        granularity: event.range.granularity,
-      );
-      // The selection moved on while this was in flight: not for this chart.
-      if (state.previousKey != event.requestKey) return;
-      emit(state.copyWith(previousBars: metrics.bars));
-    } catch (e) {
-      // Comparison is a nicety: no previous line, and no error for the page.
-      AppLogger.log(_tag, 'load previous period failed', error: e);
     }
   }
 

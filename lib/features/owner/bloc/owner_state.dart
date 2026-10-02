@@ -46,11 +46,6 @@ class OwnerState {
   final bool outletRollupsLoading;
   final bool outletRollupsFailed;
 
-  /// The sales trend of the window just before the date card's range, for the
-  /// comparison line, and the [LoadPreviousPeriodEvent.requestKey] it is for.
-  final List<DashboardBar> previousBars;
-  final String? previousKey;
-
   OwnerState({
     bool? isLoading,
     this.loading = const {},
@@ -68,8 +63,6 @@ class OwnerState {
     this.outletRollups = const [],
     this.outletRollupsLoading = false,
     this.outletRollupsFailed = false,
-    this.previousBars = const [],
-    this.previousKey,
   }) : isLoading = isLoading ?? loading.isNotEmpty,
        metrics = metrics ?? DashboardMetrics();
 
@@ -90,8 +83,6 @@ class OwnerState {
     List<OutletRollup>? outletRollups,
     bool? outletRollupsLoading,
     bool? outletRollupsFailed,
-    List<DashboardBar>? previousBars,
-    String? previousKey,
   }) {
     final nextLoading = loading ?? this.loading;
     return OwnerState(
@@ -113,8 +104,6 @@ class OwnerState {
       outletRollups: outletRollups ?? this.outletRollups,
       outletRollupsLoading: outletRollupsLoading ?? this.outletRollupsLoading,
       outletRollupsFailed: outletRollupsFailed ?? this.outletRollupsFailed,
-      previousBars: previousBars ?? this.previousBars,
-      previousKey: previousKey ?? this.previousKey,
     );
   }
 }

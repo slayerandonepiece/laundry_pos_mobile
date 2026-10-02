@@ -87,7 +87,8 @@ class PeriodRange {
     if (isCustom) return customFrom!;
     final ref = now ?? DateTime.now();
     return switch (key) {
-      '7d' => ref.subtract(const Duration(days: 6)),
+      // This week: Monday (as on the web) through today.
+      '7d' => DateTime(ref.year, ref.month, ref.day - (ref.weekday - 1)),
       'this_month' => DateTime(ref.year, ref.month, 1),
       'prev_month' => DateTime(ref.year, ref.month - 1, 1),
       '90d' => ref.subtract(const Duration(days: 89)),
@@ -106,7 +107,7 @@ class PeriodRange {
   }
 
   /// Bucket size that keeps a chart to a readable number of points.
-  /// Daily for 7 days / a month (span <= 31); weekly up to 90 days; monthly beyond.
+  /// Daily for a week / a month (span <= 31); weekly up to 90 days; monthly beyond.
   static String granularityForSpan(int span) {
     if (span <= 31) return 'day';
     if (span <= 90) return 'week';
@@ -129,7 +130,7 @@ class PeriodRange {
   String labelFor([DateTime? now]) {
     final ref = now ?? DateTime.now();
     return switch (key) {
-      '7d' => 'Last 7 days',
+      '7d' => 'This week',
       'this_month' => currentMonthLabel(ref),
       'prev_month' => previousMonthLabel(ref),
       'custom' => 'Selected dates',
@@ -164,7 +165,7 @@ class PeriodRange {
   int get hashCode => requestKey.hashCode;
 }
 
-/// Preset chips (7 days, current month, previous month) plus a custom-range picker.
+/// Preset chips (this week, current month, previous month) plus a custom-range picker.
 /// The owner holds the [PeriodRange] and reacts to [onChanged]. Custom only emits
 /// once both dates are picked; until then the calendar button shows selected and the
 /// from/to row is open.
@@ -292,7 +293,11 @@ class _PeriodFilterState extends State<PeriodFilter> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _chip('7 days', v.key == '7d', () => _preset(PeriodRange.last7)),
+              _chip(
+                'This week',
+                v.key == '7d',
+                () => _preset(PeriodRange.last7),
+              ),
               const SizedBox(width: 6),
               _chip(
                 currentMonthLabel,
