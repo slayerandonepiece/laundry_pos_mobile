@@ -6,6 +6,7 @@
     "obsidian-cli@obsidian-cli-skill": true,
     "dart-flutter@dart-flutter": true,
     "codex@openai-codex": true,
-    "wiki@llm-wiki": true
+    "wiki@llm-wiki": true,
+    "ponytail@ponytail": true
   }
 }
