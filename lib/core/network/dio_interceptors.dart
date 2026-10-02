@@ -220,13 +220,13 @@ class DioLoggingInterceptor extends Interceptor {
       }
     }
 
-    final isServerError = statusCode != null && statusCode >= 500;
-    if (reportingEnabled && isServerError) {
-      // Method, path and status only: no query string, no body.
+    if (reportingEnabled) {
+      // Method, path and status (or error type when there is no response):
+      // no query string, no body.
       nonFatalReporter(
-        Exception('API $statusCode $method $path'),
+        Exception('API ${statusCode ?? err.type.name} $method $path'),
         err.stackTrace,
-        '[$_tag] server error',
+        '[$_tag] api error',
       );
     }
 

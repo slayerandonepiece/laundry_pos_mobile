@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
@@ -314,10 +315,32 @@ void main() {
       expect(message, isNot(contains('9999')));
     });
 
-    test('4xx responses are not reported', () async {
+    test('4xx responses are reported too', () async {
       await request(404);
       await request(400);
-      expect(reports, isEmpty);
+      expect(reports, hasLength(2));
+      expect(reports[0].$1.toString(), contains('404'));
+      expect(reports[1].$1.toString(), contains('400'));
+    });
+
+    test('a timeout with no response is reported by error type', () async {
+      DioLoggingInterceptor.reportingEnabled = true;
+      final apiClient = ApiClient(
+        dio: createMockDio(
+          (options) async => throw DioException(
+            requestOptions: options,
+            type: DioExceptionType.connectionTimeout,
+          ),
+        ),
+        secureStorage: TestSecureStorage(token: 'tok'),
+        localCache: TestLocalCache(storeId: 's1', outletId: 'o1'),
+      );
+      try {
+        await apiClient.get('https://example.com/api/v1/orders?phone=9999');
+      } catch (_) {}
+      expect(reports, hasLength(1));
+      expect(reports.single.$1.toString(), contains('connectionTimeout'));
+      expect(reports.single.$1.toString(), isNot(contains('9999')));
     });
 
     test('nothing is reported when reporting is disabled', () async {

@@ -16,7 +16,7 @@ Focused tests, mutation checks, full analysis/tests, stage Android/iOS builds, a
 
 ### Prod-readiness follow-up — 2 October 2026
 
-- **API errors:** `DioLoggingInterceptor` now reports every 5xx response to Crashlytics as a non-fatal (`FirebaseService.recordNonFatal`), with the real `err.stackTrace` and only `API <status> <METHOD> <path>` (no query string, no body). Off in debug. Timeouts and no-connection errors are deliberately not reported (offline use is normal); they stay in `NetworkHealth` and the breadcrumb log.
+- **API errors:** `DioLoggingInterceptor` now reports every failed API call (4xx, 5xx, timeouts, no-connection) to Crashlytics as a non-fatal (`FirebaseService.recordNonFatal`), with the real `err.stackTrace` and only `API <status or error type> <METHOD> <path>` (no query string, no body). Off in debug. Expect noise from offline use and expected 401/403/400 responses; they also stay in `NetworkHealth` and the breadcrumb log.
 - **FCM token** is logged in debug builds only (release logs go to Crashlytics).
 - iOS Firebase plists are per flavor in `ios/Firebase/{dev,stage,prod}/`. iOS has no Crashlytics Xcode build phase, so dSYMs are only uploaded by `scripts/release.sh`.
 - **Not verified:** no real fatal/non-fatal test from a prod build in the prod Firebase project, no Crashlytics alerts configured, and the prod flavor's Firebase/backend wiring was not exercised. Do these before the prod store release.

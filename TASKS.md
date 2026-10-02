@@ -11,7 +11,7 @@ rebrand + Firebase + gating" for the full rebrand scope.
 
 Release **1.0.4+6** is prepared for **stage** (branch `feat/dashboard-filters-and-sync-hardening`): `flutter analyze` clean, 800 tests pass. Done since 27 September: per-card dashboard period filters (7 days / current month / previous month / custom), drill-down tiles and Recent orders, Orders Work/Payment filters and employee quick filters, staff outlet assignment, sync/auth hardening (resume guard, backfill, dead-letter banner, cursor resume), backend outlet/invoice access fixes. The open task list is the **Pending list** in `docs/HANDOFF.md` (expense edit/delete, on-device verification passes, backend hardening leftovers, store listing). Release notes: `docs/RELEASE-NOTES-1.0.4.md`.
 
-**2 October:** expense edit/delete/paid-date/outlet, backend hardening 2 and the parity-audit Batch A (mobile-only) are done and committed on the feature branches; statuses are in the Pending list and the 2 October note in `docs/HANDOFF.md`. Open: Batch B (needs backend endpoints), the Neon migration (user applies it), two device checks listed in the note.
+**2 October:** expense edit/delete/paid-date/outlet, backend hardening 2 and the parity-audit Batch A (mobile-only) are done and committed on the feature branches; statuses are in the Pending list and the 2 October note in `docs/HANDOFF.md`. Open: Batch B (needs backend endpoints), the Neon migration (user applies it), two device checks listed in the note. API error reporting was widened to report every failed call (4xx, 5xx, timeouts) to Crashlytics as non-fatals; see the 2 October note in `docs/HANDOFF.md`. It is uncommitted and not yet checked in a real Crashlytics project.
 
 ## Status — 27 September 2026
 
