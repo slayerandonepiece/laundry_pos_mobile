@@ -115,7 +115,63 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
 
 ---
 
-### 3. Local Development & Debugging
+### 3. Upload symbols to Crashlytics (after every stage/prod release build)
+
+Releases are built with `--obfuscate`, so Crashlytics shows unreadable stack traces until symbols are uploaded. **Android** uses the folder passed to `--split-debug-info` and the Firebase CLI. **iOS** uses the archive's dSYMs and Firebase's `upload-symbols` tool: the CLI's `crashlytics:symbols:upload` cannot read iOS `.symbols` files (it fails with "Breakpad symbol generation failed"). Run the matching command right after the build, from the repo root, and keep the symbol folders for every released version.
+
+| Build | Symbol folder | Command |
+| --- | --- | --- |
+| Android stage | `build/symbols/stage` | `firebase crashlytics:symbols:upload --app=1:649080719329:android:3dd281b9de95bf84fb34a0 build/symbols/stage` |
+| Android prod | `build/symbols/prod` | `firebase crashlytics:symbols:upload --app=1:409671694030:android:88a72eab23d25ab7bcc29f build/symbols/prod` |
+
+**iOS** (after Product > Archive in Xcode; this picks the newest Xcode archive, so check it is the one you just made):
+
+```bash
+# stage
+build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols -gsp ios/Firebase/stage/GoogleService-Info.plist -p ios "$(ls -dt ~/Library/Developer/Xcode/Archives/*/*.xcarchive | head -1)/dSYMs"
+# prod
+build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols -gsp ios/Firebase/prod/GoogleService-Info.plist -p ios "$(ls -dt ~/Library/Developer/Xcode/Archives/*/*.xcarchive | head -1)/dSYMs"
+```
+
+(For a `flutter build ipa` archive the dSYMs are in `build/ios/archive/Runner.xcarchive/dSYMs` instead.)
+
+If `build/ios/SourcePackages` is missing (after `flutter clean`), run any `flutter build ios` once or use the same tool under `~/Library/Developer/Xcode/DerivedData/Runner-*/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols`. The important file is `App.framework.dSYM` (the Dart code); its UUID must match `dwarfdump --uuid build/symbols/ios-<flavor>/app.ios-arm64.symbols`.
+
+The Android app IDs are the `mobilesdk_app_id` of each flavor's `google-services.json` (package `com.reddygona.klenpos.staging` / `com.reddygona.klenpos`). The iOS commands read the app ID from `ios/Firebase/<flavor>/GoogleService-Info.plist`.
+
+- The Crashlytics Gradle plugin already uploads Android native symbols; this step is for the Dart code.
+- When building from Xcode (Product > Archive), run `flutter build ios --release --config-only --flavor <stage|prod> --dart-define=ENV=<stage|prod> --obfuscate --split-debug-info=build/symbols/ios-<stage|prod>` first. After archiving, upload the dSYMs from that archive (Organizer > Show in Finder > Show Package Contents > dSYMs) with the iOS command above, pointing at that folder.
+- Xcode's "Upload Symbols Failed ... FirebaseAnalytics / GoogleAppMeasurement / GoogleAdsOnDeviceConversion / GoogleAppMeasurementIdentitySupport" messages are harmless warnings: those are Google's closed-source binaries and ship without dSYMs. They do not block the upload.
+
+### 4. Release checklist (stage first, then prod; same steps for both)
+
+Replace `<flavor>` with `stage` or `prod`. Never run `flutter clean` between a build and its symbol upload: it deletes `build/symbols/`. Keep a copy of every symbol folder for each released version.
+
+**Common (both platforms)**
+1. **Version.** Bump `version:` in `pubspec.yaml` (`name+build`). The build number must be higher than anything already uploaded to Play Console / App Store Connect. Commit it.
+2. **Clean gate.** `flutter clean && flutter pub get && dart format . && flutter analyze && flutter test` (analyze clean, all tests pass).
+
+**Android (Google Play)**
+1. Build the bundle:
+   `flutter build appbundle --flavor <flavor> -t lib/main.dart --dart-define=ENV=<flavor> --obfuscate --split-debug-info=build/symbols/<flavor>`
+2. Upload the Dart symbols to Crashlytics (section 3, Android row): `firebase crashlytics:symbols:upload --app=<android app id> build/symbols/<flavor>`.
+3. In Play Console upload `build/app/outputs/bundle/<flavor>Release/app-<flavor>-release.aab`: Testing > Internal testing for stage, Production for prod. Paste the "What's new" text (max 500 characters).
+
+**iOS (App Store Connect), always from Xcode**
+1. Prepare the Flutter config so Xcode builds with the right flavor, environment and obfuscation:
+   `flutter build ios --release --config-only --flavor <flavor> --dart-define=ENV=<flavor> --obfuscate --split-debug-info=build/symbols/ios-<flavor>`
+2. `open ios/Runner.xcworkspace` (the workspace, not the project).
+3. In Xcode pick the `<flavor>` scheme and the destination **Any iOS Device (arm64)**. Under Signing & Capabilities check team `CARPPQWPK9` and "Automatically manage signing".
+4. **Product > Archive.** Organizer opens when it finishes. The archive is saved under `~/Library/Developer/Xcode/Archives/<date>/` (not `build/ios/archive`).
+5. Upload the dSYMs of that archive to Crashlytics (section 3, iOS command, pointing at the newest Xcode archive).
+6. In Organizer: **Validate App**, then **Distribute App > App Store Connect > Upload**. "Upload Symbols Failed" for FirebaseAnalytics, GoogleAppMeasurement, GoogleAdsOnDeviceConversion and GoogleAppMeasurementIdentitySupport is a harmless warning.
+7. In App Store Connect: wait for processing (about 10-30 minutes), answer export compliance (standard HTTPS only), attach the build to the version and paste "What's new". Stage goes to TestFlight only; prod: check screenshots and privacy answers, add a demo owner login to the review notes, then Submit for Review.
+   Upload only one build per version+build number (App Store Connect rejects a duplicate).
+
+**After release**
+Tag the commit (`git tag v<version>`) and push the tag.
+
+### 5. Local Development & Debugging
 
 * **Run Dev (local emulator/device)**:
   ```bash

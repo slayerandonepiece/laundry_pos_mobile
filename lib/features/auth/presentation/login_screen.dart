@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:myshop/shared/widgets/app_version_text.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/constants/app_assets.dart';
@@ -270,6 +271,10 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ),
                     ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: AppVersionText(),
                   ),
                 ],
               ),

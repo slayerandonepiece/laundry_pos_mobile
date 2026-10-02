@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:myshop/shared/widgets/app_version_text.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
@@ -327,6 +328,9 @@ class MoreScreen extends StatelessWidget {
                     onTap: () => _confirmSignOut(context),
                   ),
                 ),
+                const SizedBox(height: 20),
+                const AppVersionText(),
+                const SizedBox(height: 8),
               ],
             ),
           );

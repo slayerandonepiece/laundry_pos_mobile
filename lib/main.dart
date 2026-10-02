@@ -1,8 +1,7 @@
-import 'dart:ui' show PlatformDispatcher;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_environment.dart';
+import 'package:myshop/core/error/error_reporting.dart';
 import 'package:myshop/core/gate/app_gate_service.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
@@ -39,25 +38,21 @@ import 'package:myshop/features/shell/presentation/main_navigation_shell.dart';
 import 'package:myshop/features/shell/presentation/outlet_required_screen.dart';
 import 'package:myshop/shared/widgets/blocked_screen.dart';
 
-void main() async {
+void main() {
+  // Startup and runApp share one guarded zone: an error anywhere in startup,
+  // or an uncaught async error later, is reported instead of lost.
+  ErrorReporting.runGuarded(_start);
+}
+
+Future<void> _start() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase (Crashlytics, Analytics, Cloud Messaging, Remote Config)
   await FirebaseService.initialize();
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    AppLogger.log(
-      'FLUTTER_ERROR',
-      '${details.exceptionAsString()}${details.stack != null ? '\n${details.stack}' : ''}',
-      error: details.exception,
-    );
-  };
-
-  PlatformDispatcher.instance.onError = (error, stack) {
-    AppLogger.log('PLATFORM_ERROR', '$error\n$stack', error: error);
-    return true;
-  };
+  // After Firebase, and never overwritten later: Flutter, platform and isolate
+  // errors all end up in Crashlytics as fatal in non-debug builds.
+  ErrorReporting.install();
 
   // Initialize Hive local cache (without adapters or code-gen)
   await LocalCacheService.init();

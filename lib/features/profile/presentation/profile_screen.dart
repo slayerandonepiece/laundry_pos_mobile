@@ -2,9 +2,8 @@ import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
-import 'package:myshop/core/constants/app_environment.dart';
 import 'package:myshop/core/theme/text_styles.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:myshop/shared/widgets/app_version_text.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
@@ -408,7 +407,7 @@ class ProfileScreen extends StatelessWidget {
               onTap: () => _confirmLogout(context),
             ),
             const SizedBox(height: 8),
-            const _AppVersionText(),
+            const AppVersionText(),
             const SizedBox(height: 16),
           ],
         ),
@@ -465,34 +464,6 @@ class _ProfileRow extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _AppVersionText extends StatelessWidget {
-  const _AppVersionText();
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<PackageInfo>(
-      future: PackageInfo.fromPlatform(),
-      builder: (context, snapshot) {
-        final version = snapshot.data?.version ?? '';
-        final buildNumber = snapshot.data?.buildNumber ?? '';
-        final envSuffix = AppEnvironmentConfig.isStage
-            ? ' (stage)'
-            : AppEnvironmentConfig.isDev
-            ? ' (dev)'
-            : '';
-        final text = version.isNotEmpty
-            ? 'v$version${buildNumber.isNotEmpty ? '+$buildNumber' : ''}$envSuffix'
-            : '';
-        return Text(
-          text,
-          style: AppTextStyles.hint,
-          textAlign: TextAlign.center,
-        );
-      },
     );
   }
 }

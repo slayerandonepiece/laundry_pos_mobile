@@ -434,7 +434,8 @@ Open (in order):
 3. ProGuard: dropping the blanket `io.flutter.**` keep saves about 0.54 MB of `classes.dex`; needs a logged-in release smoke test first.
 4. Batch B (needs new backend endpoints first): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts, passwordChangedAt; plus the owner payment path for `billing_pending` (a product decision).
 5. Not yet seen on a device: queued mark-paid staying Paid after refresh; employee hand-over of a prepaid order from Ready; employee sign-in after an owner password reset.
-6. Optional: a pink "previous period" line on the chart (no button), an "Organization-wide" outlet bucket (needs the protected outlet switcher file), `Renews on 2100-01-01` shows a raw ISO date on Subscription.
+6. Crashlytics symbols: after every stage/prod release build run the `firebase crashlytics:symbols:upload` command in README section 3 (no Xcode build phase does it yet).
+7. Optional: a pink "previous period" line on the chart (no button), an "Organization-wide" outlet bucket (needs the protected outlet switcher file), `Renews on 2100-01-01` shows a raw ISO date on Subscription.
 
 ## Open: unsynced data and auth failures (2026-10-02, owner's request)
 
