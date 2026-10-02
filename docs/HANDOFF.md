@@ -39,14 +39,22 @@ Postgres. Device passes ran against a local sandbox only, never the shared DB.
   `must_change_password` enforced, public-error whitelist, rollup span cap,
   `GET /employees` no longer cached (a fresh list right after a save).
 
+### Working tree, 2 October (uncommitted in both repos)
+
+Mobile `feat/expense-edit-and-switcher-fix`: analyze clean, 871 tests. Backend `feat/expense-routes-and-hardening-2`: tsc clean, 130 integration tests. Parity audit: `docs/PARITY-AUDIT-2026-10-01.md`.
+
+Done from the audit (Batch A, mobile-only): access-403 queue safety (recoverable reasons stay queued; a bare 403 is still "outlet access changed"), 403 labels, staff password reset, per-outlet dashboard cards, dashboard polish, previous-period Compare chip (opt-in), public invoice link ("Open in browser", final invoices only), plan/trial strip and silent `/auth/status` refresh on resume, must_change_password mid-session, neutral `billing_pending` copy, "Received now" partial payment at checkout, slab validation, Retry-After text on change-password. Verified on the iPhone 17 Pro simulator against the local sandbox: per-outlet cards (match the DB), Open-orders drill-down and totals, order search, resume refresh (trial strip and store-locked screen, both with no relaunch), part payment (₹15 of ₹40 stored), public invoice page opens, owner password reset (flag set, sessions revoked).
+
+Skipped on purpose: PF-02 (the web has no "Organization contact" label) and OO-07 (needs the protected outlet switcher; audit lists it as deferred). Not started, needs backend endpoints first (Batch B): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts, real `passwordChangedAt`; B6 (an owner payment path for `billing_pending`) is a product decision. Not device-verified: expenses pull-to-refresh keeping a queued mark-paid (unit-tested), prepaid hand-over from Ready for an employee, EMP sign-in after the owner reset.
+
 ### Pending list
 
 | # | Area | Pending |
 |---|---|---|
-| 1 | Expenses | Edit, delete, chosen paid date, outlet attribution (E1–E3); needs new backend routes |
+| 1 | Expenses | **Done and committed (2 Oct)**: edit/delete (online only), chosen paid date, outlet attribution (E1–E3); backend routes added; queued changes survive refresh and Retry sends the queue. Device-checked on 1–2 Oct; the queued mark-paid refresh is unit-tested only |
 | 2 | Device verification | Dashboard chips + custom range, Delivered/Due-today drill-down, Recent orders, pull-to-refresh, Part-paid filter combos, offline-then-sync pass, 401/403 propagation |
-| 3 | Switcher | Outlet menu may linger over "Setting things up" after a switch (seen once); employee landed in Lake not Main (likely saved last-used outlet) |
-| 4 | Backend | Login throttle is per warm instance; session cookie id is a cuid; `billing_pending` not enforced server-side; idempotency unique keys global, not per tenant |
+| 3 | Switcher | Menu-lingers glitch **not reproducible**; speculative fix reverted (showMenu returns at pop start, so it can't be proven). Employee landing in Lake is **by design** (remembered outlet wins). Monitor |
+| 4 | Backend | **Done and committed in `../laundry_pos`**: DB-backed throttle, cookie carries token (one web re-login), per-tenant idempotency keys, `billing_pending` enforced behind the flag. Migration `20261001120000_…` NOT applied to Neon |
 | 5 | Release | Deploy backend before stage mobile (employee-list change); `SESSION_SECRET` must be set in production (user manages it) |
 | 6 | Store gating | No App Store listing yet, so `ios_app_store_id` and force-update stay dormant |
 | 7 | Data | Neon has only a stage branch given to us; two old test employees ("Test Emp Single", "Test Emp Multi") remain there |
