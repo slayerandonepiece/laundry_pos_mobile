@@ -13,6 +13,7 @@ import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
+import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/presentation/orders_drill_down.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
@@ -45,33 +46,81 @@ class OwnerDashboardScreen extends StatefulWidget {
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   // Sales by date and Sales by service default to the current month (month-to-date);
   // each card keeps its own independent selection.
-  PeriodRange _dateRange = PeriodRange.thisMonth;
+  PeriodRange _dateRange = PeriodRange.last7;
   PeriodRange _serviceRange = PeriodRange.thisMonth;
+
+  StreamSubscription<OrdersState>? _ordersSub;
+  Timer? _ordersRefreshTimer;
+  int? _ordersSignature;
 
   @override
   void initState() {
     super.initState();
     widget.resetSignal?.addListener(_onTabLeft);
     context.read<OwnerBloc>().add(_currentLoadDashboardEvent(refresh: false));
-    context.read<OrdersBloc>().add(LoadOrdersEvent());
+    _loadSalesByDate();
+    final ordersBloc = context.read<OrdersBloc>();
+    ordersBloc.add(LoadOrdersEvent());
+    _ordersSub = ordersBloc.stream.listen(_onOrdersChanged);
   }
 
   @override
   void dispose() {
     widget.resetSignal?.removeListener(_onTabLeft);
+    _ordersSub?.cancel();
+    _ordersRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  /// Orders, their status and what was paid; anything that moves the figures.
+  int _signatureOf(OrdersState s) => Object.hashAll([
+    s.allOrders.length,
+    for (final o in s.allOrders) Object.hash(o.id, o.status, o.paidAmount),
+  ]);
+
+  /// A sale (or a payment, or a status change) must show on the dashboard
+  /// without a manual refresh; the dashboard figures come from the server.
+  void _onOrdersChanged(OrdersState s) {
+    if (s.isLoading) return;
+    final signature = _signatureOf(s);
+    final previous = _ordersSignature;
+    _ordersSignature = signature;
+    // The first loaded state is only the baseline (opening the screen already
+    // loads the dashboard); changes after it are what need a reload.
+    if (previous == null || previous == signature) return;
+    _ordersRefreshTimer?.cancel();
+    _ordersRefreshTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) _refreshDashboard();
+    });
   }
 
   void _onTabLeft() => _resetCards();
 
-  /// Both cards back to the default period and the page's own data.
+  /// Sales by date opens on this week; it needs its own request because the
+  /// page's own data is the whole month.
+  void _loadSalesByDate() {
+    context.read<OwnerBloc>().add(
+      LoadCardMetricsEvent(
+        card: DashboardCard.salesByDate,
+        range: _dateRange,
+        requestKey: _cardKey(_dateRange),
+      ),
+    );
+  }
+
+  /// Both cards back to their default period: this week for Sales by date,
+  /// the page's own data (this month) for Sales by service.
   void _resetCards() {
-    if (_dateRange.isDefault && _serviceRange.isDefault) return;
+    if (_dateRange.key == PeriodRange.last7.key && _serviceRange.isDefault) {
+      return;
+    }
     setState(() {
-      _dateRange = PeriodRange.thisMonth;
+      _dateRange = PeriodRange.last7;
       _serviceRange = PeriodRange.thisMonth;
     });
-    context.read<OwnerBloc>().add(ResetCardEvent(DashboardCard.values.toSet()));
+    final bloc = context.read<OwnerBloc>();
+    bloc.add(ResetCardEvent({DashboardCard.salesByService}));
+    _loadSalesByDate();
   }
 
   String get _scopeKey {
@@ -303,9 +352,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       sliver: SliverMainAxisGroup(
                         slivers: [
                           // 2. Two Large Money Cards
-                          SliverToBoxAdapter(
-                            child: _buildMoneyCards(metrics),
-                          ),
+                          SliverToBoxAdapter(child: _buildMoneyCards(metrics)),
 
                           // 3. Compact 3-Chip Operational Row
                           SliverToBoxAdapter(
@@ -514,10 +561,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   // "Sales today" and "Sales this month", both straight from the server reply.
   Widget _buildMoneyCards(DashboardMetrics metrics) {
     const periodCardTitle = 'Sales this month';
-    final int periodSalesAmount = metrics.periodSales > 0
+    final int periodSalesAmount = metrics.hasPeriodSales
         ? metrics.periodSales
         : metrics.todaySales;
-    final int periodOrderCount = metrics.periodOrders > 0
+    final int periodOrderCount = metrics.hasPeriodSales
         ? metrics.periodOrders
         : metrics.todayCount;
 
@@ -984,13 +1031,18 @@ class _SalesTrendChart extends StatelessWidget {
     final int dataCount = useBars ? bars.length : cash.length;
     final showState = loading || failed || dataCount == 0;
 
-    final spots = <FlSpot>[];
+    // A single day with sales would be one lonely dot: start the line at
+    // zero so it reads as "from nothing to this much".
+    final lead = dataCount == 1 ? 1 : 0;
+    final pointCount = dataCount + lead;
+
+    final spots = <FlSpot>[if (lead == 1) const FlSpot(0, 0)];
     double maxY = 0;
     for (int i = 0; i < dataCount; i++) {
       final amount = useBars ? bars[i].amount : cash[i].income;
       final y = (amount / 100).toDouble();
       if (y > maxY) maxY = y;
-      spots.add(FlSpot(i.toDouble(), y));
+      spots.add(FlSpot((i + lead).toDouble(), y));
     }
     if (maxY == 0) maxY = 100;
 
@@ -1039,9 +1091,9 @@ class _SalesTrendChart extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Text(
+                    Text(
                       'Collected',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontFamily: AppTextStyles.fontBody,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -1074,6 +1126,90 @@ class _SalesTrendChart extends StatelessWidget {
                 final chartHeight = (screenHeight * 0.28).clamp(170.0, 240.0);
                 final yInterval = (maxY * 1.15) / 3;
 
+                final grid = FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: yInterval > 0 ? yInterval : 25,
+                  getDrawingHorizontalLine: (value) =>
+                      const FlLine(color: AppColors.divider, strokeWidth: 1),
+                );
+                final titles = FlTitlesData(
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 44,
+                      interval: yInterval > 0 ? yInterval : 25,
+                      getTitlesWidget: (value, meta) {
+                        String label;
+                        if (value.round() == 0) {
+                          label = '₹0';
+                        } else if (value >= 1000) {
+                          final inK = value / 1000;
+                          label = inK % 1 == 0
+                              ? '₹${inK.toInt()}k'
+                              : '₹${inK.toStringAsFixed(1)}k';
+                        } else {
+                          label = '₹${value.toInt()}';
+                        }
+                        return SideTitleWidget(
+                          meta: meta,
+                          fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
+                          child: Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 38,
+                      interval: 1,
+                      getTitlesWidget: (value, meta) {
+                        final raw = value.toInt();
+                        final idx = raw - lead;
+                        if (value != raw.toDouble() ||
+                            idx < 0 ||
+                            idx >= dataCount) {
+                          return const SizedBox.shrink();
+                        }
+                        if (!_shouldShowChartLabel(idx, dataCount)) {
+                          return const SizedBox.shrink();
+                        }
+                        final rawLabel = useBars
+                            ? bars[idx].label
+                            : cash[idx].label;
+                        return SideTitleWidget(
+                          meta: meta,
+                          space: 6,
+                          child: Text(
+                            _formatChartLabel(rawLabel),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: AppTextStyles.fontBody,
+                              fontSize: 11,
+                              height: 1.15,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                );
+
                 return SizedBox(
                   height: chartHeight,
                   child: Padding(
@@ -1084,96 +1220,11 @@ class _SalesTrendChart extends StatelessWidget {
                         minX: 0,
                         // A single point (one-day custom range) would make
                         // minX == maxX, which fl_chart can't scale.
-                        maxX: dataCount > 1 ? (dataCount - 1).toDouble() : 1,
+                        maxX: pointCount > 1 ? (pointCount - 1).toDouble() : 1,
                         minY: 0,
                         maxY: maxY * 1.15,
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: yInterval > 0 ? yInterval : 25,
-                          getDrawingHorizontalLine: (value) => const FlLine(
-                            color: AppColors.divider,
-                            strokeWidth: 1,
-                          ),
-                        ),
-                        titlesData: FlTitlesData(
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 44,
-                              interval: yInterval > 0 ? yInterval : 25,
-                              getTitlesWidget: (value, meta) {
-                                String label;
-                                if (value.round() == 0) {
-                                  label = '₹0';
-                                } else if (value >= 1000) {
-                                  final inK = value / 1000;
-                                  label = inK % 1 == 0
-                                      ? '₹${inK.toInt()}k'
-                                      : '₹${inK.toStringAsFixed(1)}k';
-                                } else {
-                                  label = '₹${value.toInt()}';
-                                }
-                                return SideTitleWidget(
-                                  meta: meta,
-                                  fitInside:
-                                      SideTitleFitInsideData.fromTitleMeta(
-                                        meta,
-                                      ),
-                                  child: Text(
-                                    label,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.mutedText,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 38,
-                              interval: 1,
-                              getTitlesWidget: (value, meta) {
-                                final idx = value.toInt();
-                                if (value != idx.toDouble() ||
-                                    idx < 0 ||
-                                    idx >= dataCount) {
-                                  return const SizedBox.shrink();
-                                }
-                                if (!_shouldShowChartLabel(idx, dataCount)) {
-                                  return const SizedBox.shrink();
-                                }
-                                final rawLabel = useBars
-                                    ? bars[idx].label
-                                    : cash[idx].label;
-                                return SideTitleWidget(
-                                  meta: meta,
-                                  space: 6,
-                                  child: Text(
-                                    _formatChartLabel(rawLabel),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontFamily: AppTextStyles.fontBody,
-                                      fontSize: 11,
-                                      height: 1.15,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.mutedText,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
+                        gridData: grid,
+                        titlesData: titles,
                         borderData: FlBorderData(show: false),
                         lineBarsData: [
                           LineChartBarData(
@@ -1206,13 +1257,13 @@ class _SalesTrendChart extends StatelessWidget {
                             getTooltipColor: (_) => AppColors.text,
                             getTooltipItems: (touchedSpots) {
                               return touchedSpots.map((spot) {
-                                final idx = spot.x.toInt();
-                                final valPaise = idx < dataCount
+                                final idx = spot.x.toInt() - lead;
+                                final valPaise = idx >= 0 && idx < dataCount
                                     ? (useBars
                                           ? bars[idx].amount
                                           : cash[idx].income)
                                     : 0;
-                                final period = idx < dataCount
+                                final period = idx >= 0 && idx < dataCount
                                     ? _formatChartLabel(
                                         useBars
                                             ? bars[idx].label
@@ -1270,7 +1321,7 @@ class _StaleChartPlaceholder extends StatelessWidget {
 class _CashFlowChart extends StatelessWidget {
   final List<CashPoint> cash;
 
-  /// Which period the totals cover, e.g. "Last 7 days".
+  /// Which period the totals cover, e.g. "This week".
   final String periodLabel;
 
   const _CashFlowChart({required this.cash, required this.periodLabel});

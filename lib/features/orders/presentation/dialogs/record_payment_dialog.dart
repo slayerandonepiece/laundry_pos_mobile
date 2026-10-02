@@ -10,17 +10,22 @@ import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/features/pos/data/pos_repository.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
-import 'package:myshop/shared/widgets/app_text_field.dart';
 
 class RecordPaymentDialog extends StatefulWidget {
   final Order order;
 
   const RecordPaymentDialog({super.key, required this.order});
 
+  /// Collects the whole balance: nothing to type, only the method to choose.
   static Future<void> show(BuildContext context, {required Order order}) {
-    return showDialog(
+    return showModalBottomSheet<void>(
       context: context,
-      barrierDismissible: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (_) => RepositoryProvider.value(
         value: context.read<PosRepository>(),
         child: BlocProvider.value(
@@ -36,21 +41,24 @@ class RecordPaymentDialog extends StatefulWidget {
 }
 
 class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
-  final TextEditingController _amountController = TextEditingController();
   String? _selectedMethodName;
   List<StorePaymentMethod> _methods = const [];
   bool _loadingMethods = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadPaymentMethods();
+  /// One payment method per order for now: once something was paid, the rest
+  /// goes through the same method.
+  String? get _lockedMethod {
+    for (final p in widget.order.payments) {
+      if (p.method.trim().isNotEmpty) return p.method.trim();
+    }
+    return null;
   }
 
   @override
-  void dispose() {
-    _amountController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _selectedMethodName = _lockedMethod;
+    _loadPaymentMethods();
   }
 
   Future<void> _loadPaymentMethods() async {
@@ -60,7 +68,8 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
           repo.getCachedPaymentMethodsList() ?? await repo.listPaymentMethods();
       if (!mounted) return;
       setState(() {
-        _methods = methods;
+        // Cash on delivery is not money received; it is how the order was placed.
+        _methods = methods.where((m) => !m.isCashOnDelivery).toList();
         _loadingMethods = false;
       });
     } catch (_) {
@@ -70,45 +79,6 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
         _loadingMethods = false;
       });
     }
-  }
-
-  int? get _parsedPaise {
-    final text = _amountController.text.trim();
-    if (text.isEmpty) return null;
-    final val = double.tryParse(text);
-    if (val == null) return null;
-    return (val * 100).round();
-  }
-
-  String? get _amountError {
-    final text = _amountController.text.trim();
-    if (text.isEmpty) return null;
-    final val = double.tryParse(text);
-    if (val == null) return 'Enter a valid amount';
-    final paise = (val * 100).round();
-    if (paise <= 0) return 'Amount must be greater than zero';
-    if (paise > widget.order.balanceDue) {
-      return 'Amount cannot exceed balance (${CurrencyFormatter.format(widget.order.balanceDue)})';
-    }
-    return null;
-  }
-
-  bool get _isAmountValid {
-    final paise = _parsedPaise;
-    if (paise == null) return false;
-    return paise > 0 && paise <= widget.order.balanceDue;
-  }
-
-  void _payBalance() {
-    final rupees = widget.order.balanceDue / 100.0;
-    final text = (widget.order.balanceDue % 100 == 0)
-        ? rupees.toInt().toString()
-        : rupees.toStringAsFixed(2);
-    _amountController.text = text;
-    _amountController.selection = TextSelection.fromPosition(
-      TextPosition(offset: text.length),
-    );
-    setState(() {});
   }
 
   @override
@@ -132,189 +102,173 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
         final isBusy = state.isCollectingPayment;
         final canSubmit =
             !isBusy &&
-            _isAmountValid &&
-            !_loadingMethods &&
+            widget.order.balanceDue > 0 &&
+            (_lockedMethod != null || !_loadingMethods) &&
             _selectedMethodName != null;
 
-        return Dialog(
-          backgroundColor: AppColors.surface,
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 22,
-            vertical: 24,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Header
-                  const Text(
-                    'Record payment',
-                    style: TextStyle(
-                      fontFamily: AppTextStyles.fontDisplay,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.text,
-                    ),
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header
+                const Text(
+                  'Record payment',
+                  style: TextStyle(
+                    fontFamily: AppTextStyles.fontDisplay,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.text,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${widget.order.displayCode} · ${widget.order.name.isNotEmpty ? widget.order.name : widget.order.phone}',
-                    style: AppTextStyles.hint,
-                  ),
-                  const SizedBox(height: 18),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${widget.order.displayCode} · ${widget.order.name.isNotEmpty ? widget.order.name : widget.order.phone}',
+                  style: AppTextStyles.hint,
+                ),
+                const SizedBox(height: 18),
 
-                  // Balance Due Reference Box
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 14,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.inset,
-                      border: Border.all(color: AppColors.border),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'BALANCE DUE',
-                          style: TextStyle(
-                            fontFamily: AppTextStyles.fontBody,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.mutedText,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          CurrencyFormatter.format(widget.order.balanceDue),
-                          style: const TextStyle(
-                            fontFamily: AppTextStyles.fontDisplay,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.text,
-                          ),
-                        ),
-                      ],
-                    ),
+                // Balance Due Reference Box
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 14,
                   ),
-                  const SizedBox(height: 16),
-
-                  // Amount Input
-                  AppTextField(
-                    label: 'Amount (₹)',
-                    controller: _amountController,
-                    hintText: '0.00',
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    errorText: _amountError,
-                    onChanged: (_) => setState(() {}),
-                    suffixIcon: TextActionButton(
-                      label: 'Pay balance',
-                      height: AppButtonHeight.compact,
-                      onPressed: isBusy ? null : _payBalance,
-                    ),
+                  decoration: BoxDecoration(
+                    color: AppColors.inset,
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Payment Options
-                  if (_loadingMethods) ...[
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(
-                        child: SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ] else if (_methods.isEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 13,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.dangerBg,
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: const Text(
-                        'No payment methods are enabled. Ask the owner to enable one in Profile → Payment methods.',
+                  child: Column(
+                    children: [
+                      const Text(
+                        'AMOUNT TO COLLECT',
                         style: TextStyle(
                           fontFamily: AppTextStyles.fontBody,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.danger,
-                          height: 1.4,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.mutedText,
+                          letterSpacing: 0.5,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                  ] else ...[
-                    for (int i = 0; i < _methods.length; i++) ...[
-                      if (i > 0) const SizedBox(height: 10),
-                      _buildOption(
-                        name: _methods[i].name,
-                        icon: _methods[i].type.toUpperCase() == 'UPI'
-                            ? Icons.qr_code_scanner_outlined
-                            : Icons.payments_outlined,
-                        isSelected: _selectedMethodName == _methods[i].name,
-                        onTap: isBusy
-                            ? () {}
-                            : () => setState(
-                                () => _selectedMethodName = _methods[i].name,
-                              ),
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                  ],
-
-                  // Action buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SecondaryButton(
-                          label: 'Cancel',
-                          onPressed: isBusy
-                              ? null
-                              : () => Navigator.pop(context),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: PrimaryButton(
-                          label: 'Record payment',
-                          isLoading: isBusy,
-                          onPressed: !canSubmit
-                              ? null
-                              : () {
-                                  context.read<OrdersBloc>().add(
-                                    RecordPaymentEvent(
-                                      orderCode: widget.order.orderCode,
-                                      amount: _parsedPaise!,
-                                      method: _selectedMethodName!,
-                                    ),
-                                  );
-                                },
+                      const SizedBox(height: 4),
+                      Text(
+                        CurrencyFormatter.format(widget.order.balanceDue),
+                        style: const TextStyle(
+                          fontFamily: AppTextStyles.fontDisplay,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.text,
                         ),
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 16),
+
+                // Payment Options
+                if (_lockedMethod != null) ...[
+                  _buildOption(
+                    name: _lockedMethod!,
+                    icon: Icons.payments_outlined,
+                    isSelected: true,
+                    onTap: () {},
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Same method as the earlier payment on this order.',
+                    style: AppTextStyles.hint,
+                  ),
+                  const SizedBox(height: 20),
+                ] else if (_loadingMethods) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ] else if (_methods.isEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerBg,
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: const Text(
+                      'No payment methods are enabled. Ask the owner to enable one in Profile → Payment methods.',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.danger,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  for (int i = 0; i < _methods.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 10),
+                    _buildOption(
+                      name: _methods[i].name,
+                      icon: _methods[i].type.toUpperCase() == 'UPI'
+                          ? Icons.qr_code_scanner_outlined
+                          : Icons.payments_outlined,
+                      isSelected: _selectedMethodName == _methods[i].name,
+                      onTap: isBusy
+                          ? () {}
+                          : () => setState(
+                              () => _selectedMethodName = _methods[i].name,
+                            ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
                 ],
-              ),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: SecondaryButton(
+                        label: 'Cancel',
+                        onPressed: isBusy ? null : () => Navigator.pop(context),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: PrimaryButton(
+                        label:
+                            'Record ${CurrencyFormatter.format(widget.order.balanceDue)}',
+                        isLoading: isBusy,
+                        onPressed: !canSubmit
+                            ? null
+                            : () {
+                                context.read<OrdersBloc>().add(
+                                  RecordPaymentEvent(
+                                    orderCode: widget.order.orderCode,
+                                    amount: widget.order.balanceDue,
+                                    method: _selectedMethodName!,
+                                  ),
+                                );
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         );

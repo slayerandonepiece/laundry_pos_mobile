@@ -39,14 +39,22 @@ Postgres. Device passes ran against a local sandbox only, never the shared DB.
   `must_change_password` enforced, public-error whitelist, rollup span cap,
   `GET /employees` no longer cached (a fresh list right after a save).
 
+### Working tree, 2 October (uncommitted in both repos)
+
+Mobile `feat/expense-edit-and-switcher-fix`: analyze clean, 871 tests. Backend `feat/expense-routes-and-hardening-2`: tsc clean, 130 integration tests. Parity audit: `docs/PARITY-AUDIT-2026-10-01.md`.
+
+Done from the audit (Batch A, mobile-only): access-403 queue safety (recoverable reasons stay queued; a bare 403 is still "outlet access changed"), 403 labels, staff password reset, per-outlet dashboard cards, dashboard polish, "This week" period chip (Monday to today, as on the web; replaces "7 days"), public invoice link ("Open in browser", final invoices only), plan/trial strip and silent `/auth/status` refresh on resume, must_change_password mid-session, neutral `billing_pending` copy, "Received now" partial payment at checkout, slab validation, Retry-After text on change-password. Verified on the iPhone 17 Pro simulator against the local sandbox: per-outlet cards (match the DB), Open-orders drill-down and totals, order search, resume refresh (trial strip and store-locked screen, both with no relaunch), part payment (₹15 of ₹40 stored), public invoice page opens, owner password reset (flag set, sessions revoked).
+
+Skipped on purpose: PF-02 (the web has no "Organization contact" label) and OO-07 (needs the protected outlet switcher; audit lists it as deferred). Not started, needs backend endpoints first (Batch B): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts, real `passwordChangedAt`; B6 (an owner payment path for `billing_pending`) is a product decision. Not device-verified: expenses pull-to-refresh keeping a queued mark-paid (unit-tested), prepaid hand-over from Ready for an employee, EMP sign-in after the owner reset.
+
 ### Pending list
 
 | # | Area | Pending |
 |---|---|---|
-| 1 | Expenses | Edit, delete, chosen paid date, outlet attribution (E1–E3); needs new backend routes |
+| 1 | Expenses | **Done and committed (2 Oct)**: edit/delete (online only), chosen paid date, outlet attribution (E1–E3); backend routes added; queued changes survive refresh and Retry sends the queue. Device-checked on 1–2 Oct; the queued mark-paid refresh is unit-tested only |
 | 2 | Device verification | Dashboard chips + custom range, Delivered/Due-today drill-down, Recent orders, pull-to-refresh, Part-paid filter combos, offline-then-sync pass, 401/403 propagation |
-| 3 | Switcher | Outlet menu may linger over "Setting things up" after a switch (seen once); employee landed in Lake not Main (likely saved last-used outlet) |
-| 4 | Backend | Login throttle is per warm instance; session cookie id is a cuid; `billing_pending` not enforced server-side; idempotency unique keys global, not per tenant |
+| 3 | Switcher | Menu-lingers glitch **not reproducible**; speculative fix reverted (showMenu returns at pop start, so it can't be proven). Employee landing in Lake is **by design** (remembered outlet wins). Monitor |
+| 4 | Backend | **Done and committed in `../laundry_pos`**: DB-backed throttle, cookie carries token (one web re-login), per-tenant idempotency keys, `billing_pending` enforced behind the flag. Migration `20261001120000_…` NOT applied to Neon |
 | 5 | Release | Deploy backend before stage mobile (employee-list change); `SESSION_SECRET` must be set in production (user manages it) |
 | 6 | Store gating | No App Store listing yet, so `ios_app_store_id` and force-update stay dormant |
 | 7 | Data | Neon has only a stage branch given to us; two old test employees ("Test Emp Single", "Test Emp Multi") remain there |
@@ -409,6 +417,46 @@ now itself historical, superseded by 28 September above.
    an owner decision. Audit leftovers (plan doc §9) are all fixed (§10).
 4. Wiki last (local `.wiki/` already has `wiki/concepts/outlet-scope.md` as of
    2026-09-26; add anything durable from the tasks above).
+
+## Status — 2 Oct 2026 (end of day)
+
+Branch `feat/expense-edit-and-switcher-fix` (mobile) and `feat/expense-routes-and-hardening-2` (backend `../laundry_pos`). Neon stage migration `20261001120000_hardening_2_...` is applied and verified. Full gate: `dart format .`, `flutter analyze` clean, 880 tests.
+
+Done this round:
+- Dashboard: "This week" (Mon–today) replaces "7 days"; Sales by date opens on This week; Compare removed; per-outlet cards, expenses headline, needs-attention, first-use card removed; auto-reload when orders change; a one-day chart starts at zero.
+- Payments: Record payment is a method picker for the full balance (no typing), locked to the method already used, never Cash on Delivery. Checkout: due-date chips, methods two per row, Cash on Delivery as its own button, back returns to the items, X asks to discard. Activity & history is inline on the order page.
+- Invoices: in-app View renders the real PDF, laid out like the web invoice; public web invoice page shows the invoice first and full width with small Print/Download below. Owner Subscription screen lists subscription invoices and opens each as a PDF (new backend routes, see `.agents/MOBILE-API-CONTRACT.md`).
+- Build: unused assets and `cupertino_icons` dropped; Android res images are lossless WebP; plain HTTP is dev-flavor only (manifest overlay + Dart HTTPS rule); a stage/prod flavor can never resolve to dev; `allowBackup="false"`. Prod arm64 APK about 22.5 MB, iOS Runner.app about 27 MB.
+
+Open (in order):
+1. 401/403 data-loss edge case (section below) — not done.
+2. Encrypt the Hive cache (AES cipher, key in secure storage, one-time migration for existing installs).
+3. ProGuard: dropping the blanket `io.flutter.**` keep saves about 0.54 MB of `classes.dex`; needs a logged-in release smoke test first.
+4. Batch B (needs new backend endpoints first): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts, passwordChangedAt; plus the owner payment path for `billing_pending` (a product decision).
+5. Not yet seen on a device: queued mark-paid staying Paid after refresh; employee hand-over of a prepaid order from Ready; employee sign-in after an owner password reset.
+6. Optional: a pink "previous period" line on the chart (no button), an "Organization-wide" outlet bucket (needs the protected outlet switcher file), `Renews on 2100-01-01` shows a raw ISO date on Subscription.
+
+## Open: unsynced data and auth failures (2026-10-02, owner's request)
+
+Edge case to solve, not done yet. When a 401 (or a reason-less 403) arrives
+while changes are still queued, `AuthRepository.logout(involuntary: true)`
+signs out, wipes the local cache, then writes the queues back under
+`parked_unsynced::<storeId>`. Data is lost if the app is killed between the
+wipe and that write, if the write fails, or if the person signs in somewhere
+the parked copy is not restored. A token that expires while the app is closed
+hits the same path on next launch.
+
+Rule to implement: whatever the user does is saved locally first, then synced
+in the background; the UI never waits for the API.
+- On 401/403, do not wipe. Keep local data and the outbox, show "sign in
+  again" over the app, resume sync after sign-in.
+- Wipe only on a deliberate sign-out, and only when the outbox and dead-letter
+  lists are empty, or the person confirms losing them.
+- Move the parking write before any wipe (or drop parking entirely), and make
+  it atomic.
+- Audit the remaining direct API calls (profile, change password, customer
+  lookup, owner actions) and move any user-visible write onto the outbox.
+- Tests: kill-between-steps, parking write failing, different user signing in.
 
 ## Durable knowledge (mirror of the local Wiki article)
 

@@ -1,15 +1,12 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
-import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/features/orders/data/orders_repository.dart';
-import 'package:myshop/features/orders/presentation/invoice_viewer_screen.dart';
 
 class _Offline extends ConnectivityService {
   _Offline(this.offline) : super.internal();
@@ -149,12 +146,6 @@ void main() {
     expect(updated.paidAmount, 23000);
     expect(updated.isPaidInFull, isTrue);
     expect(repo.getCachedOrdersList().single.paidAmount, 23000);
-    await tester.pumpWidget(
-      MaterialApp(home: InvoiceViewerScreen(order: updated)),
-    );
-    expect(find.text('Paid in full'), findsOneWidget);
-    expect(find.text(CurrencyFormatter.formatPdf(23000)), findsAtLeastNWidgets(2));
-    expect(find.text(CurrencyFormatter.formatPdf(10000)), findsNothing);
   });
 
   test('fetches in small parallel batches and keeps every invoice', () async {

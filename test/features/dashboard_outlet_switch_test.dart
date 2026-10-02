@@ -12,6 +12,7 @@ import 'package:myshop/features/orders/bloc/orders_bloc.dart';
 import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
+import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
@@ -142,6 +143,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// While a gated request is pending its spinner keeps animating, so the page
+  /// never goes idle: step a few frames instead.
+  Future<void> settleOpen(WidgetTester tester) async {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
   Future<void> pumpScreen(WidgetTester tester) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -167,15 +179,21 @@ void main() {
   Finder inFilter(Key key, String text) =>
       find.descendant(of: find.byKey(key), matching: find.text(text));
 
+  CardMetrics? card(DashboardCard c) => ownerBloc.state.cards[c];
+
   testWidgets(
-    'switching outlet resets both cards to the current month and clears cards',
+    'switching outlet puts Sales by service back on the month and reloads '
+    'Sales by date, this week, for the new outlet',
     (tester) async {
       await pumpScreen(tester);
-      await tester.tap(inFilter(filterDate, '7 days'));
-      await settle(tester);
-      await tester.tap(inFilter(filterService, PeriodRange.previousMonthLabel()));
-      await settle(tester);
+      // Sales by date opens on this week, asked for the first outlet.
       expect(rangeOf(tester, filterDate), PeriodRange.last7);
+      expect(card(DashboardCard.salesByDate)!.key, endsWith('|outlet_1'));
+
+      await tester.tap(
+        inFilter(filterService, PeriodRange.previousMonthLabel()),
+      );
+      await settle(tester);
       expect(rangeOf(tester, filterService), PeriodRange.previousMonth);
       expect(ownerBloc.state.cards, hasLength(2));
 
@@ -183,9 +201,10 @@ void main() {
       await settle(tester);
 
       expect(cubit.state.activeOutletId, 'outlet_2');
-      expect(rangeOf(tester, filterDate), PeriodRange.thisMonth);
+      expect(rangeOf(tester, filterDate), PeriodRange.last7);
       expect(rangeOf(tester, filterService), PeriodRange.thisMonth);
-      expect(ownerBloc.state.cards, isEmpty);
+      expect(card(DashboardCard.salesByService), isNull);
+      expect(card(DashboardCard.salesByDate)!.key, endsWith('|outlet_2'));
     },
   );
 
@@ -193,19 +212,19 @@ void main() {
       'switch to outlet B', (tester) async {
     await pumpScreen(tester);
     repo.periodGate = Completer<void>();
-    await tester.tap(inFilter(filterService, '7 days'));
+    await tester.tap(inFilter(filterService, 'This week'));
     await tester.pump();
-    expect(ownerBloc.state.cards.values.single.loading, isTrue);
+    expect(card(DashboardCard.salesByService)!.loading, isTrue);
 
     cubit.select('outlet_2');
-    await settle(tester);
-    expect(ownerBloc.state.cards, isEmpty);
+    await settleOpen(tester);
+    expect(card(DashboardCard.salesByService), isNull);
 
     // Outlet A's reply lands only now.
     repo.periodGate!.complete();
     await settle(tester);
 
-    expect(ownerBloc.state.cards, isEmpty);
+    expect(card(DashboardCard.salesByService), isNull);
     expect(find.text('PeriodOnlyService'), findsNothing);
     expect(rangeOf(tester, filterService), PeriodRange.thisMonth);
   });
@@ -214,20 +233,20 @@ void main() {
       'reply from A cannot fill it', (tester) async {
     await pumpScreen(tester);
     repo.periodGate = Completer<void>();
-    await tester.tap(inFilter(filterService, '7 days'));
+    await tester.tap(inFilter(filterService, 'This week'));
     await tester.pump();
-    final keyA = ownerBloc.state.cards.values.single.key;
+    final keyA = card(DashboardCard.salesByService)!.key;
 
     cubit.select('outlet_2');
-    await settle(tester);
-    await tester.tap(inFilter(filterService, '7 days'));
+    await settleOpen(tester);
+    await tester.tap(inFilter(filterService, 'This week'));
     await tester.pump();
-    final keyB = ownerBloc.state.cards.values.single.key;
+    final keyB = card(DashboardCard.salesByService)!.key;
     expect(keyB, isNot(keyA));
 
     repo.periodGate!.complete();
     await settle(tester);
-    final slice = ownerBloc.state.cards.values.single;
+    final slice = card(DashboardCard.salesByService)!;
     expect(slice.key, keyB);
     expect(slice.metrics, isNotNull);
   });

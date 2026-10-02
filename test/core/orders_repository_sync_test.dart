@@ -130,6 +130,41 @@ void main() {
     expect(SyncManager.instance.value.isSyncing, isFalse);
   });
 
+  test('recoverable access 403 keeps order actions unchanged and later replays the same ids once', () async {
+    final original = [_action('a'), _action('b')];
+    for (final reason in [
+      'payment_lapsed',
+      'billing_pending',
+      'store_locked',
+      'membership_inactive',
+      'must_change_password',
+    ]) {
+      await env.cache.setPendingSyncQueue(original);
+      await env.cache.setDeadLetterQueue([]);
+      api.posts.clear();
+      api.onPost = (url, body, headers) async => throw AuthException(
+        code: 'FORBIDDEN',
+        reason: reason,
+        statusCode: 403,
+      );
+
+      expect(await repo.processPendingSyncQueue(), isFalse, reason: reason);
+      expect(env.cache.getPendingSyncQueue(), original, reason: reason);
+      expect(env.cache.getDeadLetterQueue(), isEmpty, reason: reason);
+      expect(api.posts, hasLength(1), reason: reason);
+    }
+
+    api.posts.clear();
+    api.onPost = (url, body, headers) async => {
+      'results': [_ok('a'), _ok('b')],
+    };
+
+    expect(await repo.processPendingSyncQueue(), isTrue);
+    expect(env.cache.getPendingSyncQueue(), isEmpty);
+    expect(api.posts, hasLength(1));
+    expect(_ids(api.posts.single['body']), ['a', 'b']);
+  });
+
   group(
     'push: unreachable / server trouble keeps everything and spends no retries',
     () {

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/core/sync/sync_engine.dart';
+import 'package:myshop/core/sync/sync_manager.dart';
+import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
@@ -11,13 +14,13 @@ import 'package:myshop/features/owner/data/models/expense_model.dart';
 import 'package:myshop/features/owner/data/models/staff_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/expenses_screen.dart';
-import 'package:myshop/shared/widgets/centred_dialog.dart';
 
 class FakeOwnerRepository extends OwnerRepository {
   List<Expense> expenses = [];
   String? lastMarkedPaidId;
   Map<String, dynamic>? lastCreatedExpense;
   Future<List<StaffMember>> Function()? listStaffOverride;
+  void Function()? onListExpenses;
 
   FakeOwnerRepository() : super(apiClient: ApiClient());
 
@@ -29,6 +32,7 @@ class FakeOwnerRepository extends OwnerRepository {
 
   @override
   Future<List<Expense>> listExpenses() async {
+    onListExpenses?.call();
     return expenses;
   }
 
@@ -40,6 +44,8 @@ class FakeOwnerRepository extends OwnerRepository {
     required String due,
     bool monthly = false,
     String? idempotencyKey,
+    String? outletId,
+    bool orgWide = false,
   }) async {
     lastCreatedExpense = {
       'title': title,
@@ -48,6 +54,8 @@ class FakeOwnerRepository extends OwnerRepository {
       'due': due,
       'monthly': monthly,
       'idempotencyKey': idempotencyKey,
+      'outletId': outletId,
+      'orgWide': orgWide,
     };
     final newExpense = Expense(
       id: 'exp-${DateTime.now().millisecondsSinceEpoch}',
@@ -56,13 +64,14 @@ class FakeOwnerRepository extends OwnerRepository {
       amount: amount,
       due: due,
       monthly: monthly,
+      outletId: orgWide ? null : outletId,
     );
     expenses.add(newExpense);
     return newExpense;
   }
 
   @override
-  Future<Expense> markExpensePaid(String id) async {
+  Future<void> markExpensePaid(String id, {String? paidDate}) async {
     lastMarkedPaidId = id;
     final index = expenses.indexWhere((e) => e.id == id);
     if (index >= 0) {
@@ -72,14 +81,56 @@ class FakeOwnerRepository extends OwnerRepository {
         category: expenses[index].category,
         amount: expenses[index].amount,
         due: expenses[index].due,
-        paid: DateTime.now().toIso8601String().split('T')[0],
+        paid: paidDate ?? DateTime.now().toIso8601String().split('T')[0],
         monthly: expenses[index].monthly,
+        outletId: expenses[index].outletId,
       );
       expenses[index] = updated;
-      return updated;
+      return;
     }
     throw Exception('Expense not found');
   }
+
+  @override
+  Future<void> updateExpense(
+    String id, {
+    required String title,
+    required String category,
+    required int amount,
+    required String due,
+    String? outletId,
+  }) async {
+    final index = expenses.indexWhere((e) => e.id == id);
+    if (index >= 0) {
+      expenses[index] = Expense(
+        id: id,
+        title: title,
+        category: category,
+        amount: amount,
+        due: due,
+        paid: expenses[index].paid,
+        monthly: expenses[index].monthly,
+        outletId: outletId,
+      );
+    }
+  }
+
+  @override
+  Future<void> deleteExpense(String id) async {
+    expenses.removeWhere((e) => e.id == id);
+  }
+}
+
+/// Records when a manual sync is asked for, instead of syncing.
+class _RecordingSyncEngine extends SyncEngine {
+  _RecordingSyncEngine(this.log) : super.internal();
+  final List<String> log;
+
+  @override
+  Future<void> retryNow() async => log.add('send queue');
+
+  @override
+  Future<void> trigger({bool forceFromStart = false}) async {}
 }
 
 void main() {
@@ -159,6 +210,71 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets(
+      'Retry on the sync bar sends the queued changes before reloading the list',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final log = <String>[];
+        SyncEngine.instance = _RecordingSyncEngine(log);
+        addTearDown(() => SyncEngine.instance = SyncEngine.internal());
+        addTearDown(() => SyncManager.instance.completeSync(force: true));
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpExpenses(tester);
+
+        fakeRepo.onListExpenses = () => log.add('reload list');
+        SyncManager.instance.setSyncPaused(2);
+        await tester.pump();
+
+        await tester.tap(find.text('Retry'));
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        await tester.pump();
+
+        expect(log, ['send queue', 'reload list']);
+      },
+    );
+
+    testWidgets(
+      'pull-to-refresh also sends the queued changes before reloading',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final log = <String>[];
+        SyncEngine.instance = _RecordingSyncEngine(log);
+        addTearDown(() => SyncEngine.instance = SyncEngine.internal());
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpExpenses(tester);
+
+        fakeRepo.onListExpenses = () => log.add('reload list');
+        await tester.fling(
+          find.byType(ListView).first,
+          const Offset(0, 500),
+          1000,
+        );
+        // Let the pulled indicator release and call onRefresh, then let the
+        // real-async work behind the reload finish, then draw the result.
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+
+        expect(log, ['send queue', 'reload list']);
+      },
+    );
+
     testWidgets('Stats compute correctly across the three period buckets', (
       tester,
     ) async {
@@ -233,6 +349,49 @@ void main() {
       expect(find.text('FROM'), findsOneWidget);
       expect(find.text('TO'), findsOneWidget);
     });
+
+    testWidgets(
+      'M1.9: Paid total parses both ISO-8601 timestamps and YYYY-MM-DD dates',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        fakeRepo.expenses = [
+          Expense(
+            id: 'exp-iso',
+            title: 'Legacy ISO Bill',
+            category: 'Operations',
+            amount: 75000, // ₹750
+            due: todayStr,
+            paid: '${todayStr}T14:32:00.000Z',
+            monthly: false,
+          ),
+          Expense(
+            id: 'exp-date-only',
+            title: 'Modern Date Bill',
+            category: 'Supplies',
+            amount: 25000, // ₹250
+            due: todayStr,
+            paid: todayStr,
+            monthly: false,
+          ),
+        ];
+
+        await tester.pumpWidget(buildTestWidget());
+        await pumpExpenses(tester);
+
+        // Switch to 'Today' period
+        await tester.tap(find.text('This month'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Today').last);
+        await tester.pumpAndSettle();
+
+        // Both contribute to the period's paid total: 750 + 250 = ₹1,000
+        expect(find.text(CurrencyFormatter.format(100000)), findsOneWidget);
+      },
+    );
 
     testWidgets('Search filters expenses by title and category', (
       tester,
@@ -312,7 +471,7 @@ void main() {
     });
 
     testWidgets(
-      'Marking an expense paid still works via CentredDialog confirmation',
+      'Marking an expense paid pushes ExpenseDetailScreen and confirms via date picker',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1600);
         tester.view.devicePixelRatio = 1.0;
@@ -322,13 +481,18 @@ void main() {
         await tester.pumpWidget(buildTestWidget());
         await pumpExpenses(tester);
 
-        // Tap on unpaid expense 'Shop Rent'
+        // Tap on unpaid expense 'Shop Rent' pushes ExpenseDetailScreen
         await tester.tap(find.text('Shop Rent'));
         await tester.pumpAndSettle();
 
-        // Confirmation dialog opens
-        expect(find.byType(CentredDialog), findsOneWidget);
-        expect(find.text('Mark expense paid?'), findsOneWidget);
+        expect(find.byType(ExpenseDetailScreen), findsOneWidget);
+        expect(find.text('Mark as paid'), findsOneWidget);
+
+        // Tap 'Mark as paid' opens DatePickerDialog
+        await tester.tap(find.text('Mark as paid'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(DatePickerDialog), findsOneWidget);
 
         // Tap confirm button 'Mark paid'
         await tester.tap(find.text('Mark paid'));

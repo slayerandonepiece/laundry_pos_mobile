@@ -725,61 +725,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 ],
                 const SizedBox(height: 14),
 
-                // 6. Activity & History Button Card
-                AppCard(
-                  padding: EdgeInsets.zero,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => OrderActivityScreen(order: order),
-                      ),
-                    );
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.history_outlined,
-                          size: 20,
-                          color: AppColors.primary,
-                        ),
-                        SizedBox(width: 13),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Activity & history',
-                                style: TextStyle(
-                                  fontFamily: AppTextStyles.fontBody,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.text,
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Delivery commitment, who changed what',
-                                style: TextStyle(
-                                  fontFamily: AppTextStyles.fontBody,
-                                  fontSize: 11,
-                                  color: AppColors.mutedText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.chevron_right,
-                          size: 18,
-                          color: AppColors.faintText,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                // 6. Activity & history, on the same page
+                OrderActivitySection(order: order),
               ],
             ),
           ),

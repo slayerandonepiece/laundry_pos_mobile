@@ -724,7 +724,7 @@ void main() {
         expect(filter, findsOneWidget);
         // Same chips as the dashboard cards (7 days, this month, last month).
         for (final label in [
-          '7 days',
+          'This week',
           PeriodRange.currentMonthLabel(),
           PeriodRange.previousMonthLabel(),
         ]) {
@@ -736,7 +736,7 @@ void main() {
 
         // A preset that still covers today's orders keeps them.
         await tester.tap(
-          find.descendant(of: filter, matching: find.text('7 days')),
+          find.descendant(of: filter, matching: find.text('This week')),
         );
         await tester.pumpAndSettle();
         expect(find.text('ORD-101'), findsOneWidget);

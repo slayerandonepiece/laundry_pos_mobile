@@ -14,10 +14,13 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
 
   OwnerBloc({required this.ownerRepository}) : super(OwnerState()) {
     on<LoadDashboardEvent>(_onLoadDashboard);
+    on<LoadOutletRollupsEvent>(_onLoadOutletRollups);
     on<LoadCardMetricsEvent>(_onLoadCardMetrics);
     on<ResetCardEvent>(_onResetCard);
     on<LoadExpensesEvent>(_onLoadExpenses);
     on<AddExpenseEvent>(_onAddExpense);
+    on<UpdateExpenseEvent>(_onUpdateExpense);
+    on<DeleteExpenseEvent>(_onDeleteExpense);
     on<MarkExpensePaidEvent>(_onMarkExpensePaid);
     on<LoadStaffEvent>(_onLoadStaff);
     on<AddStaffEvent>(_onAddStaff);
@@ -144,6 +147,47 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     }
   }
 
+  Future<void> _onLoadOutletRollups(
+    LoadOutletRollupsEvent event,
+    Emitter<OwnerState> emit,
+  ) async {
+    if (!event.allOutlets) {
+      emit(
+        state.copyWith(
+          outletRollups: const [],
+          outletRollupsLoading: false,
+          outletRollupsFailed: false,
+        ),
+      );
+      return;
+    }
+    emit(
+      state.copyWith(outletRollupsLoading: true, outletRollupsFailed: false),
+    );
+    try {
+      final rollups = await ownerRepository.getOutletRollups(
+        from: event.from,
+        to: event.to,
+      );
+      emit(
+        state.copyWith(
+          outletRollups: rollups,
+          outletRollupsLoading: false,
+          outletRollupsFailed: false,
+        ),
+      );
+    } catch (e) {
+      AppLogger.log(_tag, 'load outlet rollups failed', error: e);
+      emit(
+        state.copyWith(
+          outletRollups: const [],
+          outletRollupsLoading: false,
+          outletRollupsFailed: true,
+        ),
+      );
+    }
+  }
+
   Future<void> _onLoadCardMetrics(
     LoadCardMetricsEvent event,
     Emitter<OwnerState> emit,
@@ -255,6 +299,8 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         due: event.due,
         monthly: event.monthly,
         idempotencyKey: event.idempotencyKey,
+        outletId: event.outletId,
+        orgWide: event.orgWide,
       );
       final message = _writeMessage('Expense recorded successfully');
       final updated = await ownerRepository.listExpenses();
@@ -278,6 +324,75 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     }
   }
 
+  Future<void> _onUpdateExpense(
+    UpdateExpenseEvent event,
+    Emitter<OwnerState> emit,
+  ) async {
+    emit(
+      state.copyWith(loading: _addLoading(OwnerSection.expenses), error: null),
+    );
+    try {
+      await ownerRepository.updateExpense(
+        event.expenseId,
+        title: event.title,
+        category: event.category,
+        amount: event.amount,
+        due: event.due,
+        outletId: event.outletId,
+      );
+      final message = _writeMessage('Expense updated');
+      final updated = await ownerRepository.listExpenses();
+      emit(
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.expenses),
+          expenses: updated,
+          actionMessage: message,
+          messageSection: OwnerSection.expenses,
+        ),
+      );
+    } catch (e) {
+      AppLogger.log(_tag, 'update expense failed', error: e);
+      emit(
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.expenses),
+          error: _failure(e, 'Could not update expense — try again'),
+          messageSection: OwnerSection.expenses,
+        ),
+      );
+    }
+  }
+
+  Future<void> _onDeleteExpense(
+    DeleteExpenseEvent event,
+    Emitter<OwnerState> emit,
+  ) async {
+    emit(
+      state.copyWith(loading: _addLoading(OwnerSection.expenses), error: null),
+    );
+    try {
+      await ownerRepository.deleteExpense(event.expenseId);
+      final message = _writeMessage('Expense deleted');
+      final updated = await ownerRepository.listExpenses();
+      emit(
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.expenses),
+          expenses: updated,
+          actionMessage: message,
+          messageSection: OwnerSection.expenses,
+        ),
+      );
+    } catch (e) {
+      AppLogger.log(_tag, 'delete expense failed', error: e);
+      emit(
+        state.copyWith(
+          loading: _removeLoading(OwnerSection.expenses),
+          error: _failure(e, 'Could not delete expense — try again'),
+          messageSection: OwnerSection.expenses,
+        ),
+      );
+    }
+  }
+
   Future<void> _onMarkExpensePaid(
     MarkExpensePaidEvent event,
     Emitter<OwnerState> emit,
@@ -286,7 +401,10 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       state.copyWith(loading: _addLoading(OwnerSection.expenses), error: null),
     );
     try {
-      await ownerRepository.markExpensePaid(event.expenseId);
+      await ownerRepository.markExpensePaid(
+        event.expenseId,
+        paidDate: event.paidDate,
+      );
       final message = _writeMessage('Expense marked paid');
       final updated = await ownerRepository.listExpenses();
       emit(
@@ -434,10 +552,15 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         employeeId: event.employeeId,
         name: event.name,
         phone: event.phone,
+        password: event.password,
         outletIds: event.outletIds,
         defaultOutletId: event.defaultOutletId,
       );
-      final message = _writeMessage('Staff member updated successfully');
+      final message = _writeMessage(
+        event.password?.isNotEmpty == true
+            ? 'Staff member updated. Sessions end; they must set a new password at next sign-in'
+            : 'Staff member updated successfully',
+      );
       final updated = await ownerRepository.listStaff();
       emit(
         state.copyWith(
@@ -642,7 +765,11 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.profile),
-          error: 'Could not change password — try again',
+          // A throttled attempt carries the wait time ("Try again in N
+          // seconds"); show it instead of a generic retry prompt.
+          error: e is RateLimitException
+              ? e.message
+              : 'Could not change password — try again',
           messageSection: OwnerSection.profile,
         ),
       );

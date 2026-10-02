@@ -694,6 +694,30 @@ class OrdersRepository {
       // must not be sent (this run), false to carry on with the next batch.
       Future<bool> handleFailure(Object e, int start, int end) async {
         if (e is AuthException && e.code == 'FORBIDDEN') {
+          final recoverableAccess = switch (e.reason) {
+            'payment_lapsed' ||
+            'billing_pending' ||
+            'store_locked' ||
+            'membership_inactive' ||
+            'must_change_password' => true,
+            _ => false,
+          };
+          if (recoverableAccess) {
+            AppLogger.log(
+              _tag,
+              'processPendingSyncQueue(): recoverable 403 on outlet '
+              '${key ?? kNoOutletHeader}, keeping group queued',
+              error: e,
+            );
+            allBatchesOk = false;
+            return true;
+          }
+          final lastError = switch (e.reason) {
+            // The backend raises outlet-access denials as a bare FORBIDDEN
+            // with no reason, so null stays the outlet label.
+            null || 'outlet_forbidden' => 'outlet access changed',
+            _ => 'not allowed',
+          };
           AppLogger.log(
             _tag,
             'processPendingSyncQueue(): 403 FORBIDDEN on outlet '
@@ -704,7 +728,7 @@ class OrdersRepository {
             final id = action['clientActionId']?.toString();
             if (id != null && id.isNotEmpty) {
               forbiddenDeadLetterIds.add(id);
-              lastErrorById[id] = 'outlet access changed';
+              lastErrorById[id] = lastError;
             }
           }
           allBatchesOk = false;

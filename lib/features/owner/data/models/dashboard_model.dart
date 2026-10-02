@@ -61,6 +61,8 @@ class DashboardMetrics {
   final int todayCount;
   final int periodSales;
   final int periodOrders;
+  final bool hasPeriodSales;
+  final int expensesThisMonth;
   final int todo; // orders to finish
   final int completed;
   final int outstanding;
@@ -79,6 +81,8 @@ class DashboardMetrics {
     this.todayCount = 0,
     this.periodSales = 0,
     this.periodOrders = 0,
+    this.hasPeriodSales = true,
+    this.expensesThisMonth = 0,
     this.todo = 0,
     this.completed = 0,
     this.outstanding = 0,
@@ -105,6 +109,8 @@ class DashboardMetrics {
       todayCount: (json['todayCount'] as num?)?.toInt() ?? 0,
       periodSales: (json['periodSales'] as num?)?.toInt() ?? 0,
       periodOrders: (json['periodOrders'] as num?)?.toInt() ?? 0,
+      hasPeriodSales: json.containsKey('periodSales'),
+      expensesThisMonth: (json['expenses'] as num?)?.toInt() ?? 0,
       todo: (json['todo'] as num?)?.toInt() ?? 0,
       completed: (json['completed'] as num?)?.toInt() ?? 0,
       outstanding: (json['outstanding'] as num?)?.toInt() ?? 0,
@@ -123,6 +129,7 @@ class DashboardMetrics {
       'todayCount': todayCount,
       'periodSales': periodSales,
       'periodOrders': periodOrders,
+      'expenses': expensesThisMonth,
       'todo': todo,
       'completed': completed,
       'outstanding': outstanding,

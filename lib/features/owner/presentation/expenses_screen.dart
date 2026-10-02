@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
@@ -15,12 +16,16 @@ import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
-import 'package:myshop/shared/widgets/centred_dialog.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
 import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
+
+import 'expense_detail_screen.dart';
+
+export 'edit_expense_screen.dart';
+export 'expense_detail_screen.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -50,11 +55,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     super.dispose();
   }
 
-  DateTime _startOfDay(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
+  DateTime _startOfDay(DateTime dt) {
+    final local = dt.isUtc ? dt.toLocal() : dt;
+    return DateTime(local.year, local.month, local.day);
+  }
 
   DateTime? _parseDate(String? dateStr) {
     if (dateStr == null || dateStr.trim().isEmpty) return null;
-    return DateTime.tryParse(dateStr.trim());
+    return DateFormatter.parseCalendarDate(dateStr) ??
+        DateTime.tryParse(dateStr.trim());
   }
 
   Future<void> _pickCustomDate({required bool isFrom}) async {
@@ -255,20 +264,45 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     return dueMatches;
   }
 
-  void _showMarkPaidDialog(BuildContext context, Expense expense) {
-    showDialog(
+  Future<void> _showMarkPaidDatePicker(
+    BuildContext context,
+    Expense expense,
+  ) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final oneYearAgo = DateTime(today.year - 1, today.month, today.day);
+
+    final picked = await showDatePicker(
       context: context,
-      builder: (_) => CentredDialog(
-        title: 'Mark expense paid?',
-        subtitle:
-            'Mark "${expense.title}" (${CurrencyFormatter.format(expense.amount)}) as paid?',
-        confirmLabel: 'Mark paid',
-        onConfirm: () {
-          context.read<OwnerBloc>().add(MarkExpensePaidEvent(expense.id));
-          Navigator.pop(context);
-        },
-        cancelLabel: 'Cancel',
-        onCancel: () => Navigator.pop(context),
+      initialDate: today,
+      firstDate: oneYearAgo,
+      lastDate: today,
+      helpText: 'Select payment date',
+      confirmText: 'Mark paid',
+    );
+
+    if (picked != null && context.mounted) {
+      final paidDateStr = DateFormatter.toIsoDateString(picked);
+      context.read<OwnerBloc>().add(
+        MarkExpensePaidEvent(expense.id, paidDate: paidDateStr),
+      );
+    }
+  }
+
+  void _openExpenseDetails(BuildContext context, Expense expense) {
+    final bloc = context.read<OwnerBloc>();
+    final outletScopeCubit = context.read<OutletScopeCubit?>();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MultiBlocProvider(
+          providers: [
+            BlocProvider<OwnerBloc>.value(value: bloc),
+            if (outletScopeCubit != null)
+              BlocProvider<OutletScopeCubit>.value(value: outletScopeCubit),
+          ],
+          child: ExpenseDetailScreen(expense: expense),
+        ),
       ),
     );
   }
@@ -291,11 +325,25 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
+  /// Retry and pull-to-refresh both mean "sync": send what is queued first,
+  /// then reload the list. A bare reload would not send anything, so a change
+  /// saved offline would sit in the queue until the app was reopened.
+  Future<void> _syncThenReload({Completer<void>? done}) async {
+    final bloc = context.read<OwnerBloc>();
+    await SyncEngine.instance.retryNow();
+    if (!mounted) {
+      done?.complete();
+      return;
+    }
+    bloc.add(LoadExpensesEvent(refresh: true, done: done));
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final todayStart = _startOfDay(now);
     final outletScopeCubit = context.watch<OutletScopeCubit?>();
+    final outletScope = outletScopeCubit?.state;
 
     final content = BlocConsumer<OwnerBloc, OwnerState>(
       listenWhen: (prev, curr) =>
@@ -422,20 +470,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           ),
           body: Column(
             children: [
-              SyncStatusBar(
-                onSyncNow: () {
-                  context.read<OwnerBloc>().add(
-                    LoadExpensesEvent(refresh: true),
-                  );
-                },
-              ),
+              SyncStatusBar(onSyncNow: _syncThenReload),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () async {
                     final done = Completer<void>();
-                    context.read<OwnerBloc>().add(
-                      LoadExpensesEvent(refresh: true, done: done),
-                    );
+                    await _syncThenReload(done: done);
                     await done.future;
                   },
                   child: ListView(
@@ -708,13 +748,24 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               dueDt != null &&
                               dueDt.isAfter(todayStart);
 
+                          final String attributionText;
+                          if (expense.outletId == null ||
+                              expense.outletId!.isEmpty) {
+                            attributionText = 'Organization-wide';
+                          } else {
+                            final outlet = outletScope?.allowed
+                                .where((o) => o.id == expense.outletId)
+                                .firstOrNull;
+                            attributionText =
+                                outlet?.displayName ?? expense.outletId!;
+                          }
+
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 11),
                             child: AppCard(
                               padding: const EdgeInsets.all(14),
-                              onTap: !expense.isPaid
-                                  ? () => _showMarkPaidDialog(context, expense)
-                                  : null,
+                              onTap: () =>
+                                  _openExpenseDetails(context, expense),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -749,6 +800,16 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                           '${expense.category} · Due ${expense.due}',
                                           style: AppTextStyles.hint,
                                         ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          attributionText,
+                                          style: const TextStyle(
+                                            fontFamily: AppTextStyles.fontBody,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.mutedText,
+                                          ),
+                                        ),
                                         if (expense.isPaid &&
                                             expense.paid != null &&
                                             expense.paid!.isNotEmpty) ...[
@@ -782,17 +843,26 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                         ),
                                       ),
                                       const SizedBox(height: 5),
-                                      StatusPill(
-                                        label: expense.isPaid
-                                            ? 'Paid'
-                                            : (isUpcoming
-                                                  ? 'Upcoming'
-                                                  : 'Unpaid'),
-                                        variant: expense.isPaid
-                                            ? PillVariant.paid
-                                            : (isUpcoming
-                                                  ? PillVariant.neutral
-                                                  : PillVariant.warning),
+                                      InkWell(
+                                        onTap: !expense.isPaid
+                                            ? () => _showMarkPaidDatePicker(
+                                                context,
+                                                expense,
+                                              )
+                                            : null,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: StatusPill(
+                                          label: expense.isPaid
+                                              ? 'Paid'
+                                              : (isUpcoming
+                                                    ? 'Upcoming'
+                                                    : 'Unpaid'),
+                                          variant: expense.isPaid
+                                              ? PillVariant.paid
+                                              : (isUpcoming
+                                                    ? PillVariant.neutral
+                                                    : PillVariant.warning),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -840,7 +910,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final TextEditingController _amountController = TextEditingController();
   late final String _idempotencyKey = IdempotencyKeyGenerator.generate();
   String _category = 'Operations';
+  late String _due = DateFormatter.todayIsoDateString();
   bool _monthly = false;
+  bool _outletInitialized = false;
+  String? _selectedOutletId;
   String? _errorMessage;
 
   @override
@@ -848,6 +921,26 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     _titleController.dispose();
     _amountController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDueDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final current = DateFormatter.parseCalendarDate(_due) ?? today;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(today.year - 5, 1, 1),
+      lastDate: DateTime(today.year + 5, 12, 31),
+      helpText: 'Select due date',
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _due = DateFormatter.toIsoDateString(picked);
+      });
+    }
   }
 
   void _handleSave() {
@@ -861,18 +954,16 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    final now = DateTime.now();
-    final due =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
     context.read<OwnerBloc>().add(
       AddExpenseEvent(
         title: title,
         category: _category,
         amount: amountInPaise,
-        due: due,
+        due: _due,
         monthly: _monthly,
         idempotencyKey: _idempotencyKey,
+        outletId: _selectedOutletId,
+        orgWide: _selectedOutletId == null,
       ),
     );
     Navigator.pop(context);
@@ -881,17 +972,24 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     final outletScope = context.watch<OutletScopeCubit?>()?.state;
+    final allowedOutlets = outletScope?.allowed ?? const [];
+    if (!_outletInitialized && outletScope != null) {
+      _outletInitialized = true;
+      if (!outletScope.allOutlets && outletScope.activeOutletId != null) {
+        _selectedOutletId = outletScope.activeOutletId;
+      } else {
+        _selectedOutletId = null;
+      }
+    }
+
     final String scopeHint;
-    if (outletScope == null ||
-        outletScope.allOutlets ||
-        outletScope.activeOutletId == null) {
+    if (_selectedOutletId == null || _selectedOutletId!.isEmpty) {
       scopeHint = 'This expense will be recorded as organization-wide.';
     } else {
-      final activeOutlet = outletScope.allowed
-          .where((o) => o.id == outletScope.activeOutletId)
+      final activeOutlet = allowedOutlets
+          .where((o) => o.id == _selectedOutletId)
           .firstOrNull;
-      final displayName =
-          activeOutlet?.displayName ?? outletScope.activeOutletId!;
+      final displayName = activeOutlet?.displayName ?? _selectedOutletId!;
       scopeHint = 'This expense will be recorded against $displayName.';
     }
 
@@ -969,6 +1067,70 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               },
             ),
             const SizedBox(height: 14),
+            InkWell(
+              onTap: _pickDueDate,
+              borderRadius: BorderRadius.circular(10),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'DUE DATE',
+                  labelStyle: AppTextStyles.fieldLabel,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 14,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  suffixIcon: const Icon(
+                    Icons.calendar_today,
+                    size: 18,
+                    color: AppColors.mutedText,
+                  ),
+                ),
+                child: Text(
+                  _due,
+                  style: const TextStyle(
+                    fontFamily: AppTextStyles.fontBody,
+                    fontSize: 14.5,
+                    color: AppColors.text,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            // "Applies to" selector (M1.8)
+            DropdownButtonFormField<String?>(
+              initialValue: _selectedOutletId,
+              decoration: InputDecoration(
+                labelText: 'APPLIES TO',
+                labelStyle: AppTextStyles.fieldLabel,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 14,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Organization-wide'),
+                ),
+                ...allowedOutlets.map(
+                  (o) => DropdownMenuItem<String?>(
+                    value: o.id,
+                    child: Text(o.displayName),
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                setState(() => _selectedOutletId = v);
+              },
+            ),
+            const SizedBox(height: 6),
+            Text(scopeHint, style: AppTextStyles.hint),
+            const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -998,8 +1160,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            Text(scopeHint, style: AppTextStyles.hint),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
               Text(

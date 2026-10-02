@@ -98,36 +98,9 @@ class BlockedScreen extends StatelessWidget {
     } else if (normReason == 'billing_pending') {
       title = 'Billing not completed';
       if (isOwner) {
-        description = 'Complete payment to start using your organization.';
-        if (billingUrl == null || billingUrl!.isEmpty) {
-          extraNotice = Container(
-            decoration: BoxDecoration(
-              color: AppColors.warningBg,
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(color: AppColors.warningBorder),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.info_outline_rounded,
-                  size: 20,
-                  color: AppColors.warning,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Complete payment on the KlenPOS web dashboard',
-                    style: AppTextStyles.hint.copyWith(
-                      color: AppColors.warning,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
+        // Owners have no self-serve payment route (the platform administrator
+        // completes billing), so this must not promise one.
+        description = 'Your store account setup is pending billing completion. Contact your platform administrator to complete setup.';
       } else {
         description = 'Ask your owner to complete billing.';
       }

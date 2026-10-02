@@ -10,24 +10,42 @@ void main() {
   group('PeriodRange', () {
     final now = DateTime(2026, 9, 30, 15);
 
-    test('presets cover the last N days, inclusive of today', () {
-      expect(PeriodRange.last7.from(now), DateTime(2026, 9, 24, 15));
+    test('this week runs from Monday to today; 30 and 90 days are rolling', () {
+      // 30 Sep 2026 is a Wednesday, so the week started on Monday the 28th.
+      expect(PeriodRange.last7.from(now), DateTime(2026, 9, 28));
       expect(PeriodRange.last30.from(now), DateTime(2026, 9, 1, 15));
       expect(PeriodRange.last90.from(now), DateTime(2026, 7, 3, 15));
       expect(PeriodRange.last7.to(now), now);
     });
 
-    test('month presets run from the 1st; previous month ends on its last day', () {
-      expect(PeriodRange.thisMonth.from(now), DateTime(2026, 9, 1));
-      expect(PeriodRange.thisMonth.to(now), now);
-      expect(PeriodRange.previousMonth.from(now), DateTime(2026, 8, 1));
-      expect(PeriodRange.previousMonth.to(now), DateTime(2026, 8, 31));
+    test(
+      'month presets run from the 1st; previous month ends on its last day',
+      () {
+        expect(PeriodRange.thisMonth.from(now), DateTime(2026, 9, 1));
+        expect(PeriodRange.thisMonth.to(now), now);
+        expect(PeriodRange.previousMonth.from(now), DateTime(2026, 8, 1));
+        expect(PeriodRange.previousMonth.to(now), DateTime(2026, 8, 31));
+      },
+    );
+
+    test('this week starts on Monday, including on a Monday and a Sunday', () {
+      // 5 Oct 2026 is a Monday: the week is just today.
+      expect(
+        PeriodRange.last7.from(DateTime(2026, 10, 5, 9)),
+        DateTime(2026, 10, 5),
+      );
+      // 4 Oct 2026 is a Sunday: the week started on the 28th of September.
+      expect(
+        PeriodRange.last7.from(DateTime(2026, 10, 4, 23)),
+        DateTime(2026, 9, 28),
+      );
+      expect(PeriodRange.last7.label, 'This week');
     });
 
     test('contains is day-inclusive at both ends', () {
       final r = PeriodRange.last7;
-      expect(r.contains(DateTime(2026, 9, 24, 0, 1), now), isTrue);
-      expect(r.contains(DateTime(2026, 9, 23, 23, 59), now), isFalse);
+      expect(r.contains(DateTime(2026, 9, 28, 0, 1), now), isTrue);
+      expect(r.contains(DateTime(2026, 9, 27, 23, 59), now), isFalse);
       expect(r.contains(DateTime(2026, 9, 30, 23, 59), now), isTrue);
       expect(r.contains(DateTime(2026, 10, 1), now), isFalse);
     });
@@ -46,14 +64,17 @@ void main() {
       expect(custom(200).granularity, 'month');
     });
 
-    test('only the current month is the default; equal selections compare equal', () {
-      expect(PeriodRange.thisMonth.isDefault, isTrue);
-      expect(PeriodRange.previousMonth.isDefault, isFalse);
-      expect(PeriodRange.last30.isDefault, isFalse);
-      expect(PeriodRange.last7.isDefault, isFalse);
-      expect(PeriodRange.last7, const PeriodRange('7d'));
-      expect(PeriodRange.last7 == PeriodRange.last90, isFalse);
-    });
+    test(
+      'only the current month is the default; equal selections compare equal',
+      () {
+        expect(PeriodRange.thisMonth.isDefault, isTrue);
+        expect(PeriodRange.previousMonth.isDefault, isFalse);
+        expect(PeriodRange.last30.isDefault, isFalse);
+        expect(PeriodRange.last7.isDefault, isFalse);
+        expect(PeriodRange.last7, const PeriodRange('7d'));
+        expect(PeriodRange.last7 == PeriodRange.last90, isFalse);
+      },
+    );
   });
 
   group('AppDropdownField', () {

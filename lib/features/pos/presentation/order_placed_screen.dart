@@ -201,6 +201,25 @@ class _OrderPlacedScreenState extends State<OrderPlacedScreen> {
                                       fontSize: 18,
                                     ),
                                   ),
+                                ] else if (order.paidAmount > 0) ...[
+                                  // Part of the bill was received now: show
+                                  // what came in and what is still owed.
+                                  Expanded(
+                                    child: Text(
+                                      'Received ${CurrencyFormatter.format(order.paidAmount)} · $paymentMethod',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.success,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Due: ${CurrencyFormatter.format(order.balanceDue)}',
+                                    style: AppTextStyles.moneyLarge.copyWith(
+                                      fontSize: 16,
+                                      color: AppColors.danger,
+                                    ),
+                                  ),
                                 ] else ...[
                                   const Text(
                                     'Pay on delivery',

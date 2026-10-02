@@ -120,6 +120,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
         OrdersDrillDown.open => 'open',
         OrdersDrillDown.deliveredToday => 'delivered_today',
         OrdersDrillDown.dueToday => 'due_today',
+        OrdersDrillDown.overdue => 'late',
       };
     });
     _revealChip(_activeQuickFilter);

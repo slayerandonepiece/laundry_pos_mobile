@@ -2,6 +2,11 @@ abstract class AuthEvent {}
 
 class CheckAuthStatusEvent extends AuthEvent {}
 
+/// Silent re-check of the session while the app is in use (for example on
+/// resume). Unlike [CheckAuthStatusEvent] it shows no loading screen and never
+/// signs the user out on a transient failure.
+class RefreshAuthStatusEvent extends AuthEvent {}
+
 class LoginSubmittedEvent extends AuthEvent {
   final String phone;
   final String password;

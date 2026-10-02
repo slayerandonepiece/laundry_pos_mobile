@@ -35,6 +35,8 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
 > [!NOTE]
 > All release builds automatically apply R8 code/resource shrinking via `proguard-rules.pro` and require signing credentials in `android/key.properties`.
 
+> **Plain HTTP is dev-only.** Only the `dev` flavor may use `http://` (Android: `android/app/src/dev/AndroidManifest.xml` sets `usesCleartextTraffic`; stage and prod are HTTPS-only). In Dart, a `stage` or `prod` build ignores any non-HTTPS `BASE_URL`, and a `--flavor stage|prod` build can never resolve to the `dev` environment even if `--dart-define=ENV=` is missing (`AppEnvironmentConfig`). Android backup is off (`allowBackup="false"`).
+
 #### A. Android App Bundles (`.aab` for Google Play Store)
 
 * **Stage / Beta (`com.reddygona.klenpos.staging`)**:

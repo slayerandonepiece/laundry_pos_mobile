@@ -12,6 +12,7 @@ import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/data/models/dashboard_model.dart';
+import 'package:myshop/features/owner/data/models/outlet_rollup_model.dart';
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
@@ -97,9 +98,18 @@ class FakeLocalCache extends LocalCacheService {
 
 class FakeDashboardOwnerRepository implements OwnerRepository {
   DashboardMetrics metrics;
+  List<OutletRollup> rollups = const [];
+  bool rollupsShouldThrow = false;
   final List<({String? from, String? to})> calls = [];
 
   FakeDashboardOwnerRepository({required this.metrics});
+
+  @override
+  Future<DashboardMetrics> getPeriodMetrics({
+    required String from,
+    required String to,
+    required String granularity,
+  }) async => metrics;
 
   @override
   Future<DashboardMetrics> getDashboardMetrics({
@@ -113,6 +123,15 @@ class FakeDashboardOwnerRepository implements OwnerRepository {
 
   @override
   DashboardMetrics? getCachedDashboardMetricsSync() => metrics;
+
+  @override
+  Future<List<OutletRollup>> getOutletRollups({
+    required String from,
+    required String to,
+  }) async {
+    if (rollupsShouldThrow) throw Exception('rollups failed');
+    return rollups;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -154,6 +173,18 @@ class FakeOrdersBloc extends Bloc<OrdersEvent, OrdersState>
 }
 
 void main() {
+  test('outlet rollup model tolerates missing numeric fields', () {
+    final rollup = OutletRollup.fromJson({
+      'outletId': 'outlet_1',
+      'businessDate': '2026-10-02',
+    });
+
+    expect(rollup.outletId, 'outlet_1');
+    expect(rollup.ordersCreatedCount, 0);
+    expect(rollup.ordersCompletedCount, 0);
+    expect(rollup.grossOrderAmount, 0);
+  });
+
   group('OwnerDashboardScreen Outlet Scope & Vocabulary (O5.2)', () {
     late FakeDashboardOwnerRepository fakeOwnerRepo;
     late TrackingOwnerBloc ownerBloc;
@@ -227,7 +258,11 @@ void main() {
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
-      await tester.pumpAndSettle();
+      // The tracking bloc never answers the week card, whose spinner then
+      // keeps the page from going idle: step frames instead of settling.
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
     }
 
     testWidgets(
@@ -260,6 +295,7 @@ void main() {
         expect(find.text('All outlets'), findsNothing);
         expect(find.text('Chinnapanahalli'), findsOneWidget);
         expect(find.byIcon(Icons.unfold_more), findsNothing);
+        expect(find.text('Per-outlet performance'), findsNothing);
       },
     );
 

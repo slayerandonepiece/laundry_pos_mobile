@@ -249,7 +249,18 @@ class CartBloc extends Bloc<CartEvent, CartState> {
           );
           return;
         }
-        initialPayment = {'amount': state.totalAmount, 'method': methodName};
+        final received = event.receivedNow ?? state.totalAmount;
+        if (event.receivedNow != null &&
+            (received <= 0 || received > state.totalAmount)) {
+          emit(
+            state.copyWith(
+              isSubmitting: false,
+              submissionError: 'Amount received must be more than zero and at most the order total',
+            ),
+          );
+          return;
+        }
+        initialPayment = {'amount': received, 'method': methodName};
       }
 
       // Optimistic: saves locally & returns immediately; API fires in background

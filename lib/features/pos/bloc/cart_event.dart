@@ -58,12 +58,16 @@ class SubmitOrderEvent extends CartEvent {
   final String
   paymentChoice; // 'prepaid' (needs paymentMethodName) | 'delivery'
   final String? paymentMethodName;
+
+  /// Paise received at creation for a prepaid order; null means the full total.
+  final int? receivedNow;
   final DateTime? dueDate;
   final String? notes;
 
   SubmitOrderEvent({
     required this.paymentChoice,
     this.paymentMethodName,
+    this.receivedNow,
     this.dueDate,
     this.notes,
   });

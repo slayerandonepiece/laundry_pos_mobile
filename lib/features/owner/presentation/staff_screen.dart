@@ -655,6 +655,7 @@ class EditStaffScreen extends StatefulWidget {
 class _EditStaffScreenState extends State<EditStaffScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
+  late final TextEditingController _passwordController;
   String? _errorMessage;
 
   // The owner's outlets plus any the employee already has that the owner's
@@ -685,18 +686,21 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
     super.initState();
     _nameController = TextEditingController(text: widget.member.name);
     _phoneController = TextEditingController(text: widget.member.phone);
+    _passwordController = TextEditingController();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
   void _save() {
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
+    final password = _passwordController.text;
 
     if (name.isEmpty || phone.isEmpty) {
       setState(() {
@@ -706,6 +710,10 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
           _errorMessage = 'Phone number is required';
         }
       });
+      return;
+    }
+    if (password.isNotEmpty && (password.length < 8 || password.length > 128)) {
+      setState(() => _errorMessage = 'Password must be 8–128 characters');
       return;
     }
 
@@ -724,6 +732,7 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
         employeeId: widget.member.id,
         name: name,
         phone: phone,
+        password: password.isEmpty ? null : password,
         outletIds: sendOutlets ? _selectedOutlets.toList() : null,
         defaultOutletId: sendOutlets ? _defaultOutlet : null,
       ),
@@ -798,6 +807,13 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
                 hint: 'e.g. 9876543210',
                 keyboardType: TextInputType.phone,
                 controller: _phoneController,
+              ),
+              const SizedBox(height: 14),
+              AppTextField(
+                label: 'NEW PASSWORD (OPTIONAL)',
+                hint: '8–128 characters',
+                obscureText: true,
+                controller: _passwordController,
               ),
               if (widget.member.hasNoOutletAccess) ...[
                 const SizedBox(height: 14),
