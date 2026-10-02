@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
@@ -659,9 +660,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           icon: Icons.visibility_outlined,
                           label: 'View',
                           onTap: () {
+                            AppAnalytics.invoiceViewed(kind: 'order');
                             Navigator.push(
                               context,
                               MaterialPageRoute(
+                                settings: const RouteSettings(
+                                  name: 'invoice_viewer',
+                                ),
                                 builder: (_) => InvoiceViewerScreen(
                                   order: order,
                                   storeName: storeName,

@@ -4,6 +4,16 @@ Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
+## Release observability and automation — 2 October 2026
+
+- **A:** Added privacy-safe crash/session context with opaque user/store/outlet identifiers, uppercase role and environment; sign-out/block clears Crashlytics and Analytics identity.
+- **B:** Added a no-throw analytics wrapper, environment-based collection, exact order/payment/invoice/sync/auth events, named pushed routes, and bottom-tab screen views.
+- **C:** Added an injected dev/stage-only diagnostics dialog on version-label long press; production cannot open it.
+- **D:** Stage arm64 R8 builds succeeded at each step. `classes.dex`: 3,721,848 bytes baseline; 3,177,968 without Flutter blanket keeps; 2,674,008 without the Firebase blanket keep. No missing-class warning was emitted. Re-measured with fresh A/B dev builds on 2 Oct: old rules 3,721,848 B (APK 22.80 MB) vs tightened 2,674,008 B (APK 22.41 MB). Logged-in release smoke test on the Pixel emulator passed (sign-in, dashboard, orders, order detail, Subscription, subscription invoice PDF; logcat free of ClassNotFound/NoSuchMethod/FATAL), so the tightened rules are kept.
+- **E:** Added executable `scripts/release.sh` with guarded interactive/flag flows, external symbol retention, exact archive validation, and a side-effect-free stage dry run; README paths now point outside `build/`.
+
+Focused tests, mutation checks, full analysis/tests, stage Android/iOS builds, and the final gate file record the verification evidence. No Firebase-console check or store upload was performed. Error handling: `runZonedGuarded` in `lib/core/error/error_reporting.dart` routes Flutter, platform and isolate errors to Crashlytics (non-debug only) with a friendly release ErrorWidget. The version label (`AppVersionText`: "Version 1.0.5 (8) · Stage") is on login and profile screens. iOS stage release build (obfuscated) succeeds, Runner.app 26.7 MB.
+
 ## Current status — 1 October 2026 (stage release 1.0.4+6 prep)
 
 Supersedes the status sections below for anything they conflict with. Branch
@@ -431,11 +441,10 @@ Done this round:
 Open (in order):
 1. 401/403 data-loss edge case (section below) — not done.
 2. Encrypt the Hive cache (AES cipher, key in secure storage, one-time migration for existing installs).
-3. ProGuard: dropping the blanket `io.flutter.**` keep saves about 0.54 MB of `classes.dex`; needs a logged-in release smoke test first.
+3. Play Console follow-ups: review the pre-launch report, declare analytics/crash data in the Data safety form and iOS PrivacyInfo, and confirm testers are opted in so the internal-track update appears.
 4. Batch B (needs new backend endpoints first): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts, passwordChangedAt; plus the owner payment path for `billing_pending` (a product decision).
 5. Not yet seen on a device: queued mark-paid staying Paid after refresh; employee hand-over of a prepaid order from Ready; employee sign-in after an owner password reset.
-6. Crashlytics symbols: after every stage/prod release build run the `firebase crashlytics:symbols:upload` command in README section 3 (no Xcode build phase does it yet).
-7. Optional: a pink "previous period" line on the chart (no button), an "Organization-wide" outlet bucket (needs the protected outlet switcher file), `Renews on 2100-01-01` shows a raw ISO date on Subscription.
+6. Optional: a pink "previous period" line on the chart (no button), an "Organization-wide" outlet bucket (needs the protected outlet switcher file), `Renews on 2100-01-01` shows a raw ISO date on Subscription.
 
 ## Open: unsynced data and auth failures (2026-10-02, owner's request)
 

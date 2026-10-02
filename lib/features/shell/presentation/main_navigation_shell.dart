@@ -1,6 +1,7 @@
 import 'package:myshop/features/orders/presentation/orders_drill_down.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
@@ -30,6 +31,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
   final ValueNotifier<int> _dashboardResetSignal = ValueNotifier<int>(0);
   final ValueNotifier<int> _ordersResetSignal = ValueNotifier<int>(0);
+  bool _initialScreenLogged = false;
 
   /// A view the dashboard asks the Orders tab to open; the tab applies it and
   /// clears it.
@@ -77,6 +79,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     final isOwner = authState is AuthenticatedState && authState.isOwner;
+    if (!_initialScreenLogged) {
+      _initialScreenLogged = true;
+      AppAnalytics.screenView(isOwner ? 'dashboard' : 'orders');
+    }
     final notice = authState is AuthenticatedState
         ? resolveAccessNotice(authState.currentStore, isOwner: isOwner)
         : null;
@@ -177,6 +183,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                     }
                     setState(() {
                       _currentIndex = index;
+                    });
+                    AppAnalytics.screenView(switch (index) {
+                      0 => 'dashboard',
+                      1 => 'orders',
+                      _ => 'more',
                     });
                   }
                   // Reload orders whenever the user switches to the Orders

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_analytics/observer.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_environment.dart';
+import 'package:myshop/core/error/crash_context.dart';
 import 'package:myshop/core/error/error_reporting.dart';
 import 'package:myshop/core/gate/app_gate_service.dart';
 import 'package:myshop/core/logging/app_logger.dart';
@@ -134,6 +137,7 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _rescoping = false;
+  bool _hasAuthenticatedContext = false;
   late bool _splashAnimationCompleted = WidgetsBinding.instance.runtimeType
       .toString()
       .contains('Test');
@@ -445,6 +449,13 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
         child: MaterialApp(
           navigatorKey: _navigatorKey,
           scaffoldMessengerKey: _messengerKey,
+          navigatorObservers: FirebaseService.analytics == null
+              ? const []
+              : [
+                  FirebaseAnalyticsObserver(
+                    analytics: FirebaseService.analytics!,
+                  ),
+                ],
           title: AppEnvironmentConfig.appName,
           debugShowCheckedModeBanner: false,
           theme: AppTheme.theme,
@@ -466,10 +477,25 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
                       BlocListener<AuthBloc, AuthState>(
                         listener: (context, state) {
                           if (state is UnauthenticatedState) {
+                            if (_hasAuthenticatedContext) {
+                              AppAnalytics.logout();
+                            }
+                            _hasAuthenticatedContext = false;
+                            CrashContext.clear();
                             _outletScopeCubit.reset();
                             Navigator.of(context)
                                 .popUntil((route) => route.isFirst);
+                          } else if (state is AccessBlockedState) {
+                            if (_hasAuthenticatedContext) {
+                              AppAnalytics.logout();
+                            }
+                            _hasAuthenticatedContext = false;
+                            CrashContext.clear();
                           } else if (state is AuthenticatedState) {
+                            if (!_hasAuthenticatedContext) {
+                              AppAnalytics.login();
+                            }
+                            _hasAuthenticatedContext = true;
                             if (state.isFreshLogin) {
                               // Resolve the O3 initial outlet scope before
                               // BootstrapScreen (which fetches orders directly) ever
@@ -481,20 +507,26 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
                               if (_outletScopeCubit.state.missingCache) {
                                 _authBloc.add(SessionRevokedEvent());
                               }
-                              return;
+                            } else {
+                              // Cold start (or post-bootstrap re-entry): re-read
+                              // whatever outlet scope is already cached. Preloading
+                              // catalog/orders/dashboard itself happens in the
+                              // OutletScopeCubit listener below, once scope is
+                              // actually resolved — that also covers the case where a
+                              // cold-start employee has to pick from
+                              // OutletRequiredScreen first.
+                              _outletScopeCubit.hydrate();
+                              if (_outletScopeCubit.state.missingCache) {
+                                _authBloc.add(SessionRevokedEvent());
+                              }
                             }
-
-                            // Cold start (or post-bootstrap re-entry): re-read
-                            // whatever outlet scope is already cached. Preloading
-                            // catalog/orders/dashboard itself happens in the
-                            // OutletScopeCubit listener below, once scope is
-                            // actually resolved — that also covers the case where a
-                            // cold-start employee has to pick from
-                            // OutletRequiredScreen first.
-                            _outletScopeCubit.hydrate();
-                            if (_outletScopeCubit.state.missingCache) {
-                              _authBloc.add(SessionRevokedEvent());
-                            }
+                            CrashContext.setAuthenticated(
+                              userId: state.user.id,
+                              storeId: state.currentStore.storeId,
+                              outletId: _outletScopeCubit.state.activeOutletId,
+                              role: state.currentStore.role,
+                              environment: AppEnvironmentConfig.name,
+                            );
                           }
                         },
                       ),

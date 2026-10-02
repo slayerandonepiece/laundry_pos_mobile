@@ -6,6 +6,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_environment.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 
@@ -48,6 +49,10 @@ class FirebaseService {
 
       // 3. Analytics Setup
       analytics = FirebaseAnalytics.instance;
+      AppAnalytics.configure(analytics);
+      await analytics?.setAnalyticsCollectionEnabled(
+        !AppEnvironmentConfig.isDev,
+      );
       await analytics?.setUserProperty(
         name: 'environment',
         value: AppEnvironmentConfig.name,

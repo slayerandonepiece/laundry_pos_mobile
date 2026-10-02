@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/logging/app_logger.dart';
@@ -133,9 +134,11 @@ class InvoiceActionsSheet extends StatelessWidget {
             subtitle: 'Open it in the app',
             onTap: () {
               Navigator.pop(context);
+              AppAnalytics.invoiceViewed(kind: 'order');
               Navigator.push(
                 context,
                 MaterialPageRoute(
+                  settings: const RouteSettings(name: 'invoice_viewer'),
                   builder: (_) => InvoiceViewerScreen(
                     order: order,
                     storeName: storeName,
@@ -316,6 +319,7 @@ class InvoiceActionsSheet extends StatelessWidget {
         subject: subject,
         invoiceNo: invoiceNo,
       );
+      await AppAnalytics.invoiceShared(kind: 'order');
       AppLogger.log(_tag, 'share sheet result: ${result.status}');
     } catch (e, st) {
       AppLogger.log(_tag, 'share failed', error: e);

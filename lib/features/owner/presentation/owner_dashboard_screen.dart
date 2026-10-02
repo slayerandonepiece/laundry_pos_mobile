@@ -1960,6 +1960,7 @@ class _RecentOrdersCard extends StatelessWidget {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
+          settings: const RouteSettings(name: 'order_detail'),
           builder: (_) => OrderDetailScreen(initialOrder: order),
         ),
       ),

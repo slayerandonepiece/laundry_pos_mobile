@@ -30,6 +30,10 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
 
 ## Build & Release Commands (Copy-Paste Ready)
 
+### Release script
+
+Use `scripts/release.sh` for a guarded stage or production release preparation. It runs the quality gates, builds Android and/or guides the Xcode archive, stores Dart symbols under `$HOME/klenpos-symbols/<env>/<version>/`, uploads Crashlytics symbols, and leaves every store upload manual. Run `scripts/release.sh --help` for flags; use `--dry-run` to inspect the complete flow without building or uploading.
+
 ### 1. Android Release Commands (with Obfuscation & R8)
 
 > [!NOTE]
@@ -46,7 +50,7 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
     -t lib/main.dart \
     --dart-define=ENV=stage \
     --obfuscate \
-    --split-debug-info=build/symbols/stage
+    --split-debug-info="$HOME/klenpos-symbols/stage/<version>/android"
   ```
   *Output:* `build/app/outputs/bundle/stageRelease/app-stage-release.aab`
 
@@ -57,7 +61,7 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
     -t lib/main.dart \
     --dart-define=ENV=prod \
     --obfuscate \
-    --split-debug-info=build/symbols/prod
+    --split-debug-info="$HOME/klenpos-symbols/prod/<version>/android"
   ```
   *Output:* `build/app/outputs/bundle/prodRelease/app-prod-release.aab`
 
@@ -72,7 +76,7 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
     -t lib/main.dart \
     --dart-define=ENV=stage \
     --obfuscate \
-    --split-debug-info=build/symbols/stage
+    --split-debug-info="$HOME/klenpos-symbols/stage/<version>/android"
   ```
   *Output:* `build/app/outputs/flutter-apk/app-stage-release.apk`
 
@@ -83,7 +87,7 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
     -t lib/main.dart \
     --dart-define=ENV=prod \
     --obfuscate \
-    --split-debug-info=build/symbols/prod
+    --split-debug-info="$HOME/klenpos-symbols/prod/<version>/android"
   ```
   *Output:* `build/app/outputs/flutter-apk/app-prod-release.apk`
 
@@ -98,7 +102,7 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
     -t lib/main.dart \
     --dart-define=ENV=stage \
     --obfuscate \
-    --split-debug-info=build/symbols/ios-stage
+    --split-debug-info="$HOME/klenpos-symbols/stage/<version>/ios"
   ```
   *Output:* `build/ios/ipa/KlenPOS Stage.ipa`
 
@@ -109,7 +113,7 @@ Flutter uses four work statuses (Pending, In progress, Ready, Delivered). Androi
     -t lib/main.dart \
     --dart-define=ENV=prod \
     --obfuscate \
-    --split-debug-info=build/symbols/ios-prod
+    --split-debug-info="$HOME/klenpos-symbols/prod/<version>/ios"
   ```
   *Output:* `build/ios/ipa/KlenPOS.ipa`
 
@@ -121,8 +125,8 @@ Releases are built with `--obfuscate`, so Crashlytics shows unreadable stack tra
 
 | Build | Symbol folder | Command |
 | --- | --- | --- |
-| Android stage | `build/symbols/stage` | `firebase crashlytics:symbols:upload --app=1:649080719329:android:3dd281b9de95bf84fb34a0 build/symbols/stage` |
-| Android prod | `build/symbols/prod` | `firebase crashlytics:symbols:upload --app=1:409671694030:android:88a72eab23d25ab7bcc29f build/symbols/prod` |
+| Android stage | `$HOME/klenpos-symbols/stage/<version>/android` | `firebase crashlytics:symbols:upload --app=<id from stage google-services.json> "$HOME/klenpos-symbols/stage/<version>/android"` |
+| Android prod | `$HOME/klenpos-symbols/prod/<version>/android` | `firebase crashlytics:symbols:upload --app=<id from prod google-services.json> "$HOME/klenpos-symbols/prod/<version>/android"` |
 
 **iOS** (after Product > Archive in Xcode; this picks the newest Xcode archive, so check it is the one you just made):
 
@@ -135,17 +139,17 @@ build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols -
 
 (For a `flutter build ipa` archive the dSYMs are in `build/ios/archive/Runner.xcarchive/dSYMs` instead.)
 
-If `build/ios/SourcePackages` is missing (after `flutter clean`), run any `flutter build ios` once or use the same tool under `~/Library/Developer/Xcode/DerivedData/Runner-*/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols`. The important file is `App.framework.dSYM` (the Dart code); its UUID must match `dwarfdump --uuid build/symbols/ios-<flavor>/app.ios-arm64.symbols`.
+If `build/ios/SourcePackages` is missing (after `flutter clean`), run any `flutter build ios` once or use the same tool under `~/Library/Developer/Xcode/DerivedData/Runner-*/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols`. The important file is `App.framework.dSYM` (the Dart code); its UUID must match `dwarfdump --uuid "$HOME/klenpos-symbols/<flavor>/<version>/ios/app.ios-arm64.symbols"`.
 
 The Android app IDs are the `mobilesdk_app_id` of each flavor's `google-services.json` (package `com.reddygona.klenpos.staging` / `com.reddygona.klenpos`). The iOS commands read the app ID from `ios/Firebase/<flavor>/GoogleService-Info.plist`.
 
 - The Crashlytics Gradle plugin already uploads Android native symbols; this step is for the Dart code.
-- When building from Xcode (Product > Archive), run `flutter build ios --release --config-only --flavor <stage|prod> --dart-define=ENV=<stage|prod> --obfuscate --split-debug-info=build/symbols/ios-<stage|prod>` first. After archiving, upload the dSYMs from that archive (Organizer > Show in Finder > Show Package Contents > dSYMs) with the iOS command above, pointing at that folder.
+- When building from Xcode (Product > Archive), run `flutter build ios --release --config-only --flavor <stage|prod> --dart-define=ENV=<stage|prod> --obfuscate --split-debug-info="$HOME/klenpos-symbols/<stage|prod>/<version>/ios"` first. After archiving, upload the dSYMs from that archive (Organizer > Show in Finder > Show Package Contents > dSYMs) with the iOS command above, pointing at that folder.
 - Xcode's "Upload Symbols Failed ... FirebaseAnalytics / GoogleAppMeasurement / GoogleAdsOnDeviceConversion / GoogleAppMeasurementIdentitySupport" messages are harmless warnings: those are Google's closed-source binaries and ship without dSYMs. They do not block the upload.
 
 ### 4. Release checklist (stage first, then prod; same steps for both)
 
-Replace `<flavor>` with `stage` or `prod`. Never run `flutter clean` between a build and its symbol upload: it deletes `build/symbols/`. Keep a copy of every symbol folder for each released version.
+Replace `<flavor>` with `stage` or `prod` and `<version>` with the full `name+build` value. Symbols stay outside the repository so `flutter clean` cannot delete them. Keep every released version's folder.
 
 **Common (both platforms)**
 1. **Version.** Bump `version:` in `pubspec.yaml` (`name+build`). The build number must be higher than anything already uploaded to Play Console / App Store Connect. Commit it.
@@ -153,13 +157,13 @@ Replace `<flavor>` with `stage` or `prod`. Never run `flutter clean` between a b
 
 **Android (Google Play)**
 1. Build the bundle:
-   `flutter build appbundle --flavor <flavor> -t lib/main.dart --dart-define=ENV=<flavor> --obfuscate --split-debug-info=build/symbols/<flavor>`
-2. Upload the Dart symbols to Crashlytics (section 3, Android row): `firebase crashlytics:symbols:upload --app=<android app id> build/symbols/<flavor>`.
+   `flutter build appbundle --flavor <flavor> -t lib/main.dart --dart-define=ENV=<flavor> --obfuscate --split-debug-info="$HOME/klenpos-symbols/<flavor>/<version>/android"`
+2. Upload the Dart symbols to Crashlytics (section 3, Android row): `firebase crashlytics:symbols:upload --app=<android app id> "$HOME/klenpos-symbols/<flavor>/<version>/android"`.
 3. In Play Console upload `build/app/outputs/bundle/<flavor>Release/app-<flavor>-release.aab`: Testing > Internal testing for stage, Production for prod. Paste the "What's new" text (max 500 characters).
 
 **iOS (App Store Connect), always from Xcode**
 1. Prepare the Flutter config so Xcode builds with the right flavor, environment and obfuscation:
-   `flutter build ios --release --config-only --flavor <flavor> --dart-define=ENV=<flavor> --obfuscate --split-debug-info=build/symbols/ios-<flavor>`
+   `flutter build ios --release --config-only --flavor <flavor> --dart-define=ENV=<flavor> --obfuscate --split-debug-info="$HOME/klenpos-symbols/<flavor>/<version>/ios"`
 2. `open ios/Runner.xcworkspace` (the workspace, not the project).
 3. In Xcode pick the `<flavor>` scheme and the destination **Any iOS Device (arm64)**. Under Signing & Capabilities check team `CARPPQWPK9` and "Automatically manage signing".
 4. **Product > Archive.** Organizer opens when it finishes. The archive is saved under `~/Library/Developer/Xcode/Archives/<date>/` (not `build/ios/archive`).

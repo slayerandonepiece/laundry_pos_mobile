@@ -131,6 +131,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (state.placedOrder != null) {
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(
+                settings: const RouteSettings(name: 'order_placed'),
                 builder: (_) => OrderPlacedScreen(order: state.placedOrder!),
               ),
               (route) => route.isFirst,

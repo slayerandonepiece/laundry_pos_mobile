@@ -164,6 +164,7 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(name: 'services'),
                             builder: (_) => const ServicesScreen(),
                           ),
                         ),
@@ -193,6 +194,7 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(name: 'expenses'),
                             builder: (_) => const ExpensesScreen(),
                           ),
                         ),
@@ -210,6 +212,7 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(name: 'staff'),
                             builder: (_) => const StaffScreen(),
                           ),
                         ),
@@ -227,6 +230,9 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(
+                              name: 'payment_methods',
+                            ),
                             builder: (_) => const PaymentMethodsScreen(),
                           ),
                         ),
@@ -273,6 +279,9 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(
+                              name: 'owner_profile',
+                            ),
                             builder: (_) => const OwnerProfileScreen(),
                           ),
                         ),
@@ -290,6 +299,7 @@ class MoreScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
+                            settings: const RouteSettings(name: 'subscription'),
                             builder: (_) => const SubscriptionScreen(),
                           ),
                         ),

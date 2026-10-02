@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/analytics/app_analytics.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../core/sync/sync_freshness.dart';
@@ -232,6 +233,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         event.amount,
         event.method,
       );
+      await AppAnalytics.paymentRecorded(amountPaise: event.amount);
       final updated = await ordersRepository.updateStatus(
         event.orderCode,
         'Delivered',
@@ -301,6 +303,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
         event.amount,
         event.method,
       );
+      await AppAnalytics.paymentRecorded(amountPaise: event.amount);
       final updatedList = state.allOrders
           .map((o) => o.isSameOrder(updated) ? updated : o)
           .toList();

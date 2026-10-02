@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/owner/data/models/subscription_invoice_model.dart';
@@ -73,10 +74,13 @@ class _SubscriptionInvoiceViewerScreenState
                 icon: const Icon(Icons.ios_share, color: AppColors.mutedText),
                 onPressed: bytes == null
                     ? null
-                    : () => Printing.sharePdf(
-                        bytes: bytes,
-                        filename: '${invoice.number}.pdf',
-                      ),
+                    : () async {
+                        await Printing.sharePdf(
+                          bytes: bytes,
+                          filename: '${invoice.number}.pdf',
+                        );
+                        await AppAnalytics.invoiceShared(kind: 'subscription');
+                      },
               );
             },
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
@@ -68,6 +69,7 @@ class _FakePosRepo implements PosRepository {
   List<StorePaymentMethod>? cachedPaymentMethods;
   int listPaymentMethodsCalls = 0;
   bool throwOnPaymentMethods = false;
+  bool throwOnCreateOrder = false;
   String? lastPassedOutletId;
   String? lastPassedPaymentMethodName;
 
@@ -101,6 +103,7 @@ class _FakePosRepo implements PosRepository {
     Map<String, dynamic>? initialPayment,
     String? outletId,
   }) async {
+    if (throwOnCreateOrder) throw Exception('create failed');
     lastPassedOutletId = outletId;
     lastPassedPaymentMethodName = initialPayment?['method']?.toString();
     return Order(
@@ -118,6 +121,20 @@ class _FakePosRepo implements PosRepository {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RecordingSink implements AppAnalyticsSink {
+  final events = <({String name, Map<String, Object>? parameters})>[];
+
+  @override
+  Future<void> logEvent(String name, Map<String, Object>? parameters) async =>
+      events.add((name: name, parameters: parameters));
+
+  @override
+  Future<void> setUserId(String? userId) async {}
+
+  @override
+  Future<void> setUserProperty(String name, String? value) async {}
 }
 
 void main() {
@@ -197,6 +214,60 @@ void main() {
         expect(bloc.state.placedOrder?.outletId, equals('outlet_mth_02'));
       },
     );
+
+    test(
+      'placing an order fires order_placed once, with no customer data',
+      () async {
+        final sink = _RecordingSink();
+        AppAnalytics.setSinkForTesting(sink);
+        addTearDown(() => AppAnalytics.setSinkForTesting(null));
+
+        bloc.add(
+          SetCustomerDetailsEvent(
+            phone: '9876543210',
+            customerName: 'Distinctive Customer',
+            dueDate: DateTime(2026, 10, 3),
+            notes: '',
+          ),
+        );
+        bloc.add(AddItemToCartEvent(product: testProduct, quantity: 2));
+        await bloc.stream.firstWhere((s) => s.items.isNotEmpty);
+
+        bloc.add(
+          SubmitOrderEvent(paymentChoice: 'prepaid', paymentMethodName: 'UPI'),
+        );
+        await bloc.stream.firstWhere((s) => s.placedOrder != null);
+
+        final placed = sink.events
+            .where((e) => e.name == 'order_placed')
+            .toList();
+        expect(placed, hasLength(1));
+        expect(placed.single.parameters, {
+          'payment_choice': 'prepaid',
+          'item_count': bloc.state.totalItemCount,
+          'value_paise': bloc.state.totalAmount,
+        });
+        final everything = sink.events
+            .map((e) => '${e.name} ${e.parameters}')
+            .join();
+        expect(everything, isNot(contains('9876543210')));
+        expect(everything, isNot(contains('Distinctive')));
+      },
+    );
+
+    test('a failed order sends no order_placed event', () async {
+      final sink = _RecordingSink();
+      AppAnalytics.setSinkForTesting(sink);
+      addTearDown(() => AppAnalytics.setSinkForTesting(null));
+      fakeRepo.throwOnCreateOrder = true;
+
+      bloc.add(AddItemToCartEvent(product: testProduct, quantity: 1));
+      await bloc.stream.firstWhere((s) => s.items.isNotEmpty);
+      bloc.add(SubmitOrderEvent(paymentChoice: 'delivery'));
+      await bloc.stream.firstWhere((s) => s.submissionError != null);
+
+      expect(sink.events.where((e) => e.name == 'order_placed'), isEmpty);
+    });
 
     test('LoadCatalogEvent populates paymentMethods on CartState', () async {
       bloc.add(LoadCatalogEvent());

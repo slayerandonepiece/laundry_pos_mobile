@@ -153,8 +153,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       ),
     );
 
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const NewSaleBrowseScreen()));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'new_order_items'),
+        builder: (_) => const NewSaleBrowseScreen(),
+      ),
+    );
   }
 
   void _handleBack(BuildContext context) {

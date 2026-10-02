@@ -1,4 +1,5 @@
 import 'package:myshop/shared/widgets/app_button.dart';
+import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -298,14 +299,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     return AppCard(
       key: ValueKey('subscription-invoice-${invoice.invoiceSeq}'),
       padding: EdgeInsets.zero,
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => RepositoryProvider<OwnerRepository>.value(
-            value: context.read<OwnerRepository>(),
-            child: SubscriptionInvoiceViewerScreen(invoice: invoice),
+      onTap: () {
+        AppAnalytics.invoiceViewed(kind: 'subscription');
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            settings: const RouteSettings(name: 'subscription_invoice'),
+            builder: (_) => RepositoryProvider<OwnerRepository>.value(
+              value: context.read<OwnerRepository>(),
+              child: SubscriptionInvoiceViewerScreen(invoice: invoice),
+            ),
           ),
-        ),
-      ),
+        );
+      },
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
