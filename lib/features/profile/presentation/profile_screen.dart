@@ -2,6 +2,7 @@ import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/constants/app_environment.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/shared/widgets/app_version_text.dart';
 import 'package:myshop/core/storage/local_cache.dart';
@@ -12,8 +13,15 @@ import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'change_password_screen.dart';
+
+/// The policy pages are served by the same web app as the API.
+Future<void> _openLegalPage(String page) => launchUrl(
+  Uri.parse('${AppEnvironmentConfig.baseUrl}/$page'),
+  mode: LaunchMode.externalApplication,
+);
 
 /// The only place logout lives — no other screen carries a sign-out control.
 class ProfileScreen extends StatelessWidget {
@@ -396,6 +404,16 @@ class ProfileScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
               ),
+            ),
+            _ProfileRow(
+              icon: Icons.privacy_tip_outlined,
+              label: 'Privacy policy',
+              onTap: () => _openLegalPage('privacy'),
+            ),
+            _ProfileRow(
+              icon: Icons.description_outlined,
+              label: 'Terms of service',
+              onTap: () => _openLegalPage('terms'),
             ),
             const Spacer(),
             const Divider(color: AppColors.border, height: 1),

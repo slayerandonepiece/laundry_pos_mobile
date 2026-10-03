@@ -78,6 +78,7 @@ Skipped on purpose: PF-02 (the web has no "Organization contact" label) and OO-0
 | 10 | Backend/API gaps for the web team | No `/api/v1/outlets` route; no announcements endpoint; an employee omitting the outlet on rollups falls back silently instead of getting 403 |
 | 6 | Store gating | No App Store listing yet, so `ios_app_store_id` and force-update stay dormant |
 | 7 | Data | Neon has only a stage branch given to us; two old test employees ("Test Emp Single", "Test Emp Multi") remain there |
+| 11 | Legal and privacy (3 Oct, not needed for first Play release; web items are in `../laundry_pos`) | (a) purge script/runbook for the "deleted within 3 months" promise: stores are only soft-deleted (`deletedAt`), nothing hard-deletes, and `Order`/`Payment` cascade from `Store`, so test on a throwaway store first; do this before real customer data is held; (b) `robots: noindex` and optional expiry on public invoice links `/i/[token]`; (c) record Terms/Privacy acceptance at onboarding (super-admin create-store); (d) cap on how long unpaid accounts stay on hold (now unlimited); (e) refund rule (Terms default: non-refundable); (f) web login still says MyShop/StoreOps, legal pages say KlenPOS; (g) website `[DOMAIN]` in `docs/legal/play-data-safety-answers.md`; (h) update policy and Play Data safety form when push notifications go live, a new SDK is added, or hosting region/retention changes |
 
 Decisions taken 2026-10-01: `MOBILE_BLOCK_TERMS_NOT_SET` stays `false`
 (unbilled organizations keep working; turning it on locks them out because
