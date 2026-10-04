@@ -162,6 +162,7 @@
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
+				C1D2E3F4A5B60718293A4C01 /* [firebase_crashlytics] Upload Symbols */,
 			);
 			buildRules = (
 			);
@@ -285,6 +286,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+		};
+		C1D2E3F4A5B60718293A4C01 /* [firebase_crashlytics] Upload Symbols */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
+				"$(SRCROOT)/$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "[firebase_crashlytics] Upload Symbols";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Upload dSYMs (Flutter App.framework and Runner) to Crashlytics for release builds.\ncase \"$CONFIGURATION\" in\n  Release-*) ;;\n  *) exit 0 ;;\nesac\n\nUPLOAD=\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols\"\nGSP=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/GoogleService-Info.plist\"\n\nif [ ! -x \"$UPLOAD\" ]; then\n  echo \"warning: Crashlytics upload-symbols not found at $UPLOAD, dSYMs were not uploaded\"\n  exit 0\nfi\nif [ ! -f \"$GSP\" ]; then\n  echo \"warning: GoogleService-Info.plist not found at $GSP, dSYMs were not uploaded\"\n  exit 0\nfi\n\nfor DSYM in \"${DWARF_DSYM_FOLDER_PATH}/App.framework.dSYM\" \"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}\"; do\n  if [ -d \"$DSYM\" ]; then\n    \"$UPLOAD\" -gsp \"$GSP\" -p ios \"$DSYM\" || echo \"warning: Crashlytics dSYM upload failed for $DSYM\"\n  else\n    echo \"warning: dSYM not found: $DSYM\"\n  fi\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

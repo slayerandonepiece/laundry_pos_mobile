@@ -147,7 +147,7 @@ Releases are built with `--obfuscate`, so Crashlytics shows unreadable stack tra
 | Android stage | `$HOME/klenpos-symbols/stage/<version>/android` | `firebase crashlytics:symbols:upload --app=<id from stage google-services.json> "$HOME/klenpos-symbols/stage/<version>/android"` |
 | Android prod | `$HOME/klenpos-symbols/prod/<version>/android` | `firebase crashlytics:symbols:upload --app=<id from prod google-services.json> "$HOME/klenpos-symbols/prod/<version>/android"` |
 
-**iOS** (after Product > Archive in Xcode; this picks the newest Xcode archive, so check it is the one you just made):
+**iOS** is automatic: the `[firebase_crashlytics] Upload Symbols` Xcode build phase uploads the dSYMs during Product > Archive (Release configurations only). The archive log shows `Successfully uploaded Crashlytics symbols` once per dSYM; a `warning:` line instead means it was skipped. Use the manual command below only then (after Product > Archive in Xcode; this picks the newest Xcode archive, so check it is the one you just made):
 
 ```bash
 # stage
@@ -163,7 +163,7 @@ If `build/ios/SourcePackages` is missing (after `flutter clean`), run any `flutt
 The Android app IDs are the `mobilesdk_app_id` of each flavor's `google-services.json` (package `com.reddygona.klenpos.staging` / `com.reddygona.klenpos`). The iOS commands read the app ID from `ios/Firebase/<flavor>/GoogleService-Info.plist`.
 
 - The Crashlytics Gradle plugin already uploads Android native symbols; this step is for the Dart code.
-- When building from Xcode (Product > Archive), run `flutter build ios --release --config-only --flavor <stage|prod> --dart-define=ENV=<stage|prod> --obfuscate --split-debug-info="$HOME/klenpos-symbols/<stage|prod>/<version>/ios"` first. After archiving, upload the dSYMs from that archive (Organizer > Show in Finder > Show Package Contents > dSYMs) with the iOS command above, pointing at that folder.
+- When building from Xcode (Product > Archive), run `flutter build ios --release --config-only --flavor <stage|prod> --dart-define=ENV=<stage|prod> --obfuscate --split-debug-info="$HOME/klenpos-symbols/<stage|prod>/<version>/ios"` first. The dSYMs are uploaded automatically while archiving (see the iOS note above); only upload them by hand if the archive log shows a `warning:` from that phase.
 - Xcode's "Upload Symbols Failed ... FirebaseAnalytics / GoogleAppMeasurement / GoogleAdsOnDeviceConversion / GoogleAppMeasurementIdentitySupport" messages are harmless warnings: those are Google's closed-source binaries and ship without dSYMs. They do not block the upload.
 
 ### 4. Release checklist (stage first, then prod; same steps for both)
@@ -186,7 +186,7 @@ Replace `<flavor>` with `stage` or `prod` and `<version>` with the full `name+bu
 2. `open ios/Runner.xcworkspace` (the workspace, not the project).
 3. In Xcode pick the `<flavor>` scheme and the destination **Any iOS Device (arm64)**. Under Signing & Capabilities check team `CARPPQWPK9` and "Automatically manage signing".
 4. **Product > Archive.** Organizer opens when it finishes. The archive is saved under `~/Library/Developer/Xcode/Archives/<date>/` (not `build/ios/archive`).
-5. Upload the dSYMs of that archive to Crashlytics (section 3, iOS command, pointing at the newest Xcode archive).
+5. Check the archive log for `Successfully uploaded Crashlytics symbols` (the Xcode build phase uploads the dSYMs; section 3 has the manual command if it warned).
 6. In Organizer: **Validate App**, then **Distribute App > App Store Connect > Upload**. "Upload Symbols Failed" for FirebaseAnalytics, GoogleAppMeasurement, GoogleAdsOnDeviceConversion and GoogleAppMeasurementIdentitySupport is a harmless warning.
 7. In App Store Connect: wait for processing (about 10-30 minutes), answer export compliance (standard HTTPS only), attach the build to the version and paste "What's new". Stage goes to TestFlight only; prod: check screenshots and privacy answers, add a demo owner login to the review notes, then Submit for Review.
    Upload only one build per version+build number (App Store Connect rejects a duplicate).

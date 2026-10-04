@@ -180,7 +180,7 @@ if [[ "$PLATFORM" == ios || "$PLATFORM" == both ]]; then
   if $DRY_RUN; then
     say 'DRY RUN: wait for Enter after the Xcode archive completes'
     say 'DRY RUN: find newest archive, verify start time, bundle id, version, and build'
-    say "DRY RUN: upload archive dSYMs with ios/Firebase/$ENVIRONMENT/GoogleService-Info.plist"
+    say 'DRY RUN: dSYMs are uploaded by the Xcode build phase during the archive'
     say 'DRY RUN: open verified archive in Organizer'
     IOS_RESULT="Xcode archive pending; Dart symbols $IOS_SYMBOLS"
   else
@@ -206,14 +206,9 @@ PY
     [[ "$ACTUAL_BUNDLE" == "$EXPECTED_BUNDLE" ]] || fail "Archive bundle id mismatch: expected $EXPECTED_BUNDLE"
     [[ "$ACTUAL_VERSION" == "$VERSION_NAME" ]] || fail "Archive version mismatch: expected $VERSION_NAME"
     [[ "$ACTUAL_BUILD" == "$BUILD_NUMBER" ]] || fail "Archive build mismatch: expected $BUILD_NUMBER"
-    UPLOAD_SYMBOLS="build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols"
-    if [[ ! -x "$UPLOAD_SYMBOLS" ]]; then
-      UPLOAD_SYMBOLS="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols' -type f -perm -111 -print -quit)"
-    fi
-    [[ -n "$UPLOAD_SYMBOLS" && -x "$UPLOAD_SYMBOLS" ]] || fail 'Firebase iOS upload-symbols tool not found'
-    "$UPLOAD_SYMBOLS" -gsp "ios/Firebase/$ENVIRONMENT/GoogleService-Info.plist" -p ios "$ARCHIVE/dSYMs"
+    # dSYMs are uploaded by the "[firebase_crashlytics] Upload Symbols" build phase during the archive.
     open "$ARCHIVE"
-    IOS_RESULT="archive $ARCHIVE; Dart symbols $IOS_SYMBOLS; dSYMs uploaded"
+    IOS_RESULT="archive $ARCHIVE; Dart symbols $IOS_SYMBOLS; dSYMs uploaded by the Xcode build phase"
   fi
 fi
 
