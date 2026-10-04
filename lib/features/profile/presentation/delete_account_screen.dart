@@ -119,19 +119,19 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
     final auth = context.watch<AuthBloc>().state;
     if (auth is! AuthenticatedState) return const SizedBox.shrink();
 
-    final done = _scheduledFor != null;
+    if (_scheduledFor != null) return _buildDone(auth);
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
-        automaticallyImplyLeading: !done,
         title: const Text('Delete account', style: AppTextStyles.h2),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: done ? _buildDone() : _buildForm(auth),
+          child: _buildForm(auth),
         ),
       ),
     );
@@ -252,33 +252,83 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
     );
   }
 
-  Widget _buildDone() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 24),
-        const Icon(
-          Icons.check_circle_outline,
-          size: 48,
-          color: AppColors.primary,
+  /// Same full-screen layout as the restore screen shown after the next sign-in.
+  Widget _buildDone(AuthenticatedState auth) {
+    final isOwner = auth.isOwner;
+    final date = DateFormatter.parseCalendarDate(_scheduledFor);
+    final days = date?.difference(DateTime.now()).inDays.clamp(0, 100000);
+    final what = isOwner ? 'Your store and all its data' : 'Your mobile number';
+
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Spacer(),
+              Center(
+                child: Container(
+                  width: 68,
+                  height: 68,
+                  decoration: const BoxDecoration(
+                    color: AppColors.warningBg,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.schedule,
+                    size: 32,
+                    color: AppColors.warning,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Deletion requested',
+                style: AppTextStyles.h1,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '$what will be permanently deleted on '
+                '${DateFormatter.formatFull(_scheduledFor)}.',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.mutedText,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (days != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  '$days ${days == 1 ? 'day' : 'days'} left to restore',
+                  style: AppTextStyles.hint.copyWith(
+                    color: AppColors.warning,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              const SizedBox(height: 20),
+              AppInset(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Text(
+                  'Changed your mind? Sign in again before then and '
+                  '${isOwner ? 'everything comes back as you left it.' : 'you can use the app again as before.'}',
+                  style: AppTextStyles.hint.copyWith(
+                    color: AppColors.mutedText,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              PrimaryButton(label: 'Sign out', onPressed: _signOut),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        const Text(
-          'Deletion requested',
-          style: AppTextStyles.h1,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'Your data will be permanently deleted on '
-          '${DateFormatter.formatFull(_scheduledFor)}. '
-          'Sign in again before then to restore your account.',
-          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.mutedText),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 28),
-        PrimaryButton(label: 'Sign out', onPressed: _signOut),
-      ],
+      ),
     );
   }
 

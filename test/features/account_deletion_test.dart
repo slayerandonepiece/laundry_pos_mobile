@@ -277,6 +277,9 @@ void main() {
       expect(requested, 1);
       expect(find.text('Deletion requested'), findsOneWidget);
       expect(find.textContaining('2 Jan 2027'), findsOneWidget);
+      // Same layout as the restore screen: days left and a Sign out button.
+      expect(find.textContaining('left to restore'), findsOneWidget);
+      expect(find.text('Sign out'), findsOneWidget);
     });
 
     testWidgets('employee sees only their phone and no typed confirmation', (
