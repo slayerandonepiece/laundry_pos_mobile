@@ -6,6 +6,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_environment.dart';
 import 'package:myshop/core/logging/app_logger.dart';
@@ -19,6 +20,10 @@ class FirebaseService {
   static FirebaseRemoteConfig? remoteConfig;
   static bool hasSuccessfulFetch = false;
 
+  /// True for an iOS TestFlight install, which updates through TestFlight and
+  /// has no App Store page to open.
+  static bool isTestFlight = false;
+
   /// True once Crashlytics is initialized; until then reports are dropped.
   static bool crashlyticsReady = false;
 
@@ -31,6 +36,17 @@ class FirebaseService {
         'Skipping Firebase initialization on unsupported non-mobile platform.',
       );
       return;
+    }
+
+    if (Platform.isIOS) {
+      try {
+        isTestFlight =
+            await const MethodChannel('klenpos/distribution')
+                .invokeMethod<bool>('isTestFlight') ??
+            false;
+      } catch (_) {
+        // Unknown: treat as a normal install.
+      }
     }
 
     try {
@@ -223,6 +239,7 @@ class FirebaseService {
   static String get minSupportedVersion =>
       remoteConfig?.getString('min_supported_version') ?? '';
 
+  /// Empty on TestFlight, which turns every App Store update prompt off there.
   static String get iosAppStoreId =>
-      remoteConfig?.getString('ios_app_store_id') ?? '';
+      isTestFlight ? '' : remoteConfig?.getString('ios_app_store_id') ?? '';
 }
