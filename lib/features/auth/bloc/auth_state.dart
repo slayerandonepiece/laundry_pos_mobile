@@ -25,6 +25,20 @@ class MustChangePasswordState extends AuthState {
   MustChangePasswordState({required this.user, this.errorMessage});
 }
 
+/// Signed in, but the account is scheduled for deletion. Nothing else is
+/// usable until the user restores it or signs out.
+class DeletionPendingState extends AuthState {
+  final User user;
+  final String scheduledFor;
+  final bool isOwner;
+
+  DeletionPendingState({
+    required this.user,
+    required this.scheduledFor,
+    required this.isOwner,
+  });
+}
+
 class AccessBlockedState extends AuthState {
   final String reason;
   final String? paidThroughDate;

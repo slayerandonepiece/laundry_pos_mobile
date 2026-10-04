@@ -305,5 +305,30 @@ void main() {
         expect(find.text('Renews soon'), findsNothing);
       },
     );
+
+    testWidgets('Owner can reach the Delete account screen from More', (
+      tester,
+    ) async {
+      final authState = AuthenticatedState(
+        user: testUser,
+        currentStore: StoreSummary(
+          storeId: 'store-1',
+          storeName: 'Main Laundromat',
+          role: 'OWNER',
+        ),
+        availableStores: const [],
+      );
+
+      await tester.pumpWidget(buildMoreScreen(authState));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Delete account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete account'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete store and all data'), findsOneWidget);
+      expect(find.text('TYPE DELETE TO CONFIRM'), findsOneWidget);
+    });
   });
 }

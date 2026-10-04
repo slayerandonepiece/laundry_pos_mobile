@@ -19,6 +19,7 @@ import 'package:myshop/features/owner/presentation/services_screen.dart';
 import 'package:myshop/features/owner/presentation/staff_screen.dart';
 import 'package:myshop/features/owner/presentation/store_profile_screen.dart';
 import 'package:myshop/features/owner/presentation/subscription_screen.dart';
+import 'package:myshop/features/profile/presentation/delete_account_screen.dart';
 import 'package:myshop/features/profile/presentation/dialogs/logout_dialog.dart';
 import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
@@ -318,6 +319,25 @@ class MoreScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) => const ChangePasswordScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.delete_outline,
+                        iconColor: AppColors.danger,
+                        title: 'Delete account',
+                        titleColor: AppColors.danger,
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const DeleteAccountScreen(),
                           ),
                         ),
                       ),

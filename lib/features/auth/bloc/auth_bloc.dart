@@ -144,6 +144,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
 
+    final scheduledFor = result.user.deletionScheduledFor;
+    if (scheduledFor != null && scheduledFor.isNotEmpty) {
+      emit(
+        DeletionPendingState(
+          user: result.user,
+          scheduledFor: scheduledFor,
+          isOwner: result.stores.any((s) => s.isOwner),
+        ),
+      );
+      return;
+    }
+
     if (result.user.mustChangePassword) {
       emit(MustChangePasswordState(user: result.user));
       return;

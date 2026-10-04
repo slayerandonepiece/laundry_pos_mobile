@@ -16,6 +16,7 @@ import 'package:myshop/features/shell/presentation/store_switcher_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'change_password_screen.dart';
+import 'delete_account_screen.dart';
 
 /// The policy pages are served by the same web app as the API.
 Future<void> _openLegalPage(String page) => launchUrl(
@@ -414,6 +415,13 @@ class ProfileScreen extends StatelessWidget {
               icon: Icons.description_outlined,
               label: 'Terms of service',
               onTap: () => _openLegalPage('terms'),
+            ),
+            _ProfileRow(
+              icon: Icons.delete_outline,
+              label: 'Delete account',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DeleteAccountScreen()),
+              ),
             ),
             const Spacer(),
             const Divider(color: AppColors.border, height: 1),

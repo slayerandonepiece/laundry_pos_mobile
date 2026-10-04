@@ -15,6 +15,11 @@ class ApiEndpoints {
   static String get changePassword => '$baseUrl/api/v1/auth/change-password';
   static String get setPassword => '$baseUrl/api/v1/auth/set-password';
 
+  // Account deletion (request, then restore during the grace period)
+  static String get accountDeletion => '$baseUrl/api/v1/account/deletion';
+  static String get accountDeletionRestore =>
+      '$baseUrl/api/v1/account/deletion/restore';
+
   // Memberships
   static String get memberships => '$baseUrl/api/v1/memberships';
 

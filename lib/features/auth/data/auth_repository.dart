@@ -255,6 +255,29 @@ class AuthRepository {
     }
   }
 
+  /// Asks the server to delete the account after the grace period. Returns the
+  /// ISO date everything is permanently wiped. The server decides what is
+  /// deleted from the caller's role: an owner's whole store, an employee's
+  /// own login only.
+  Future<String> requestAccountDeletion({required String storeId}) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.accountDeletion,
+      body: {'storeId': storeId},
+    );
+    final scheduledFor = response is Map
+        ? response['scheduledFor']?.toString()
+        : null;
+    if (scheduledFor == null || scheduledFor.isEmpty) {
+      throw ApiException('Invalid response format from deletion endpoint');
+    }
+    return scheduledFor;
+  }
+
+  /// Cancels a pending deletion request (allowed until the wipe date).
+  Future<void> restoreAccount() async {
+    await _apiClient.post(ApiEndpoints.accountDeletionRestore);
+  }
+
   /// Selects the active store for multi-store users
   Future<void> selectStore(String storeId) async {
     await _localCache.setActiveStoreId(storeId);

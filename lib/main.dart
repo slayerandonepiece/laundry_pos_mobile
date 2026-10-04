@@ -23,6 +23,7 @@ import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/auth/data/auth_repository.dart';
 import 'package:myshop/features/auth/presentation/bootstrap_screen.dart';
 import 'package:myshop/features/auth/presentation/login_screen.dart';
+import 'package:myshop/features/auth/presentation/account_restore_screen.dart';
 import 'package:myshop/features/auth/presentation/reset_password_screen.dart';
 import 'package:myshop/features/auth/presentation/splash_screen.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
@@ -575,6 +576,20 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
                             (state is AuthLoadingState &&
                                 state.message == 'Updating password...')) {
                           return const ResetPasswordScreen();
+                        }
+
+                        if (state is DeletionPendingState) {
+                          return AccountRestoreScreen(
+                            scheduledFor: state.scheduledFor,
+                            isOwner: state.isOwner,
+                            authRepository: widget.authRepository,
+                            onRestored: () {
+                              _authBloc.add(CheckAuthStatusEvent());
+                            },
+                            onSignOut: () {
+                              _authBloc.add(LogoutRequestedEvent());
+                            },
+                          );
                         }
 
                         if (state is AccessBlockedState) {

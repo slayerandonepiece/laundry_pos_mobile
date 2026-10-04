@@ -5,12 +5,17 @@ class User {
   final bool isSuperAdmin;
   final bool mustChangePassword;
 
+  /// ISO date the account is permanently deleted; null unless a deletion
+  /// request is pending (the user can still restore until then).
+  final String? deletionScheduledFor;
+
   User({
     required this.id,
     required this.name,
     required this.phone,
     this.isSuperAdmin = false,
     this.mustChangePassword = false,
+    this.deletionScheduledFor,
   });
 
   String get displayName => name.isNotEmpty ? name : phone;
@@ -22,6 +27,7 @@ class User {
       phone: json['phone']?.toString() ?? '',
       isSuperAdmin: json['isSuperAdmin'] == true,
       mustChangePassword: json['mustChangePassword'] == true,
+      deletionScheduledFor: json['deletionScheduledFor']?.toString(),
     );
   }
 
@@ -32,6 +38,7 @@ class User {
       'phone': phone,
       'isSuperAdmin': isSuperAdmin,
       'mustChangePassword': mustChangePassword,
+      'deletionScheduledFor': deletionScheduledFor,
     };
   }
 
@@ -41,6 +48,7 @@ class User {
     String? phone,
     bool? isSuperAdmin,
     bool? mustChangePassword,
+    String? deletionScheduledFor,
   }) {
     return User(
       id: id ?? this.id,
@@ -48,6 +56,7 @@ class User {
       phone: phone ?? this.phone,
       isSuperAdmin: isSuperAdmin ?? this.isSuperAdmin,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+      deletionScheduledFor: deletionScheduledFor ?? this.deletionScheduledFor,
     );
   }
 }
