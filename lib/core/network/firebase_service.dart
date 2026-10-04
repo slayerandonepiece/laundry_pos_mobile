@@ -67,7 +67,7 @@ class FirebaseService {
           fetchTimeout: const Duration(seconds: 10),
           minimumFetchInterval: isDevOrStage
               ? const Duration(seconds: 0)
-              : const Duration(hours: 12),
+              : const Duration(hours: 1),
         ),
       );
 

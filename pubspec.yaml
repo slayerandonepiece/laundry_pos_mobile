@@ -52,8 +52,7 @@ dependencies:
   firebase_analytics: ^12.6.0
   firebase_messaging: ^16.7.0
   firebase_remote_config: ^6.7.0
-  in_app_update: ^5.0.0
-  upgrader: ^13.7.0
+  in_app_update_flutter: 3.0.1
   version: ^3.0.2
 
 dev_dependencies:

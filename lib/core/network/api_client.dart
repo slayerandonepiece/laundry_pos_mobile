@@ -69,6 +69,10 @@ class ApiClient {
       );
     }
 
+    if (!_dio.interceptors.any((i) => i is UpdateAdvisoryInterceptor)) {
+      _dio.interceptors.add(UpdateAdvisoryInterceptor());
+    }
+
     final hasLogging = _dio.interceptors.any((i) => i is DioLoggingInterceptor);
     if (!hasLogging) {
       _dio.interceptors.add(

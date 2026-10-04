@@ -109,13 +109,16 @@ machine-local and do **not** reach cloud sessions — this file does.
   projects. Nothing blocks the app until someone sets these remotely.
 - Maintenance-mode + force-update gate: `lib/core/gate/app_gate_service.dart`
   (`lib/core/app_gate_service.dart` is a re-export, unused, harmless).
-  Priority: maintenance mode > Android force-update (`in_app_update`,
-  Play Core native flow) > iOS force-update (`upgrader`, non-dismissible
-  via `canDismissDialog: false`/`showIgnore: false`/`showLater: false`).
+  Priority: maintenance mode > Android force-update (`in_app_update_flutter`,
+  Play Core native flow) > iOS force-update (full-screen
+  `lib/features/update/presentation/update_required_screen.dart`, no way
+  past it; its button opens Apple's App Store sheet). The backend's
+  `X-Update-Level` header (see `lib/core/gate/update_advisory.dart`) drives
+  soft/urgent prompts; this Remote Config gate is the fallback.
   Checked at startup + app resume only, never per-route. Everything fails
   open on any error — only an explicit fetched "below minimum version"
   blocks. `ios_app_store_id` is empty until there's an actual App Store
-  listing; `upgrader` no-ops gracefully until then.
+  listing; the iOS prompt fails open until then.
 - No App Store or Play Store listing exists yet — this whole gating
   system is dormant/inert by design until those exist and the Remote
   Config values are set.

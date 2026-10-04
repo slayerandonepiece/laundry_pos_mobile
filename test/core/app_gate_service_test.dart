@@ -5,8 +5,6 @@ import 'package:myshop/core/network/firebase_service.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/pos/bloc/cart_state.dart';
 import 'package:myshop/features/pos/data/models/product_model.dart';
-import 'package:upgrader/upgrader.dart';
-import 'package:version/version.dart';
 
 void main() {
   group('AppEnvironmentConfig & Single Source of Truth', () {
@@ -216,35 +214,6 @@ void main() {
       );
     });
   });
-
-  group('IosAppStoreUpgraderStore Fail-Open Tests', () {
-    test('Returns empty version info when ios_app_store_id is empty', () async {
-      final store = IosAppStoreUpgraderStore(appStoreId: '');
-      final info = await store.getVersionInfo(
-        state: Upgrader().state,
-        installedVersion: Version(1, 0, 0),
-        country: 'US',
-        language: 'en',
-      );
-
-      expect(info.appStoreVersion, isNull);
-      expect(info.appStoreListingURL, isNull);
-    });
-
-    test('Returns empty version info when appStoreId is whitespace', () async {
-      final store = IosAppStoreUpgraderStore(appStoreId: '   ');
-      final info = await store.getVersionInfo(
-        state: Upgrader().state,
-        installedVersion: Version(1, 0, 0),
-        country: 'US',
-        language: 'en',
-      );
-
-      expect(info.appStoreVersion, isNull);
-      expect(info.appStoreListingURL, isNull);
-    });
-  });
-
   group('Android InAppUpdate Fail-Open Test', () {
     test('performAndroidForceUpdateIfNeeded handles exceptions gracefully and does not throw', () async {
       // In this test environment (macOS / test runner), InAppUpdate will either no-op or throw PlatformException,

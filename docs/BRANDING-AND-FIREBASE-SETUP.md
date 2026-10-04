@@ -260,7 +260,7 @@ files (3x google-services.json, 3x GoogleService-Info.plist):
   Debug/Release/Profile-{dev,stage,prod} scheme names)
 - Wire Crashlytics (disabled in debug builds), Analytics (plumbing only),
   Cloud Messaging (permission request + token logging, no backend wiring
-  yet), and Remote Config (short fetch interval dev/stage, 12h prod)
+  yet), and Remote Config (short fetch interval dev/stage, 1h prod)
 - Ensure google-services.json / GoogleService-Info.plist are in
   .gitignore if they aren't already, since they'll contain real project
   data

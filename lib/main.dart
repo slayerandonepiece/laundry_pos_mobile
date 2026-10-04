@@ -1,11 +1,17 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:in_app_update_flutter/in_app_update_flutter.dart';
 import 'package:firebase_analytics/observer.dart';
 import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_environment.dart';
 import 'package:myshop/core/error/crash_context.dart';
 import 'package:myshop/core/error/error_reporting.dart';
 import 'package:myshop/core/gate/app_gate_service.dart';
+import 'package:myshop/core/gate/update_advisory.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
@@ -16,7 +22,7 @@ import 'package:myshop/core/sync/app_resume_sync.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/theme/app_theme.dart';
 import 'package:myshop/features/maintenance/presentation/maintenance_screen.dart';
-import 'package:upgrader/upgrader.dart';
+import 'package:myshop/features/update/presentation/update_required_screen.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_event.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
@@ -60,6 +66,9 @@ Future<void> _start() async {
 
   // Initialize Hive local cache (without adapters or code-gen)
   await LocalCacheService.init();
+
+  // Requests report the installed version so the backend can advise updates.
+  await UpdateAdvisory.init();
 
   final apiClient = ApiClient();
   final localCache = LocalCacheService();
@@ -134,6 +143,22 @@ class MyShopApp extends StatefulWidget {
   State<MyShopApp> createState() => _MyShopAppState();
 }
 
+/// Re-checks the update prompt whenever a screen closes, so a prompt held back
+/// because a form was open appears as soon as the user is back on the shell.
+class _UpdateRetryObserver extends NavigatorObserver {
+  _UpdateRetryObserver(this.onSettled);
+
+  final VoidCallback onSettled;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      onSettled();
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      onSettled();
+}
+
 class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -146,7 +171,22 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   bool _isMaintenanceMode = false;
   bool _isIosForceUpdateRequired = false;
   GateDecision? _deferredGateDecision;
-  late final Upgrader _upgrader;
+
+  // Backend-advertised update prompt (see UpdateAdvisory). Soft is offered once
+  // per launch, urgent once per foreground session; both wait for a safe moment.
+  bool _updateFlowActive = false;
+  bool _softUpdateOffered = false;
+  bool _urgentUpdateOffered = false;
+  // iOS mandatory update: the blocker overlays the app while this is true.
+  bool _iosUrgentBlocker = false;
+  DateTime? _softRetryAt;
+  Timer? _blockerRecheck;
+  StreamSubscription<InstallStateAndroid>? _installSub;
+  late final _updateRetryObserver = _UpdateRetryObserver(
+    () => WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _applyUpdateAdvisory();
+    }),
+  );
 
   late final AuthBloc _authBloc;
   late final OutletScopeCubit _outletScopeCubit;
@@ -260,8 +300,124 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
+      _urgentUpdateOffered = false;
       _handleAppResume();
+      _applyUpdateAdvisory();
+      if (_iosUrgentBlocker) UpdateAdvisory.probe();
     }
+  }
+
+  /// Offers the update the backend advertised, but only when no sale is in
+  /// progress. Retried from the cart/orders listeners until a safe moment.
+  void _applyUpdateAdvisory() {
+    if (!mounted || kIsWeb) return;
+    // The backend's level, double-checked against the installed version: an
+    // install already at or above the minimum is never blocked or prompted.
+    final level = UpdateAdvisory.effective;
+    if (_iosUrgentBlocker && level != UpdateLevel.urgent) {
+      // The backend lowered the level: never leave the user stuck behind it.
+      setState(() => _iosUrgentBlocker = false);
+    }
+    if (level == UpdateLevel.none) {
+      _softUpdateOffered = false;
+      _urgentUpdateOffered = false;
+      _softRetryAt = null;
+    }
+    final offer = UpdateAdvisory.nextOffer(
+      level: level,
+      flowActive: _updateFlowActive,
+      softOffered: _softUpdateOffered || _softRetryPending,
+      urgentOffered: Platform.isIOS ? _iosUrgentBlocker : _urgentUpdateOffered,
+      safeMoment: _isSafeForUpdatePrompt(),
+    );
+    if (offer == null) return;
+    if (offer == UpdateLevel.soft) {
+      _softUpdateOffered = true;
+    } else if (!Platform.isIOS) {
+      _urgentUpdateOffered = true;
+    }
+    _offerUpdate(offer);
+  }
+
+  /// Safe = no sale in progress and no screen pushed over the main shell, so
+  /// the prompt never lands on a half-filled form. Retried when the user
+  /// returns (see [_UpdateRetryObserver]).
+  bool _isSafeForUpdatePrompt() =>
+      _navigatorKey.currentState?.canPop() != true &&
+      !AppGateService.isMidTransaction(
+        cartState: _cartBloc.state,
+        ordersState: _ordersBloc.state,
+      );
+
+  Future<void> _offerUpdate(UpdateLevel level) async {
+    if (kIsWeb) return;
+    _updateFlowActive = true;
+    try {
+      if (Platform.isAndroid) {
+        if (level == UpdateLevel.soft) _watchFlexibleUpdate();
+        await AppGateService.startAndroidUpdate(
+          immediate: level == UpdateLevel.urgent,
+        );
+      } else if (Platform.isIOS) {
+        if (level == UpdateLevel.soft) {
+          await _offerIosSoftUpdate();
+        } else if (FirebaseService.iosAppStoreId.trim().isNotEmpty) {
+          // Without a store ID there is nowhere to send the user: fail open
+          // instead of blocking behind a button that cannot work.
+          setState(() => _iosUrgentBlocker = true);
+        }
+      }
+    } finally {
+      _updateFlowActive = false;
+    }
+  }
+
+  /// A flexible update downloads in the background; offer the restart once done.
+  void _watchFlexibleUpdate() {
+    _installSub ??= AppGateService.androidInstallState.listen((state) {
+      if (state.status != InstallStatusAndroid.downloaded) return;
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: const Text('Update downloaded.'),
+          duration: const Duration(days: 1),
+          action: SnackBarAction(
+            label: 'Restart',
+            onPressed: AppGateService.completeAndroidUpdate,
+          ),
+        ),
+      );
+    });
+  }
+
+  bool get _softRetryPending {
+    final at = _softRetryAt;
+    return at != null && DateTime.now().isBefore(at);
+  }
+
+  /// Apple's own App Store sheet, on top of everything; the user can close it.
+  /// Needs a connection, so without one (or if the sheet fails) the prompt is
+  /// tried again a couple of minutes later instead of being lost for the launch.
+  Future<void> _offerIosSoftUpdate() async {
+    if (FirebaseService.iosAppStoreId.trim().isEmpty) return;
+    final online = !await ConnectivityService.instance.checkIsOffline();
+    final shown = online && await AppGateService.showIosUpdateSheet();
+    if (!shown) {
+      _softUpdateOffered = false;
+      _softRetryAt = DateTime.now().add(const Duration(minutes: 2));
+    }
+  }
+
+  /// Update now: check the connection first, then open Apple's App Store
+  /// sheet, falling back to the listing itself.
+  Future<UpdateAttempt> _openIosUpdate() async {
+    if (await ConnectivityService.instance.checkIsOffline()) {
+      return UpdateAttempt.offline;
+    }
+    var opened = await AppGateService.showIosUpdateSheet();
+    if (!opened) opened = await AppGateService.openAppStorePage();
+    // Back from the App Store: re-check against the installed version.
+    if (mounted) _applyUpdateAdvisory();
+    return opened ? UpdateAttempt.opened : UpdateAttempt.failed;
   }
 
   Future<void> _handleAppResume() async {
@@ -305,6 +461,7 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   }
 
   void _checkDeferredGate() {
+    _applyUpdateAdvisory();
     if (_deferredGateDecision == null) return;
     final midTx = AppGateService.isMidTransaction(
       cartState: _cartBloc.state,
@@ -344,27 +501,31 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
     }
   }
 
-  Widget _wrapWithUpgradeAlertIfNeeded(Widget child) {
-    if (_isIosForceUpdateRequired) {
-      return UpgradeAlert(
-        upgrader: _upgrader,
-        navigatorKey: _navigatorKey,
-        barrierDismissible: false,
-        shouldPopScope: () => false,
-        showIgnore: false,
-        showLater: false,
-        child: child,
-      );
-    }
-    return child;
+  /// Keeps the app mounted (listeners, tab state) and covers it with the
+  /// mandatory-update screen. Set by the backend level or, as a fallback when
+  /// the backend sends none, by the Remote Config gate.
+  Widget _wrapWithUpdateBlocker(Widget child) {
+    if (!_isIosForceUpdateRequired && !_iosUrgentBlocker) return child;
+    return Stack(
+      children: [
+        ExcludeSemantics(child: child),
+        Positioned.fill(child: UpdateRequiredScreen(onUpdate: _openIosUpdate)),
+      ],
+    );
   }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _upgrader = AppGateService.createUpgrader();
     _evaluateStartupGate();
+    // While the mandatory-update page is up the app may be idle (even signed
+    // out), so nothing else would tell it the level was lowered: ask now and then.
+    _blockerRecheck = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_iosUrgentBlocker) UpdateAdvisory.probe();
+    });
+    UpdateAdvisory.level.addListener(_applyUpdateAdvisory);
+    UpdateAdvisory.responses.addListener(_applyUpdateAdvisory);
 
     ConnectivityService.instance.start();
     _appResumeSync = AppResumeSync();
@@ -416,6 +577,10 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _blockerRecheck?.cancel();
+    UpdateAdvisory.level.removeListener(_applyUpdateAdvisory);
+    UpdateAdvisory.responses.removeListener(_applyUpdateAdvisory);
+    _installSub?.cancel();
     _appResumeSync.dispose();
     ConnectivityService.instance.dispose();
     _authBloc.close();
@@ -450,13 +615,11 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
         child: MaterialApp(
           navigatorKey: _navigatorKey,
           scaffoldMessengerKey: _messengerKey,
-          navigatorObservers: FirebaseService.analytics == null
-              ? const []
-              : [
-                  FirebaseAnalyticsObserver(
-                    analytics: FirebaseService.analytics!,
-                  ),
-                ],
+          navigatorObservers: [
+            if (FirebaseService.analytics != null)
+              FirebaseAnalyticsObserver(analytics: FirebaseService.analytics!),
+            _updateRetryObserver,
+          ],
           title: AppEnvironmentConfig.appName,
           debugShowCheckedModeBanner: false,
           theme: AppTheme.theme,
@@ -466,7 +629,7 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
                   eta: FirebaseService.maintenanceEta,
                   onCheckAgain: _handleCheckAgain,
                 )
-              : _wrapWithUpgradeAlertIfNeeded(
+              : _wrapWithUpdateBlocker(
                   MultiBlocListener(
                     listeners: [
                       BlocListener<CartBloc, CartState>(

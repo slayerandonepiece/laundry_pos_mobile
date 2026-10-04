@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, visibleForTesting;
 
+import '../gate/update_advisory.dart';
 import '../logging/app_logger.dart';
 import '../storage/local_cache.dart';
 import '../storage/secure_storage.dart';
@@ -64,6 +65,36 @@ class NetworkHealth {
 
 /// Pass as X-Outlet-Id to force the header to be OMITTED (owner, organization-wide) instead of defaulting to the active outlet.
 const String kNoOutletHeader = '__no_outlet__';
+
+/// Reports this install's version on every request and records the update
+/// level the backend advertises in `X-Update-Level` (success or error replies).
+class UpdateAdvisoryInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    UpdateAdvisory.requestHeaders.forEach(
+      (key, value) => options.headers.putIfAbsent(key, () => value),
+    );
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    UpdateAdvisory.record(
+      response.headers.value(UpdateAdvisory.levelHeader),
+      response.headers.value(UpdateAdvisory.minVersionHeader),
+    );
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    UpdateAdvisory.record(
+      err.response?.headers.value(UpdateAdvisory.levelHeader),
+      err.response?.headers.value(UpdateAdvisory.minVersionHeader),
+    );
+    handler.next(err);
+  }
+}
 
 /// Automatically injects authentication tokens and active store IDs into requests.
 class AuthInterceptor extends Interceptor {

@@ -1,9 +1,9 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:in_app_update/in_app_update.dart';
+import 'package:in_app_update_flutter/in_app_update_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:upgrader/upgrader.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:version/version.dart';
 
 import '../../features/orders/bloc/orders_state.dart';
@@ -13,84 +13,6 @@ import '../network/firebase_service.dart';
 
 /// The result of evaluating app startup or resume gate conditions.
 enum GateDecision { proceed, maintenance, androidForceUpdate, iosForceUpdate }
-
-/// Custom Upgrader messages that show "Update" as the primary action.
-class ForceUpdateUpgraderMessages extends UpgraderMessages {
-  @override
-  String? message(UpgraderMessage messageKey) {
-    if (messageKey == UpgraderMessage.buttonTitleUpdate) {
-      return 'Update';
-    }
-    return super.message(messageKey);
-  }
-}
-
-/// Upgrader store for iOS that looks up the product via [iosAppStoreId].
-/// Fails open gracefully if [appStoreId] is empty or iTunes Lookup fails.
-class IosAppStoreUpgraderStore extends UpgraderStore {
-  final String appStoreId;
-
-  IosAppStoreUpgraderStore({required this.appStoreId});
-
-  @override
-  Future<UpgraderVersionInfo> getVersionInfo({
-    required UpgraderState state,
-    required Version installedVersion,
-    required String? country,
-    required String? language,
-  }) async {
-    // Fail open if app store ID is empty (no store listing yet)
-    if (appStoreId.trim().isEmpty || state.packageInfo == null) {
-      return UpgraderVersionInfo();
-    }
-
-    try {
-      final iTunes = ITunesSearchAPI();
-      iTunes.debugLogging = state.debugLogging;
-      iTunes.client = state.client;
-      iTunes.clientHeaders = state.clientHeaders;
-
-      final response = await iTunes.lookupById(
-        appStoreId.trim(),
-        country: country ?? 'US',
-      );
-
-      if (response == null) {
-        return UpgraderVersionInfo();
-      }
-
-      final versionStr = iTunes.version(response);
-      Version? appStoreVersion;
-      if (versionStr != null) {
-        try {
-          appStoreVersion = Version.parse(versionStr);
-        } catch (_) {}
-      }
-
-      final appStoreListingURL =
-          iTunes.trackViewUrl(response) ??
-          'https://apps.apple.com/app/id${appStoreId.trim()}';
-      final releaseNotes = iTunes.releaseNotes(response);
-      final minAppVersion = iTunes.minAppVersion(response);
-
-      return UpgraderVersionInfo(
-        installedVersion: installedVersion,
-        appStoreListingURL: appStoreListingURL,
-        appStoreVersion: appStoreVersion,
-        minAppVersion: minAppVersion,
-        releaseNotes: releaseNotes,
-      );
-    } catch (e) {
-      AppLogger.log(
-        'APP_GATE_IOS',
-        'iTunes lookup failed (failing open): $e',
-        error: e,
-      );
-      // Fail open on any lookup error
-      return UpgraderVersionInfo();
-    }
-  }
-}
 
 /// Central gateway service for Remote Config driven maintenance mode & force-updates.
 class AppGateService {
@@ -192,54 +114,80 @@ class AppGateService {
         cartState.hasItems;
   }
 
-  /// Performs Android immediate update via Google Play Core (in_app_update).
-  /// Fails open gracefully if offline, sideloaded, or on any error.
+  static final InAppUpdateFlutter _updater = InAppUpdateFlutter();
+
+  /// Performs the Android immediate update when Remote Config enables it.
   static Future<void> performAndroidForceUpdateIfNeeded() async {
-    if (kIsWeb || !Platform.isAndroid) return;
     if (!FirebaseService.hasSuccessfulFetch ||
         !FirebaseService.isForceUpdateEnabled) {
       return;
     }
+    await startAndroidUpdate(immediate: true);
+  }
 
+  /// Starts the Google Play update flow: immediate (blocking) or flexible
+  /// (background download). Fails open if offline, sideloaded, declined, or on
+  /// any other error.
+  static Future<void> startAndroidUpdate({required bool immediate}) async {
+    if (kIsWeb || !Platform.isAndroid) return;
     try {
-      final updateInfo = await InAppUpdate.checkForUpdate();
-      if (updateInfo.updateAvailability == UpdateAvailability.updateAvailable &&
-          updateInfo.immediateUpdateAllowed) {
-        await InAppUpdate.performImmediateUpdate();
+      final info = await _updater.checkUpdateAndroid();
+      if (info.updateAvailability !=
+          UpdateAvailabilityAndroid.updateAvailable) {
+        return;
+      }
+      if (immediate && info.isImmediateUpdateAllowed) {
+        await _updater.startImmediateUpdateAndroid();
+      } else if (!immediate && info.isFlexibleUpdateAllowed) {
+        await _updater.startFlexibleUpdateAndroid();
       }
     } catch (e) {
       AppLogger.log(
         'APP_GATE_ANDROID',
-        'InAppUpdate check/perform failed (failing open): $e',
+        'In-app update failed (failing open): $e',
         error: e,
       );
     }
   }
 
-  /// Builds a configured [Upgrader] instance for iOS force-update flow.
-  /// If [forceUpdateEnabled] is false, or store ID is empty, Upgrader no-ops safely.
-  static Upgrader createUpgrader({
-    bool? forceUpdateEnabled,
-    String? minSupportedVersion,
-    String? iosAppStoreId,
-    UpgraderStore? customStore,
-  }) {
-    final isEnabled =
-        forceUpdateEnabled ?? FirebaseService.isForceUpdateEnabled;
-    final minVer = (minSupportedVersion ?? FirebaseService.minSupportedVersion)
-        .trim();
-    final storeId = (iosAppStoreId ?? FirebaseService.iosAppStoreId).trim();
+  /// Download state of a flexible update, for offering "Restart to update".
+  static Stream<InstallStateAndroid> get androidInstallState =>
+      _updater.installStateStreamAndroid;
 
-    final shouldEnforce = isEnabled && minVer.isNotEmpty && storeId.isNotEmpty;
+  static Future<void> completeAndroidUpdate() async {
+    try {
+      await _updater.completeUpdateAndroid();
+    } catch (e) {
+      AppLogger.log('APP_GATE_ANDROID', 'Complete update failed: $e', error: e);
+    }
+  }
 
-    return Upgrader(
-      minAppVersion: shouldEnforce ? minVer : null,
-      showOnlyMandatoryUpdates: true,
-      storeController: UpgraderStoreController(
-        oniOS: () =>
-            customStore ?? IosAppStoreUpgraderStore(appStoreId: storeId),
-      ),
-      messages: ForceUpdateUpgraderMessages(),
-    );
+  /// Opens the App Store product page in-app. Returns false without a store
+  /// ID or when the sheet could not be shown.
+  static Future<bool> showIosUpdateSheet() async {
+    final storeId = FirebaseService.iosAppStoreId.trim();
+    if (kIsWeb || !Platform.isIOS || storeId.isEmpty) return false;
+    try {
+      await _updater.showUpdateForIos(appStoreId: storeId);
+      return true;
+    } catch (e) {
+      AppLogger.log('APP_GATE_IOS', 'App Store sheet failed: $e', error: e);
+      return false;
+    }
+  }
+
+  /// Fallback when the in-app sheet fails: opens the App Store listing itself.
+  static Future<bool> openAppStorePage() async {
+    final storeId = FirebaseService.iosAppStoreId.trim();
+    if (kIsWeb || storeId.isEmpty) return false;
+    try {
+      return await launchUrl(
+        Uri.parse('https://apps.apple.com/app/id$storeId'),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (e) {
+      AppLogger.log('APP_GATE_IOS', 'App Store page failed: $e', error: e);
+      return false;
+    }
   }
 }

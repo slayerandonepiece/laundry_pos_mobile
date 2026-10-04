@@ -130,10 +130,11 @@ clean, `flutter test` **402/402** pass.
   convenience but currently unused — harmless, not wired anywhere) evaluates,
   in order: maintenance mode (highest priority, custom full-screen
   `lib/features/maintenance/presentation/maintenance_screen.dart`) → Android
-  force update (`in_app_update` package, Play Core native immediate-update
-  flow) → iOS force update (`upgrader` package, non-dismissible alert via
-  `canDismissDialog: false` / `showIgnore: false` / `showLater: false`,
-  redirects to the App Store product page). Checked at startup and on app
+  force update (`in_app_update_flutter` package, Play Core native
+  immediate-update flow) → iOS force update (full-screen
+  `lib/features/update/presentation/update_required_screen.dart`, no way past
+  it; its button opens Apple's App Store sheet). The backend's
+  `X-Update-Level` header drives soft/urgent prompts on top of this gate. Checked at startup and on app
   resume from background (not on every route — this is a POS app, staff
   leave it open all day; per-route checks would also risk interrupting a
   live transaction). **Everything fails open** on any fetch/lookup/version-
