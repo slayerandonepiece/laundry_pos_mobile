@@ -96,12 +96,17 @@ class FirebaseService {
 
       // 5. Cloud Messaging Setup (Push notifications)
       messaging = FirebaseMessaging.instance;
-      final notificationSettings = await messaging?.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false,
-      );
+      // iOS has no Push Notifications capability yet, so asking at launch
+      // would only show a permission prompt that can never deliver anything.
+      // Re-enable the request together with the capability.
+      final notificationSettings = Platform.isIOS
+          ? await messaging?.getNotificationSettings()
+          : await messaging?.requestPermission(
+              alert: true,
+              badge: true,
+              sound: true,
+              provisional: false,
+            );
 
       AppLogger.log(
         'FIREBASE_MESSAGING',

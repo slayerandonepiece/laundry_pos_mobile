@@ -48,8 +48,10 @@ All data moves between the App and our servers over encrypted HTTPS connections.
 
 - **Active subscription:** data is kept while the account is active.
 - **Subscription not renewed:** the account is placed on hold. Data is retained so the store can resume exactly where it left off once it subscribes again.
-- **Store chooses to stop using the App:** all of the store's data is permanently deleted within **3 months** of that decision. During this period the store may ask us to restore the account. After it, deletion is final.
+- **Account deletion requested:** store owners and employees can request deletion inside the app. Your data is then kept for a grace period (90 days) and **permanently deleted after it ends**. If you sign in and choose to restore your account before then, the deletion is cancelled and nothing is lost.
 - Copies in provider backups are removed as those backups expire. We may keep limited records where the law requires (for example billing records).
+
+**Deletion log.** To show that we honoured each request, we keep a minimal deletion log: an opaque internal ID, the role (owner or employee), and the request and completion dates. It contains no name, phone number or email address. [LEGAL REVIEW: confirm this retained deletion log and the billing-record retention above are acceptable under the DPDP Act, 2023 and applicable tax law.]
 
 ## 6. Your rights and account deletion
 
@@ -57,7 +59,7 @@ Under the Digital Personal Data Protection Act, 2023, you may ask to access, cor
 
 - **Store owners and staff:** email itsreddygona@gmail.com from your registered contact and we will act on the request within [30] days.
 - **A store's customers:** your data is held by the store you used. Please ask the store; we will help the store fulfil it.
-- **Delete my account / data:** email itsreddygona@gmail.com with the subject "Delete account". Deletion follows Section 5.
+- **Delete my account / data:** request deletion in the app (owners delete the whole store and its data; employees delete their own login), or email itsreddygona@gmail.com with the subject "Delete account". Deletion follows Section 5.
 
 Grievance contact: Gona Janardhan Reddy, itsreddygona@gmail.com.
 
