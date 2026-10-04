@@ -79,6 +79,14 @@ class AppTextField extends StatelessWidget {
                   obscureText: obscureText,
                   keyboardType: keyboardType,
                   inputFormatters: inputFormatters,
+                  // Flutter-drawn Cut/Copy/Paste toolbar on every platform. The
+                  // iOS system menu asserts "Attempted to show while another
+                  // instance was still visible" when the screen rebuilds under
+                  // it, e.g. the sign-in screen after a wrong password.
+                  contextMenuBuilder: (context, editableTextState) =>
+                      AdaptiveTextSelectionToolbar.editableText(
+                        editableTextState: editableTextState,
+                      ),
                   autofocus: autofocus,
                   enabled: enabled,
                   maxLines: maxLines,
