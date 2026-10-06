@@ -176,24 +176,33 @@ if [[ "$PLATFORM" == ios || "$PLATFORM" == both ]]; then
   say "  1. Select scheme $ENVIRONMENT."
   say '  2. Select destination Any iOS Device (arm64).'
   say '  3. Choose Product > Archive.'
+  say '  4. When it finishes, Xcode opens Organizer: click Distribute App.'
+  say '     This script waits for the archive and checks it; nothing to press here.'
   run open ios/Runner.xcworkspace
   if $DRY_RUN; then
-    say 'DRY RUN: wait for Enter after the Xcode archive completes'
+    say 'DRY RUN: wait for a new Xcode archive to appear (up to 60 minutes)'
     say 'DRY RUN: find newest archive, verify start time, bundle id, version, and build'
     say 'DRY RUN: dSYMs are uploaded by the Xcode build phase during the archive'
-    say 'DRY RUN: open verified archive in Organizer'
+    say 'DRY RUN: Xcode opens Organizer itself; the script does not reopen the archive'
     IOS_RESULT="Xcode archive pending; Dart symbols $IOS_SYMBOLS"
   else
-    read -r -p 'Press Enter only after Xcode finishes archiving. '
-    ARCHIVE="$(python3 - "$HOME/Library/Developer/Xcode/Archives" <<'PY'
+    say 'Waiting for the Xcode archive to finish (Ctrl-C to cancel)...'
+    ARCHIVE=''
+    for _ in $(seq 720); do
+      ARCHIVE="$(python3 - "$HOME/Library/Developer/Xcode/Archives" "$START_EPOCH" <<'PY'
 from pathlib import Path
 import sys
-items = list(Path(sys.argv[1]).glob('*/*.xcarchive'))
-if not items:
-    raise SystemExit('no Xcode archive found')
-print(max(items, key=lambda path: path.stat().st_mtime))
+items = [p for p in Path(sys.argv[1]).glob('*/*.xcarchive')
+         if p.stat().st_mtime >= int(sys.argv[2])]
+if items:
+    print(max(items, key=lambda path: path.stat().st_mtime))
 PY
 )"
+      [[ -n "$ARCHIVE" ]] && break
+      sleep 5
+    done
+    [[ -n "$ARCHIVE" ]] || fail 'No new Xcode archive appeared within 60 minutes'
+    sleep 5 # let Xcode finish writing the archive
     ARCHIVE_EPOCH="$(stat -f %m "$ARCHIVE")"
     (( ARCHIVE_EPOCH >= START_EPOCH )) || fail 'Newest archive is older than this script run'
     INFO_PLIST="$ARCHIVE/Products/Applications/Runner.app/Info.plist"
@@ -207,7 +216,7 @@ PY
     [[ "$ACTUAL_VERSION" == "$VERSION_NAME" ]] || fail "Archive version mismatch: expected $VERSION_NAME"
     [[ "$ACTUAL_BUILD" == "$BUILD_NUMBER" ]] || fail "Archive build mismatch: expected $BUILD_NUMBER"
     # dSYMs are uploaded by the "[firebase_crashlytics] Upload Symbols" build phase during the archive.
-    open "$ARCHIVE"
+    # Xcode opens Organizer by itself after archiving, so the archive is not reopened here.
     IOS_RESULT="archive $ARCHIVE; Dart symbols $IOS_SYMBOLS; dSYMs uploaded by the Xcode build phase"
   fi
 fi
