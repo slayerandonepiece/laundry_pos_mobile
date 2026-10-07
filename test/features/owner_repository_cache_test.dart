@@ -156,9 +156,11 @@ void main() {
       fakeConnectivity.mockOffline = false;
       fakeApiClient.responses[ApiEndpoints.dashboard] = mockMetricsJson;
 
+      // Ends yesterday: a range ending today in daily buckets is the same
+      // request as month-to-date on the 7th (and is rightly cached then).
       await ownerRepo.getDashboardMetrics(
-        from: isoDaysAgo(6),
-        to: isoDaysAgo(0),
+        from: isoDaysAgo(7),
+        to: isoDaysAgo(1),
         granularity: 'day',
       );
       await ownerRepo.getDashboardMetrics(
