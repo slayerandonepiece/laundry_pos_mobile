@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/analytics/app_analytics.dart';
 import '../../../core/logging/app_logger.dart';
+import '../../../core/network/api_exceptions.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../core/sync/sync_freshness.dart';
 import '../../../core/sync/sync_manager.dart';
@@ -40,6 +41,7 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     on<RecordPaymentEvent>(_onRecordPayment);
     on<HandoverOrderEvent>(_onHandoverOrder);
     on<RefreshInvoiceEvent>(_onRefreshInvoice);
+    on<CancelOrderEvent>(_onCancelOrder);
   }
 
   /// Cold open (navigating to the Orders tab): read local cache only, no
@@ -215,7 +217,9 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       emit(
         state.copyWith(
           isUpdatingStatus: false,
-          error: 'Could not update status — try again',
+          error: e is OrderRuleException
+              ? e.message
+              : 'Could not update status — try again',
         ),
       );
     }
@@ -286,7 +290,9 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       emit(
         state.copyWith(
           isCollectingPayment: false,
-          error: 'Could not collect payment — try again',
+          error: e is OrderRuleException
+              ? e.message
+              : 'Could not collect payment — try again',
         ),
       );
     }
@@ -337,7 +343,40 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       emit(
         state.copyWith(
           isCollectingPayment: false,
-          error: 'Could not record payment — try again',
+          error: e is OrderRuleException
+              ? e.message
+              : 'Could not record payment — try again',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onCancelOrder(
+    CancelOrderEvent event,
+    Emitter<OrdersState> emit,
+  ) async {
+    emit(state.copyWith(isUpdatingStatus: true, error: null));
+    try {
+      await ordersRepository.cancelOrder(event.orderCode, event.reason);
+      emit(
+        state.copyWith(
+          isUpdatingStatus: false,
+          allOrders: state.allOrders
+              .where((o) => o.orderCode != event.orderCode)
+              .toList(),
+          actionSuccessMessage: 'Order cancelled',
+        ),
+      );
+    } catch (e) {
+      AppLogger.log(_tag, 'cancelOrder(${event.orderCode}) failed', error: e);
+      emit(
+        state.copyWith(
+          isUpdatingStatus: false,
+          error: e is OrderRuleException
+              ? e.message
+              : e is ApiException && (e.message).isNotEmpty
+              ? e.message
+              : 'Could not cancel — check your connection and try again',
         ),
       );
     }
@@ -397,7 +436,9 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
       emit(
         state.copyWith(
           isUpdatingStatus: false,
-          error: 'Could not hand over order — try again',
+          error: e is OrderRuleException
+              ? e.message
+              : 'Could not hand over order — try again',
         ),
       );
     }

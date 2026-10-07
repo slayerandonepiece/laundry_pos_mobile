@@ -11,6 +11,8 @@ class ApiEndpoints {
   // Auth
   static String get login => '$baseUrl/api/v1/auth/login';
   static String get logout => '$baseUrl/api/v1/auth/logout';
+  static String get syncStatus => '$baseUrl/api/v1/sync/status';
+  static String get messageTemplates => '$baseUrl/api/v1/message-templates';
   static String get sessionStatus => '$baseUrl/api/v1/auth/status';
   static String get changePassword => '$baseUrl/api/v1/auth/change-password';
   static String get setPassword => '$baseUrl/api/v1/auth/set-password';
@@ -40,6 +42,10 @@ class ApiEndpoints {
       '$baseUrl/api/v1/orders/$orderCode/payments';
   static String orderInvoice(String orderCode) =>
       '$baseUrl/api/v1/orders/$orderCode/invoice';
+  static String orderCancel(String orderCode) =>
+      '$baseUrl/api/v1/orders/$orderCode/cancel';
+  static String orderMessage(String orderCode) =>
+      '$baseUrl/api/v1/orders/$orderCode/message';
   static String orderInvoicePdf(String orderCode) =>
       '$baseUrl/api/v1/orders/$orderCode/invoice/pdf';
 

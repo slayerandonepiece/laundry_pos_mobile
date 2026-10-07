@@ -84,3 +84,10 @@ class RefreshInvoiceEvent extends OrdersEvent {
 
   RefreshInvoiceEvent(this.orderCode);
 }
+
+class CancelOrderEvent extends OrdersEvent {
+  final String orderCode;
+  final String reason;
+
+  CancelOrderEvent({required this.orderCode, required this.reason});
+}
