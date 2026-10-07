@@ -734,9 +734,15 @@ void main() {
           );
         }
 
+        // Opens on This week, like the web Sales page: nothing to clear yet.
+        expect(find.text('Clear'), findsNothing);
+
         // A preset that still covers today's orders keeps them.
         await tester.tap(
-          find.descendant(of: filter, matching: find.text('This week')),
+          find.descendant(
+            of: filter,
+            matching: find.text(PeriodRange.currentMonthLabel()),
+          ),
         );
         await tester.pumpAndSettle();
         expect(find.text('ORD-101'), findsOneWidget);

@@ -41,6 +41,7 @@ List<String> _ids(dynamic body) => [
 ];
 
 void main() {
+  orderMessageTests();
   late SyncTestEnv env;
   late ScriptedApi api;
   late OrdersRepository repo;
@@ -52,6 +53,42 @@ void main() {
     repo = OrdersRepository(apiClient: api, localCache: env.cache);
   });
   tearDown(() => env.dispose());
+
+  group('message templates stay on the phone', () {
+    Map<String, dynamic> row(String key, String body) => {
+      'statusKey': key,
+      'enabled': true,
+      'attachment': 'NONE',
+      'body': body,
+    };
+
+    test('a sync stores them, and the next sync replaces them whole', () async {
+      expect(repo.getCachedMessageTemplates(), isNull);
+      api.onGet = (_, _) async => {
+        'templates': [row('PENDING', 'a'), row('READY', 'b')],
+      };
+      await repo.syncMessageTemplates();
+      expect(repo.getCachedMessageTemplates()!.length, 2);
+
+      api.onGet = (_, _) async => {
+        'templates': [row('READY', 'c')],
+      };
+      await repo.syncMessageTemplates();
+      final stored = repo.getCachedMessageTemplates()!;
+      expect(stored.length, 1);
+      expect(stored.single['body'], 'c');
+    });
+
+    test('a failed sync keeps what was stored', () async {
+      api.onGet = (_, _) async => {
+        'templates': [row('READY', 'b')],
+      };
+      await repo.syncMessageTemplates();
+      api.onGet = (_, _) async => throw Exception('offline');
+      await expectLater(repo.syncMessageTemplates(), throwsException);
+      expect(repo.getCachedMessageTemplates()!.single['body'], 'b');
+    });
+  });
 
   group('push: a poison batch does not block the queue (H4)', () {
     setUp(() async {
@@ -542,7 +579,7 @@ void main() {
   });
 
   group('local Delivered keeps the completed date in step', () {
-    test('Delivered sets today, moving off Delivered clears it', () async {
+    test('Delivered sets today and cannot be undone', () async {
       await env.cache.setCachedOrders([
         {
           'id': 'EL-1',
@@ -560,8 +597,163 @@ void main() {
       final delivered = await repo.updateStatus('EL-1', 'Delivered');
       expect(delivered.completed, today);
 
-      final back = await repo.updateStatus('EL-1', 'Ready');
-      expect(back.completed, isNull);
+      await expectLater(
+        repo.updateStatus('EL-1', 'Ready'),
+        throwsA(isA<OrderRuleException>()),
+      );
+    });
+  });
+
+  group('order rules', () {
+    Map<String, dynamic> order(String status, {int paid = 0}) => {
+      'id': 'EL-9',
+      'name': 'X',
+      'phone': '1',
+      'status': status,
+      'lines': [
+        {
+          'productId': 'p',
+          'name': 'i',
+          'quantity': 1,
+          'unit': 'PIECE',
+          'amount': 100,
+        },
+      ],
+      'payments': [
+        if (paid > 0)
+          {'id': 'p1', 'amount': paid, 'date': '2026-09-01', 'method': 'Cash'},
+      ],
+    };
+
+    test(
+      'Delivered is refused while a balance is due, and queues nothing',
+      () async {
+        await env.cache.setCachedOrders([order('Ready')]);
+        await expectLater(
+          repo.updateStatus('EL-9', 'Delivered'),
+          throwsA(isA<OrderRuleException>()),
+        );
+        expect(env.cache.getPendingSyncQueue(), isEmpty);
+      },
+    );
+
+    test('collect then deliver queues payment first, then status', () async {
+      await env.cache.setCachedOrders([order('Ready')]);
+      await repo.recordPayment('EL-9', 100, 'Cash');
+      await repo.updateStatus('EL-9', 'Delivered');
+      expect(env.cache.getPendingSyncQueue().map((a) => a['type']).toList(), [
+        'record_payment',
+        'update_status',
+      ]);
+    });
+
+    test('a repeated collect or delivered tap queues nothing extra', () async {
+      await env.cache.setCachedOrders([order('Ready')]);
+      await repo.recordPayment('EL-9', 100, 'Cash');
+      await repo.updateStatus('EL-9', 'Delivered');
+      await expectLater(
+        repo.recordPayment('EL-9', 100, 'Cash'),
+        throwsA(isA<OrderRuleException>()),
+      );
+      await repo.updateStatus('EL-9', 'Delivered'); // same status: no-op
+      expect(env.cache.getPendingSyncQueue(), hasLength(2));
+    });
+
+    test('status cannot move backwards', () async {
+      await env.cache.setCachedOrders([order('Ready', paid: 100)]);
+      await expectLater(
+        repo.updateStatus('EL-9', 'In Progress'),
+        throwsA(isA<OrderRuleException>()),
+      );
+    });
+
+    group('queued actions survive a server copy', () {
+      Map<String, dynamic> queuedPayment(String id) => {
+        'type': 'record_payment',
+        'clientActionId': id,
+        'orderCode': 'EL-9',
+        'amount': 100,
+        'method': 'Cash',
+        'queuedAt': '2026-10-07T07:22:00',
+      };
+      Map<String, dynamic> queuedDelivered() => {
+        'type': 'update_status',
+        'clientActionId': 'a-del',
+        'orderCode': 'EL-9',
+        'status': 'Delivered',
+        'queuedAt': '2026-10-07T07:22:01',
+      };
+
+      test(
+        'server copy is Ready/unpaid but payment and delivery are queued',
+        () async {
+          await env.cache.setCachedOrders([order('Ready')]);
+          await env.cache.setPendingSyncQueue([
+            queuedPayment('a-pay'),
+            queuedDelivered(),
+          ]);
+          final shown = repo.getCachedOrdersList().single;
+          expect(shown.balanceDue, 0);
+          expect(shown.status, 'Delivered');
+        },
+      );
+
+      test(
+        'a second collect is refused while the first is still queued',
+        () async {
+          await env.cache.setCachedOrders([order('Ready')]);
+          await env.cache.setPendingSyncQueue([queuedPayment('a-pay')]);
+          await expectLater(
+            repo.recordPayment('EL-9', 100, 'Cash'),
+            throwsA(isA<OrderRuleException>()),
+          );
+          expect(env.cache.getPendingSyncQueue(), hasLength(1));
+        },
+      );
+
+      test(
+        'once the server echoes the payment it is not counted twice',
+        () async {
+          final served = order('Ready', paid: 100);
+          (served['payments'] as List).first['clientActionId'] = 'a-pay';
+          await env.cache.setCachedOrders([served]);
+          await env.cache.setPendingSyncQueue([queuedPayment('a-pay')]);
+          final shown = repo.getCachedOrdersList().single;
+          expect(shown.payments, hasLength(1));
+          expect(shown.balanceDue, 0);
+        },
+      );
+
+      test('an action that left the queue is no longer shown', () async {
+        await env.cache.setCachedOrders([order('Ready')]);
+        await env.cache.setPendingSyncQueue([]);
+        final shown = repo.getCachedOrdersList().single;
+        expect(shown.balanceDue, 100);
+        expect(shown.status, 'Ready');
+      });
+
+      test(
+        'the local collect carries the same id as the queued action',
+        () async {
+          await env.cache.setCachedOrders([order('Ready')]);
+          await repo.recordPayment('EL-9', 100, 'Cash');
+          final queuedId = env.cache
+              .getPendingSyncQueue()
+              .single['clientActionId'];
+          final raw = env.cache.getCachedOrders()!.single['payments'] as List;
+          expect(raw.single['clientActionId'], queuedId);
+          // laid over itself, the payment is still counted once
+          expect(repo.getCachedOrdersList().single.payments, hasLength(1));
+        },
+      );
+    });
+
+    test('a payment above the balance is refused', () async {
+      await env.cache.setCachedOrders([order('Ready', paid: 40)]);
+      await expectLater(
+        repo.recordPayment('EL-9', 100, 'Cash'),
+        throwsA(isA<OrderRuleException>()),
+      );
     });
   });
 }
@@ -584,3 +776,28 @@ Map<String, dynamic> _paidDelivered(String id) => {
     {'id': 'p1', 'amount': 100, 'date': '2026-09-01', 'method': 'Cash'},
   ],
 };
+
+void orderMessageTests() {
+  group('OrderMessage.compose', () {
+    test('fills {link} with origin + path', () {
+      const m = OrderMessage(
+        enabled: true,
+        text: 'Hi {link}',
+        linkPath: '/o/abc/view',
+      );
+      expect(m.compose('https://x.test'), 'Hi https://x.test/o/abc/view');
+    });
+    test('appends the link when the template has no {link}', () {
+      const m = OrderMessage(
+        enabled: true,
+        text: 'Ready!',
+        linkPath: '/i/t/view',
+      );
+      expect(m.compose('https://x.test'), 'Ready!\nhttps://x.test/i/t/view');
+    });
+    test('no link path: text only, never a stray placeholder', () {
+      const m = OrderMessage(enabled: true, text: 'Hi {link}', linkPath: null);
+      expect(m.compose('https://x.test'), 'Hi');
+    });
+  });
+}

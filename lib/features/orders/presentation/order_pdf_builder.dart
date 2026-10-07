@@ -6,9 +6,8 @@ import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-/// Builds the PDF shown/shared for an order — shared by the post-delivery
-/// invoice (InvoiceActionsSheet) and the pre-collection "order ready" bill
-/// (ReadyBillActionsSheet), matching the server-rendered invoice PDF structure
+/// Builds the PDF shown/shared for an order by the post-delivery invoice
+/// (InvoiceActionsSheet), matching the server-rendered invoice PDF structure
 /// and labels.
 Future<Uint8List> buildOrderPdfBytes({
   required Order order,

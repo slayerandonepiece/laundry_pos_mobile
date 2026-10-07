@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:myshop/features/orders/presentation/dialogs/cancel_order_dialog.dart';
+import 'package:myshop/features/orders/data/orders_repository.dart';
+import 'package:myshop/features/orders/presentation/share_update.dart';
 import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -12,7 +15,6 @@ import 'package:myshop/features/orders/bloc/orders_event.dart';
 import 'package:myshop/features/orders/bloc/orders_state.dart';
 import 'package:myshop/features/orders/data/models/order_model.dart';
 import 'package:myshop/features/orders/presentation/dialogs/collect_payment_dialog.dart';
-import 'package:myshop/features/orders/presentation/dialogs/ready_bill_actions_sheet.dart';
 import 'package:myshop/features/orders/presentation/dialogs/record_payment_dialog.dart';
 import 'package:myshop/features/orders/presentation/dialogs/status_dialog.dart';
 import 'package:myshop/features/orders/presentation/invoice_actions_sheet.dart';
@@ -47,74 +49,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     _order = widget.initialOrder;
   }
 
-  Future<void> _promptNotifyCustomerReady(
-    BuildContext context,
-    Order order,
-    String storeName,
-  ) async {
-    final shouldNotify = await showDialog<bool>(
-      context: context,
-      barrierColor: AppColors.scrim.withValues(alpha: 0.42),
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Notify customer now?', style: AppTextStyles.h2),
-              const SizedBox(height: 8),
-              const Text(
-                'Order is ready for pickup. Send the customer their bill now?',
-                style: AppTextStyles.hint,
-              ),
-              const SizedBox(height: 22),
-              Row(
-                children: [
-                  Expanded(
-                    child: SecondaryButton(
-                      label: 'Skip',
-                      height: AppButtonHeight.inline,
-                      onPressed: () => Navigator.of(dialogContext).pop(false),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: PrimaryButton(
-                      label: 'Yes, notify',
-                      height: AppButtonHeight.inline,
-                      onPressed: () => Navigator.of(dialogContext).pop(true),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (shouldNotify == true && context.mounted) {
-      await ReadyBillActionsSheet.show(
-        context,
-        order: order,
-        storeName: storeName,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     final String storeName = authState is AuthenticatedState
         ? authState.currentStore.storeName
         : '';
+    final bool isOwner =
+        authState is AuthenticatedState && authState.currentStore.isOwner;
 
     return BlocConsumer<OrdersBloc, OrdersState>(
       listener: (context, state) {
@@ -132,22 +74,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          if (state.actionSuccessMessage == 'Status updated to Ready' &&
-              state.selectedOrder != null &&
-              state.selectedOrder!.isSameOrder(widget.initialOrder)) {
-            // StatusDialog listens on this same bloc and pops itself on this
-            // same state change. Its listener runs after this one, so
-            // pushing the notify dialog synchronously here would land it on
-            // top of StatusDialog before StatusDialog's own pop runs —
-            // making that pop close the notify dialog instead of
-            // StatusDialog. Deferring to the next frame guarantees
-            // StatusDialog has already closed first.
-            final order = state.selectedOrder!;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (context.mounted) {
-                _promptNotifyCustomerReady(context, order, storeName);
-              }
-            });
+          if (state.actionSuccessMessage == 'Order cancelled') {
+            Navigator.of(context).pop();
+            return;
           }
         }
         if (state.error != null) {
@@ -473,61 +402,44 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
                 // 5. Actions / Invoice Section
                 if (!isDelivered) ...[
-                  // Pre-settlement flow. "Collect payment & deliver" is one
-                  // constant action once the order is ready — the dialog
-                  // itself branches on whether a balance is due, instead of
-                  // this screen choosing between two different dialogs.
-                  if (isReady) ...[
+                  // One rule: no delivery without payment. Up to Ready the
+                  // only action is Update status. Once Ready, the single way
+                  // forward is Collect payment & deliver (or Mark delivered
+                  // when it was paid up front); the status picker cannot
+                  // reach Delivered.
+                  if (isReady)
                     PrimaryButton(
-                      label: 'Collect payment & deliver',
+                      label: hasBalanceDue
+                          ? 'Collect payment & deliver'
+                          : 'Mark delivered',
                       icon: const Icon(
                         Icons.payments_outlined,
                         size: 19,
                         color: Colors.white,
                       ),
-                      onPressed: () {
-                        CollectPaymentDialog.show(context, order: order);
-                      },
-                    ),
-                    if (order.balanceDue > 0) ...[
-                      const SizedBox(height: 10),
-                      SecondaryButton(
-                        label: 'Record payment',
-                        onPressed: () {
-                          RecordPaymentDialog.show(context, order: order);
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    SecondaryButton(
-                      label: 'Update status',
-                      onPressed: () {
-                        StatusDialog.show(
-                          context,
-                          order: order,
-                          onCollectPaymentRequested: () {
-                            CollectPaymentDialog.show(context, order: order);
-                          },
-                        );
-                      },
-                    ),
-                  ] else ...[
+                      onPressed: () =>
+                          CollectPaymentDialog.show(context, order: order),
+                    )
+                  else
                     PrimaryButton(
                       label: 'Update status',
-                      onPressed: () {
-                        StatusDialog.show(context, order: order);
-                      },
+                      onPressed: () => StatusDialog.show(context, order: order),
                     ),
-                    if (order.balanceDue > 0) ...[
-                      const SizedBox(height: 10),
-                      SecondaryButton(
-                        label: 'Record payment',
-                        onPressed: () {
-                          RecordPaymentDialog.show(context, order: order);
-                        },
-                      ),
-                    ],
-                  ],
+                  const SizedBox(height: 10),
+                  SecondaryButton(
+                    label: 'Share update',
+                    icon: const Icon(
+                      Icons.ios_share,
+                      size: 17,
+                      color: AppColors.primary,
+                    ),
+                    textColor: AppColors.primary,
+                    onPressed: () => shareOrderUpdate(
+                      context,
+                      context.read<OrdersRepository>(),
+                      order,
+                    ),
+                  ),
                   const SizedBox(height: 12),
 
                   // Inset message
@@ -556,8 +468,33 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       ],
                     ),
                   ),
+                  if (isOwner) ...[
+                    const SizedBox(height: 10),
+                    SecondaryButton(
+                      label: 'Cancel order',
+                      textColor: AppColors.danger,
+                      borderColor: AppColors.danger,
+                      onPressed: () =>
+                          CancelOrderDialog.show(context, order: order),
+                    ),
+                  ],
                 ] else ...[
                   // Settled / Delivered Flow (Screen 9f)
+                  SecondaryButton(
+                    label: 'Share update',
+                    icon: const Icon(
+                      Icons.ios_share,
+                      size: 17,
+                      color: AppColors.primary,
+                    ),
+                    textColor: AppColors.primary,
+                    onPressed: () => shareOrderUpdate(
+                      context,
+                      context.read<OrdersRepository>(),
+                      order,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   if (order.balanceDue > 0) ...[
                     PrimaryButton(
                       label: 'Record payment',

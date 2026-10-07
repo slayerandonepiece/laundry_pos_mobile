@@ -60,7 +60,7 @@ class _CollectPaymentDialogState extends State<CollectPaymentDialog> {
           repo.getCachedPaymentMethodsList() ?? await repo.listPaymentMethods();
       if (!mounted) return;
       setState(() {
-        _methods = methods;
+        _methods = methods.where((m) => m.offeredAfterOrder).toList();
         _loadingMethods = false;
       });
     } catch (_) {

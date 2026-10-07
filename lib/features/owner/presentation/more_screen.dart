@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:myshop/features/profile/presentation/sync_data_screen.dart';
 import 'package:myshop/shared/widgets/app_version_text.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -13,6 +14,8 @@ import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/presentation/change_password_screen.dart';
 import 'package:myshop/features/owner/presentation/expenses_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_profile_screen.dart';
+import 'package:myshop/features/owner/presentation/customer_messages_screen.dart';
+import 'package:myshop/features/owner/presentation/outlets_screen.dart';
 import 'package:myshop/features/owner/presentation/payment_methods_screen.dart';
 import 'package:myshop/features/owner/presentation/plan_status_helper.dart';
 import 'package:myshop/features/owner/presentation/services_screen.dart';
@@ -241,8 +244,46 @@ class MoreScreen extends StatelessWidget {
                       const Divider(color: AppColors.border, height: 1),
                       _buildMenuItem(
                         context,
+                        icon: Icons.chat_bubble_outline,
+                        title: 'Customer messages',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            settings: const RouteSettings(
+                              name: 'customer_messages',
+                            ),
+                            builder: (_) => const CustomerMessagesScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.store_mall_directory_outlined,
+                        title: 'Outlets',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            settings: const RouteSettings(name: 'outlets'),
+                            builder: (_) => const OutletsScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
                         icon: Icons.storefront_outlined,
-                        title: 'Store profile',
+                        title: 'Organization',
                         trailing: const Icon(
                           Icons.chevron_right,
                           color: AppColors.faintText,
@@ -302,6 +343,24 @@ class MoreScreen extends StatelessWidget {
                           MaterialPageRoute(
                             settings: const RouteSettings(name: 'subscription'),
                             builder: (_) => const SubscriptionScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.sync,
+                        title: 'Sync data',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            settings: const RouteSettings(name: 'sync_data'),
+                            builder: (_) => const SyncDataScreen(),
                           ),
                         ),
                       ),

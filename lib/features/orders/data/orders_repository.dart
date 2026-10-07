@@ -16,6 +16,54 @@ import 'models/order_model.dart';
 
 const _tag = 'ORDERS_SYNC';
 
+/// A status change the order rules refuse (backwards, after Delivered, or
+/// Delivered with a balance due). The message is safe to show to the user.
+class OrderRuleException implements Exception {
+  final String message;
+  const OrderRuleException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+/// What the server returns for GET /orders/{code}/message.
+class OrderMessage {
+  final bool enabled;
+
+  /// Every placeholder filled except {link}.
+  final String text;
+
+  /// Public page path (`/o/TOKEN/view` or `/i/TOKEN/view`), or null.
+  final String? linkPath;
+
+  const OrderMessage({
+    required this.enabled,
+    required this.text,
+    required this.linkPath,
+  });
+
+  factory OrderMessage.fromJson(Map<String, dynamic> json) => OrderMessage(
+    enabled: json['enabled'] == true,
+    text: json['text']?.toString() ?? '',
+    linkPath: json['linkPath']?.toString(),
+  );
+
+  /// The text to send: {link} replaced by the public link, or the link added
+  /// on a new line when the template has no {link}. Link only, no PDF.
+  String compose(String origin) {
+    final path = linkPath;
+    if (path == null || path.isEmpty) {
+      return text.replaceAll('{link}', '').trim();
+    }
+    final link = '$origin$path';
+    return text.contains('{link}')
+        ? text.replaceAll('{link}', link)
+        : '$text\n$link';
+  }
+}
+
+const _statusOrder = ['pending', 'in progress', 'ready', 'delivered'];
+
 class OrdersRepository {
   final ApiClient _apiClient;
   final LocalCacheService _localCache;
@@ -99,11 +147,90 @@ class OrdersRepository {
   /// only thing the Orders screen calls on a normal open; a network sync
   /// only happens via [SyncEngine], triggered by pull-to-refresh, a
   /// reconnect, or a manual "Sync now" tap.
+  /// An order map with the phone's queued, not-yet-confirmed actions laid on
+  /// top of it. A server copy knows nothing about a payment or status that is
+  /// still waiting to be sent, so without this a sync would show the order as
+  /// unpaid again and invite a second collect. Nothing is persisted: once the
+  /// server echoes an action (a payment by its clientActionId, a status by
+  /// value) it is satisfied and adds nothing, and an action that left the
+  /// queue stops being shown.
+  Map<String, dynamic> _withPendingActions(Map<String, dynamic> order) {
+    final refs = <String>{
+      order['id']?.toString() ?? '',
+      order['offlineId']?.toString() ?? '',
+    }..remove('');
+    if (refs.isEmpty) return order;
+
+    final List<Map<String, dynamic>> queue;
+    try {
+      queue = _localCache.getPendingSyncQueue();
+    } catch (e) {
+      // An unreadable queue must not hide the order; show it as stored.
+      AppLogger.log(_tag, 'pending queue unreadable', error: e);
+      return order;
+    }
+
+    List<Map<String, dynamic>>? payments;
+    var status = order['status']?.toString() ?? 'Pending';
+    var statusChanged = false;
+    for (final a in queue) {
+      final ref = a['orderCode']?.toString();
+      if (ref == null || !refs.contains(ref)) continue;
+      if (a['type'] == 'record_payment') {
+        final id = a['clientActionId']?.toString() ?? '';
+        payments ??= [
+          for (final p in (order['payments'] as List? ?? const []))
+            Map<String, dynamic>.from(p as Map),
+        ];
+        final seen = payments.any(
+          (p) =>
+              id.isNotEmpty &&
+              (p['clientActionId']?.toString() == id ||
+                  p['id']?.toString() == id),
+        );
+        if (!seen) {
+          payments.add({
+            'id': 'pending_$id',
+            'clientActionId': id,
+            'amount': a['amount'],
+            'method': a['method'],
+            'date': a['queuedAt'],
+          });
+        }
+      } else if (a['type'] == 'update_status') {
+        final target = a['status']?.toString() ?? '';
+        if (_statusOrder.indexOf(target.toLowerCase()) >
+            _statusOrder.indexOf(status.toLowerCase())) {
+          status = target;
+          statusChanged = true;
+        }
+      }
+    }
+    if (payments == null && !statusChanged) return order;
+    return {
+      ...order,
+      'payments': ?payments,
+      if (statusChanged) 'status': status,
+      if (statusChanged && status == 'Delivered')
+        'completed': order['completed'] ?? _localDay(),
+    };
+  }
+
+  /// The cached order for [orderCode] with queued actions applied, or null.
+  Map<String, dynamic>? _cachedOrderWithPending(String orderCode) {
+    for (final c in _localCache.getCachedOrders() ?? const []) {
+      if (Order.jsonMatchesRef(c, orderCode)) {
+        return _withPendingActions(Map<String, dynamic>.from(c));
+      }
+    }
+    return null;
+  }
+
   List<Order> getCachedOrdersList() {
     final cached = _localCache.getCachedOrders();
     if (cached == null) return [];
     final orders = LocalCacheService.dedupeOrdersById(cached)
-        .map((o) => Order.fromJson(o))
+        .map((o) => Order.fromJson(_withPendingActions(o)))
         .toList();
     // Delta sync upserts by id in whatever order the server returned them
     // (oldest-changed first), which is not display order — always sort
@@ -222,7 +349,7 @@ class OrdersRepository {
       if (response is Map) {
         final order = Order.fromJson(Map<String, dynamic>.from(response));
         await _updateCachedOrder(order, ctx);
-        return order;
+        return Order.fromJson(_withPendingActions(order.toJson()));
       }
       throw Exception('Failed to load order details');
     } catch (e) {
@@ -238,7 +365,7 @@ class OrdersRepository {
           orElse: () => <String, dynamic>{},
         );
         if (match.isNotEmpty) {
-          return Order.fromJson(match);
+          return Order.fromJson(_withPendingActions(match));
         }
       }
       rethrow;
@@ -251,6 +378,27 @@ class OrdersRepository {
   /// to trigger SyncEngine themselves afterward (kept out of this repository
   /// to avoid a circular import between OrdersRepository and SyncEngine).
   Future<Order> updateStatus(String orderCode, String status) async {
+    final cachedJson = _cachedOrderWithPending(orderCode);
+    if (cachedJson != null) {
+      final current = Order.fromJson(cachedJson);
+      final from = _statusOrder.indexOf(current.status.trim().toLowerCase());
+      final to = _statusOrder.indexOf(status.trim().toLowerCase());
+      // Same status again is a no-op, so a double tap never queues a second
+      // update for the server.
+      if (from == to) return current;
+      if (current.isDelivered) {
+        throw const OrderRuleException('Delivered orders cannot be changed.');
+      }
+      if (to < from) {
+        throw const OrderRuleException('Status can only move forward.');
+      }
+      if (to == 3 && current.balanceDue > 0) {
+        throw const OrderRuleException(
+          'Collect the balance before marking this order delivered.',
+        );
+      }
+    }
+
     final updatedJson = await _applyLocalUpdate(
       orderCode,
       (json) => json
@@ -292,10 +440,21 @@ class OrdersRepository {
     int amount,
     String method,
   ) async {
+    // Never record more than is owed: a repeated tap or a second queued
+    // "collect" must not double-charge the customer.
+    final cachedJson = _cachedOrderWithPending(orderCode);
+    if (cachedJson != null) {
+      final order = Order.fromJson(cachedJson);
+      if (amount <= 0 || (order.totalAmount > 0 && amount > order.balanceDue)) {
+        throw const OrderRuleException('Nothing more is due on this order.');
+      }
+    }
+    final clientActionId = IdempotencyKeyGenerator.generate();
     final updatedJson = await _applyLocalUpdate(orderCode, (json) {
       final payments = List<Map<String, dynamic>>.from(json['payments'] ?? []);
       payments.add({
         'id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
+        'clientActionId': clientActionId,
         'amount': amount,
         'method': method,
         'date': DateTime.now().toIso8601String(),
@@ -306,7 +465,7 @@ class OrdersRepository {
 
     await _localCache.enqueueSyncAction({
       'type': 'record_payment',
-      'clientActionId': IdempotencyKeyGenerator.generate(),
+      'clientActionId': clientActionId,
       'orderCode': orderCode,
       'amount': amount,
       'method': method,
@@ -363,6 +522,79 @@ class OrdersRepository {
     final invoice = await _fetchInvoice(orderCode);
     await _mergeInvoiceIntoCachedOrder(orderCode, invoice, ctx);
     return invoice;
+  }
+
+  /// When the server's products and orders last changed (GET /sync/status),
+  /// so the phone can tell whether its copy is behind. Null for a missing
+  /// value.
+  Future<Map<String, DateTime>> getServerChangeTimes() async {
+    final response = await _apiClient.get(ApiEndpoints.syncStatus);
+    if (response is! Map) throw Exception('Unexpected sync status response');
+    return {
+      for (final e in response.entries)
+        e.key.toString(): ?DateTime.tryParse(e.value?.toString() ?? ''),
+    };
+  }
+
+  /// Fetches the organization's message templates and keeps them on the
+  /// phone. The server's rows replace the stored ones whole, so there is
+  /// never a merged or duplicated copy.
+  Future<List<Map<String, dynamic>>> syncMessageTemplates() async {
+    final response = await _apiClient.get(ApiEndpoints.messageTemplates);
+    final list = response is Map ? response['templates'] : null;
+    if (list is! List) throw Exception('Unexpected templates response');
+    final rows = [for (final e in list) Map<String, dynamic>.from(e as Map)];
+    await _localCache.setCachedMessageTemplates(rows);
+    return rows;
+  }
+
+  /// The templates last stored on this phone, or null before the first sync.
+  List<Map<String, dynamic>>? getCachedMessageTemplates() =>
+      _localCache.getCachedMessageTemplates();
+
+  /// Owner-only. Cancels an order that has not been delivered; the server
+  /// decides (Delivered is final) and needs the connection, so this is never
+  /// queued. The order leaves the phone once the server confirms.
+  Future<void> cancelOrder(String orderCode, String reason) async {
+    final cachedJson = _cachedOrderWithPending(orderCode);
+    if (cachedJson != null) {
+      final order = Order.fromJson(cachedJson);
+      if (order.isDelivered) {
+        throw const OrderRuleException('Delivered orders cannot be cancelled.');
+      }
+      if (order.id.isEmpty) {
+        throw const OrderRuleException(
+          'Sync this order first, then cancel it.',
+        );
+      }
+    }
+    final trimmed = reason.trim();
+    if (trimmed.length < 3 || trimmed.length > 500) {
+      throw const OrderRuleException('Reason must be 3 to 500 characters.');
+    }
+    await _apiClient.post(
+      ApiEndpoints.orderCancel(orderCode),
+      body: {'reason': trimmed},
+    );
+    final ctx = _captureContext();
+    final list = _readOrdersIn(ctx);
+    if (list != null) {
+      await _writeOrdersIn(
+        ctx,
+        list.where((c) => !Order.jsonMatchesRef(c, orderCode)).toList(),
+      );
+    }
+  }
+
+  /// The customer message for the order's current status, filled by the
+  /// server from the organization's template. Needs the server (the template
+  /// and the public link live there), so it is online-only.
+  Future<OrderMessage> getOrderMessage(String orderCode) async {
+    final response = await _apiClient.get(ApiEndpoints.orderMessage(orderCode));
+    if (response is Map) {
+      return OrderMessage.fromJson(Map<String, dynamic>.from(response));
+    }
+    throw Exception('Unexpected message response');
   }
 
   Future<InvoiceInfo> _fetchInvoice(String orderCode) async {

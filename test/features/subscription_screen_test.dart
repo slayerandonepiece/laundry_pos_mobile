@@ -39,10 +39,14 @@ class FakeBillingRepository implements OwnerRepository {
   List<SubscriptionInvoice> cached = const [];
   List<SubscriptionInvoice> remote = const [];
   bool failList = false;
+  SubscriptionPlan? plan;
   int pdfAsked = 0;
 
   @override
   List<SubscriptionInvoice> getCachedSubscriptionInvoices() => cached;
+
+  @override
+  SubscriptionPlan? getCachedSubscriptionPlan() => plan;
 
   @override
   Future<List<SubscriptionInvoice>> listSubscriptionInvoices() async {
@@ -349,6 +353,66 @@ void main() {
       expect(find.text('Paid 25 Sep 2026 · Cash'), findsOneWidget);
       expect(find.text('Covers 25 Sep 2026 – 24 Sep 2027'), findsOneWidget);
       expect(find.text('Paid 20 Sep 2026 · UPI'), findsOneWidget);
+    });
+
+    testWidgets('Shows the current term from the invoice that ends last', (
+      tester,
+    ) async {
+      final repo = FakeBillingRepository()..remote = [_deposit, _renewal];
+      await tester.pumpWidget(billingApp(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('CURRENT TERM'), findsOneWidget);
+      expect(find.text('to 24 Sep 2027'), findsOneWidget);
+      expect(find.text('PAID THROUGH'), findsOneWidget);
+      expect(find.text('1 Jan 2100'), findsOneWidget);
+    });
+
+    testWidgets('No paid invoice yet: says there is no paid term', (
+      tester,
+    ) async {
+      final repo = FakeBillingRepository()..remote = [_deposit];
+      await tester.pumpWidget(billingApp(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No paid term yet'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Shows the plan, fees and renewal fee when the server sends them',
+      (tester) async {
+        final repo = FakeBillingRepository()
+          ..remote = [_renewal]
+          ..plan = const SubscriptionPlan(
+            planName: 'Standard',
+            annualFeeAmount: 500000,
+            depositAmount: 1000000,
+          );
+        await tester.pumpWidget(billingApp(repo));
+        await tester.pumpAndSettle();
+
+        expect(find.text('PLAN'), findsOneWidget);
+        expect(find.text('Standard'), findsOneWidget);
+        expect(
+          find.text('Annual fee ₹5,000 · Deposit ₹10,000'),
+          findsOneWidget,
+        );
+        expect(find.text('Renewal fee ₹5,000'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Custom terms: no plan name, no deposit line', (tester) async {
+      final repo = FakeBillingRepository()
+        ..remote = [_renewal]
+        ..plan = const SubscriptionPlan(
+          annualFeeAmount: 500000,
+          depositAmount: 0,
+        );
+      await tester.pumpWidget(billingApp(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Custom terms'), findsOneWidget);
+      expect(find.text('Annual fee ₹5,000'), findsOneWidget);
     });
 
     testWidgets('A failed refresh keeps showing what the phone already has', (

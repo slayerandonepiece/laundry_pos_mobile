@@ -322,7 +322,12 @@ void main() {
       await tester.pumpWidget(buildMoreScreen(authState));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Delete account'));
+      // The list builds rows lazily, so scroll until the row exists.
+      await tester.scrollUntilVisible(
+        find.text('Delete account'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Delete account'));
       await tester.pumpAndSettle();

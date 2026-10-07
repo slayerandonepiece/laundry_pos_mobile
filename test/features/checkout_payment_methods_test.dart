@@ -240,6 +240,9 @@ void main() {
     testWidgets(
       '2. Select Cash On Delivery -> Place order dispatches paymentChoice delivery with no paymentMethodName',
       (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
         cartBloc.emit(
           cartBloc.state.copyWith(
             items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},

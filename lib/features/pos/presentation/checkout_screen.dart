@@ -147,7 +147,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               : null;
           final outletName = outlet?.displayName;
 
-          final selectedMethod = state.paymentMethods
+          final offeredMethods = state.paymentMethods
+              .where((m) => m.offeredWhenPlacingOrder)
+              .toList();
+          final selectedMethod = offeredMethods
               .where((m) => m.id == _selectedMethodId)
               .firstOrNull;
           final hasSelection = selectedMethod != null;
@@ -159,6 +162,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   (receivedPaise <= 0 || receivedPaise > totalAmount)
               ? 'Enter an amount between ₹1 and ${CurrencyFormatter.format(totalAmount)}'
               : null;
+
+          // What the bill will show: a blank field takes the full total, a
+          // bad number counts as nothing yet, and pay on delivery takes none.
+          final receivedNowPaise = !takesPaymentNow
+              ? 0
+              : receivedPaise == null
+              ? totalAmount
+              : receivedError != null
+              ? 0
+              : receivedPaise;
+          final balanceDuePaise = totalAmount - receivedNowPaise;
 
           return Scaffold(
             backgroundColor: AppColors.surface,
@@ -190,7 +204,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               onPressed: () => _goBack(context),
                             ),
                             const SizedBox(width: 4),
-                            const Text('Checkout', style: AppTextStyles.h3),
+                            const Text(
+                              'Review and pay',
+                              style: AppTextStyles.h3,
+                            ),
                           ],
                         ),
                         IconButton(
@@ -323,6 +340,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     ),
                                   );
                                 }),
+                                const SizedBox(height: 4),
+                                const Divider(),
+                                const SizedBox(height: 8),
+                                _sumRow(
+                                  'Order total',
+                                  CurrencyFormatter.format(totalAmount),
+                                ),
+                                if (receivedNowPaise > 0) ...[
+                                  const SizedBox(height: 6),
+                                  _sumRow(
+                                    'Received now',
+                                    CurrencyFormatter.format(receivedNowPaise),
+                                  ),
+                                ],
+                                const SizedBox(height: 6),
+                                _sumRow(
+                                  'Balance due',
+                                  CurrencyFormatter.format(balanceDuePaise),
+                                  bold: true,
+                                ),
                               ],
                             ),
                           ),
@@ -360,7 +397,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           Text('PAYMENT METHOD', style: AppTextStyles.label),
                           const SizedBox(height: 8),
 
-                          if (state.paymentMethods.isEmpty)
+                          if (offeredMethods.isEmpty)
                             const Padding(
                               padding: EdgeInsets.only(bottom: 10),
                               child: Text(
@@ -375,11 +412,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             )
                           else ...[
                             _buildMethodGrid(
-                              state.paymentMethods
+                              offeredMethods
                                   .where((m) => !m.isCashOnDelivery)
                                   .toList(),
                             ),
-                            for (final cod in state.paymentMethods.where(
+                            for (final cod in offeredMethods.where(
                               (m) => m.isCashOnDelivery,
                             )) ...[
                               const SizedBox(height: 10),
@@ -403,7 +440,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   ),
                               onChanged: (_) => setState(() {}),
                             ),
-                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextActionButton(
+                                key: const Key('checkout_received_full'),
+                                label:
+                                    'Full ${CurrencyFormatter.format(totalAmount)}',
+                                onPressed: totalAmount <= 0
+                                    ? null
+                                    : () => setState(() {
+                                        _receivedController.text =
+                                            totalAmount % 100 == 0
+                                            ? '${totalAmount ~/ 100}'
+                                            : (totalAmount / 100)
+                                                  .toStringAsFixed(2);
+                                      }),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
                           ],
 
                           AppTextField(
@@ -473,6 +527,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _sumRow(String label, String value, {bool bold = false}) {
+    final style = AppTextStyles.bodySmall.copyWith(
+      fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+      color: bold ? AppColors.text : AppColors.mutedText,
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: style),
+        Text(value, style: style.copyWith(color: AppColors.text)),
+      ],
     );
   }
 

@@ -103,6 +103,27 @@ class LocalCacheService {
 
   // Active Store Id
   static const String keyActiveStoreId = 'active_store_id';
+
+  /// When a dataset was last pulled from the server on this phone, per
+  /// organization. Shown on Settings > Sync data.
+  String _syncedAtKey(String dataset) =>
+      'synced_at::${getActiveStoreId()}::$dataset';
+  DateTime? getSyncedAt(String dataset) =>
+      DateTime.tryParse(_box.get(_syncedAtKey(dataset)) as String? ?? '');
+  Future<void> setSyncedAt(String dataset) =>
+      _box.put(_syncedAtKey(dataset), DateTime.now().toIso8601String());
+
+  /// Message templates, per organization, as the server sent them.
+  String get _templatesKey => 'cached_message_templates::${getActiveStoreId()}';
+  List<Map<String, dynamic>>? getCachedMessageTemplates() {
+    final raw = _box.get(_templatesKey);
+    if (raw is! List) return null;
+    return [for (final e in raw) Map<String, dynamic>.from(e as Map)];
+  }
+
+  Future<void> setCachedMessageTemplates(List<Map<String, dynamic>> list) =>
+      _box.put(_templatesKey, list);
+
   String? getActiveStoreId() => _box.get(keyActiveStoreId) as String?;
   Future<void> setActiveStoreId(String storeId) =>
       _box.put(keyActiveStoreId, storeId);

@@ -203,7 +203,7 @@ void main() {
         await tester.pumpWidget(wrapScreen(const StoreProfileScreen()));
         await pumpAsync(tester);
 
-        expect(find.text('Store profile'), findsOneWidget);
+        expect(find.text('Organization'), findsOneWidget);
         expect(
           find.text('Currency: INR · Timezone: Asia/Kolkata'),
           findsOneWidget,
@@ -239,39 +239,22 @@ void main() {
     );
 
     testWidgets(
-      '3. PaymentMethodsScreen toggle dispatches TogglePaymentMethodEvent and renders no Add/Rename UI',
+      '3. PaymentMethodsScreen is read-only and renders no Add/Rename/toggle UI',
       (tester) async {
         await tester.pumpWidget(wrapScreen(const PaymentMethodsScreen()));
         await pumpAsync(tester);
 
         expect(find.text('Cash'), findsWidgets);
-        expect(find.text('UPI QR'), findsOneWidget);
         expect(
-          find.text(
-            'Payment methods are managed by the platform. Enable the ones you accept.',
-          ),
+          find.text('Contact support to change which methods are offered.'),
           findsOneWidget,
         );
 
-        // No Add or Rename UI rendered
         expect(find.text('Rename'), findsNothing);
         expect(find.text('Add payment method'), findsNothing);
         expect(find.text('Add method'), findsNothing);
         expect(find.byType(TextField), findsNothing);
-
-        // Toggle the first Switch (Cash: active true -> false)
-        final switches = find.byType(Switch);
-        expect(switches, findsNWidgets(2));
-        await tester.tap(switches.first);
-        await pumpAsync(tester);
-
-        expect(find.text('Disable Cash?'), findsOneWidget);
-        await tester.tap(find.text('Disable method'));
-        await pumpAsync(tester);
-
-        expect(fakeRepo.lastToggledPaymentMethod, isNotNull);
-        expect(fakeRepo.lastToggledPaymentMethod!['id'], 'pm-1');
-        expect(fakeRepo.lastToggledPaymentMethod!['active'], isFalse);
+        expect(find.byType(Switch), findsNothing);
 
         fakeRepo.paymentMethods = [
           StorePaymentMethod(id: 'pm-3', code: 'COD', name: 'Pay on delivery'),
