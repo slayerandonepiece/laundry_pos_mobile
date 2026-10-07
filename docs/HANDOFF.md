@@ -4,7 +4,7 @@ Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
-## Web-parity October pass — 7 October 2026 (branch `feat/web-parity-oct`, uncommitted)
+## Web-parity October pass — 7 October 2026 (branch `feat/web-parity-oct`, committed, not pushed)
 
 **Rule set by the owner:** no delivery without payment. Statuses go up to Ready; Ready shows "Collect payment & deliver" (or "Mark delivered" if paid); "Share update" drafts a message per status; a paid and delivered order cannot be cancelled. Offline, the payment and the delivery stay in the same queue and replay in order.
 
