@@ -4,7 +4,7 @@ Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
-## Web-parity October pass — 7 October 2026 (branch `feat/web-parity-oct`, committed, not pushed)
+## Web-parity October pass — 7 October 2026 (branch `feat/web-parity-oct`, pushed; PR to `main` to be opened by the owner)
 
 **Rule set by the owner:** no delivery without payment. Statuses go up to Ready; Ready shows "Collect payment & deliver" (or "Mark delivered" if paid); "Share update" drafts a message per status; a paid and delivered order cannot be cancelled. Offline, the payment and the delivery stay in the same queue and replay in order.
 
@@ -17,7 +17,13 @@ cloud, so everything needed to continue is in this file and the docs it links.
 
 **Later the same day (also committed):** Customer messages screen (4); Outlets list and Store profile renamed Organization (1); Subscription shows Plan, Current term, Paid through and renewal fee, with `plan` from `GET /subscription/invoices` (2); Orders screen opens on This week like the web Sales page (6). Imported orders never reach the phone (the sync excludes them), so the imported flag needs no change (7).
 
-**Not done:** invoice link sharing (5, no `/s/<token>` endpoint yet); Review and pay (rest of 7): the phone's checkout already has due date chips, payment method, received now and notes, but lacks the web's itemized bill, a "Balance due" line, a "Full" quick button and the "Review and pay" title (awaiting approval of that UI); final per-item report.
+**Also done (committed):** the checkout is titled Review and pay and shows Order total, Received now and Balance due, with a Full quick button (rest of 7). The Orders screen opens on This week (6).
+
+**Not done:** invoice link sharing (5): the backend has no `/s/<token>` endpoint for subscription invoices yet.
+
+**Not seen on a device:** the new checkout (the dev backend on :3000 had stopped, and the new-order phone step waits on the customer lookup), the trial and custom-terms Subscription views, offline or failed Sync states.
+
+**PR note:** `origin/main` was three commits behind local `main` (update-advisory merge and the 1.0.6+9 release bump), so the PR to `main` carries those three plus this pass.
 
 **Known:** `test/features/owner_repository_cache_test.dart` "7-day and 90-day requests are fetched but never cached" fails with or without these changes. `TogglePaymentMethodEvent` in `owner_bloc.dart` is dead code, left in place. Order `/sync/status` has one org-wide orders time, so an employee can see a false "newer data" for Orders. Dev order EL-24 (customer 9000000001) still exists in the dev DB. The end-to-end collect-and-deliver test has not been re-run since the dev backend recovered.
 
