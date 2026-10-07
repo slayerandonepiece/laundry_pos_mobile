@@ -43,7 +43,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
   SyncStatus? _lastSyncStatus;
 
   // The Sales summary card's period; it also narrows the list below it.
-  PeriodRange _period = PeriodRange.thisMonth;
+  PeriodRange _period = _defaultPeriod;
   String _activeQuickFilter = 'selected_dates'; // 'selected_dates' | 'due_today' | 'late' | 'open' | 'delivered_today'
 
   // The chip row scrolls sideways; a view picked from the dashboard may sit
@@ -101,10 +101,13 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     super.dispose();
   }
 
+  /// The web Sales page opens on This week, so the phone does too.
+  static const _defaultPeriod = PeriodRange.last7;
+
   /// Any narrowing beyond the defaults — decides whether Clear is offered.
   bool get _hasActiveFilters =>
       _searchQuery.isNotEmpty ||
-      !_period.isDefault ||
+      _period != _defaultPeriod ||
       _activeQuickFilter != 'selected_dates' ||
       _selectedWorkStatus != 'all' ||
       _selectedPaymentStatus != 'all';
@@ -135,7 +138,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     _searchController.clear();
     setState(() {
       _searchQuery = '';
-      _period = PeriodRange.thisMonth;
+      _period = _defaultPeriod;
       _activeQuickFilter = 'selected_dates';
       _selectedWorkStatus = 'all';
       _selectedPaymentStatus = 'all';
