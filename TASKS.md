@@ -13,6 +13,8 @@ Release **1.0.4+6** is prepared for **stage** (branch `feat/dashboard-filters-an
 
 **2 October:** expense edit/delete/paid-date/outlet, backend hardening 2 and the parity-audit Batch A (mobile-only) are done and committed on the feature branches; statuses are in the Pending list and the 2 October note in `docs/HANDOFF.md`. Open: Batch B (needs backend endpoints), the Neon migration (user applies it), two device checks listed in the note. API error reporting was widened to report every failed call (4xx, 5xx, timeouts) to Crashlytics as non-fatals; see the 2 October note in `docs/HANDOFF.md`. It is uncommitted and not yet checked in a real Crashlytics project.
 
+**7 October:** web-parity pass on `feat/web-parity-oct` (uncommitted): no-delivery-without-payment flow, catalog payment stages, Sync data page with stored message templates. Open items and the not-done list are in the 7 October note at the top of `docs/HANDOFF.md`. Next: Customer messages screen, then parity items 1, 2, 5, 6, 7.
+
 ## Status — 27 September 2026
 
 The mobile HTTP API exists. Main `cdfc121` includes the merged offline-ID/outlet/local-first work. Historical F1–F8 details below are not a current test-count or exact navigation specification: owner navigation currently has Dashboard / Orders / More, employees use Orders without an owner bottom bar.

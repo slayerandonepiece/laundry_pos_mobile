@@ -4,6 +4,21 @@ Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
+## Web-parity October pass — 7 October 2026 (branch `feat/web-parity-oct`, uncommitted)
+
+**Rule set by the owner:** no delivery without payment. Statuses go up to Ready; Ready shows "Collect payment & deliver" (or "Mark delivered" if paid); "Share update" drafts a message per status; a paid and delivered order cannot be cancelled. Offline, the payment and the delivery stay in the same queue and replay in order.
+
+**Done on the phone (analyzer clean, tests pass except the known one below):**
+- Payment stage read from the catalog: `PaymentMethodModel.stage`, `offeredWhenPlacingOrder`, `offeredAfterOrder` (COD is never after-order). Checkout and the collect dialogs filter by it. Payment methods screen is read-only.
+- `OrdersRepository`: `OrderRuleException`, forward-only status, overpay guard, `cancelOrder`, `getOrderMessage`, `getServerChangeTimes` (map of all `*UpdatedAt`), `syncMessageTemplates` (+ cached copy per store), queue overlay at read time (`_withPendingActions`) so a sync never shows a queued payment or delivery as undone. `recordPayment` uses one `clientActionId` for the temp payment and the queued action.
+- Order detail: Collect payment & deliver, Share update (`share_update.dart`), outlined Cancel order (owner, `cancel_order_dialog.dart`). Notify prompt and Record payment button removed (Record payment remains only for a legacy delivered order with a balance).
+- Settings > Sync data (`lib/features/profile/presentation/sync_data_screen.dart`): Status, Profile, Services and prices, Payment methods, Orders, Message templates, and owner-only Expenses, Employees, Invoices. State icons, "Sync"/"Retry" only when needed, "Send now" only when changes wait, "Last synced" line, server check on open, orders' last-synced stored per outlet. Org-wide data syncs once; orders sync for the selected outlet only.
+- Backend (done by the backend agent, read and typechecked by us, its Postgres tests could not start locally): `GET /api/v1/message-templates`, `/sync/status` extended, contract updated.
+
+**Not done:** Customer messages screen (item 4, use the stored templates), Profile sections (1), Billing/invoices (2), invoice link sharing (5, no `/s/<token>` endpoint yet), Sales default "This week" and the Orders "Oct 26" default (6), imported flag and Review-and-pay (rest of 7), final per-item report.
+
+**Known:** `test/features/owner_repository_cache_test.dart` "7-day and 90-day requests are fetched but never cached" fails with or without these changes. `TogglePaymentMethodEvent` in `owner_bloc.dart` is dead code, left in place. Order `/sync/status` has one org-wide orders time, so an employee can see a false "newer data" for Orders. Dev order EL-24 (customer 9000000001) still exists in the dev DB. The end-to-end collect-and-deliver test has not been re-run since the dev backend recovered.
+
 ## Release observability and automation — 2 October 2026
 
 - **A:** Added privacy-safe crash/session context with opaque user/store/outlet identifiers, uppercase role and environment; sign-out/block clears Crashlytics and Analytics identity.
