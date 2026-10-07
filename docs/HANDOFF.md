@@ -4,7 +4,7 @@ Start here in a new (cloud) session. Local-only state — `~/.claude` memory,
 `.wiki/` (gitignored), `.claude/CHECKPOINT.md` — is **not** available in the
 cloud, so everything needed to continue is in this file and the docs it links.
 
-## Web-parity October pass — 7 October 2026 (branch `feat/web-parity-oct`, pushed; PR to `main` to be opened by the owner)
+## Web-parity October pass — 7 October 2026 (merged to `main` as PR #8, merge commit `eb0ae7a`)
 
 **Rule set by the owner:** no delivery without payment. Statuses go up to Ready; Ready shows "Collect payment & deliver" (or "Mark delivered" if paid); "Share update" drafts a message per status; a paid and delivered order cannot be cancelled. Offline, the payment and the delivery stay in the same queue and replay in order.
 
@@ -23,9 +23,9 @@ cloud, so everything needed to continue is in this file and the docs it links.
 
 **Not seen on a device:** the new checkout (the dev backend on :3000 had stopped, and the new-order phone step waits on the customer lookup), the trial and custom-terms Subscription views, offline or failed Sync states.
 
-**PR note:** `origin/main` was three commits behind local `main` (update-advisory merge and the 1.0.6+9 release bump), so the PR to `main` carries those three plus this pass.
+**After the merge:** every remote and local branch is merged into `origin/main` (checked 7 Oct); the merged PR also carried the update-advisory merge and the 1.0.6+9 bump. The dashboard cache test that had been failing was date-dependent, not an app bug: its 7-day daily request is identical to the default month-to-date request on the 7th of a month, which the app rightly caches. Fixed in `71c61ce` (the range now ends yesterday). Full suite: 977 pass, 0 fail. A local `pubspec.yaml` bump to 1.0.7+10 is uncommitted and was not part of this work.
 
-**Known:** `test/features/owner_repository_cache_test.dart` "7-day and 90-day requests are fetched but never cached" fails with or without these changes. `TogglePaymentMethodEvent` in `owner_bloc.dart` is dead code, left in place. Order `/sync/status` has one org-wide orders time, so an employee can see a false "newer data" for Orders. Dev order EL-24 (customer 9000000001) still exists in the dev DB. The end-to-end collect-and-deliver test has not been re-run since the dev backend recovered.
+**Known:** `TogglePaymentMethodEvent` in `owner_bloc.dart` is dead code, left in place. Order `/sync/status` has one org-wide orders time, so an employee can see a false "newer data" for Orders. Dev order EL-24 (customer 9000000001) still exists in the dev DB. The end-to-end collect-and-deliver test has not been re-run since the dev backend recovered.
 
 ## Release observability and automation — 2 October 2026
 
