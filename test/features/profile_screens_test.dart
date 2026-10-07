@@ -203,7 +203,7 @@ void main() {
         await tester.pumpWidget(wrapScreen(const StoreProfileScreen()));
         await pumpAsync(tester);
 
-        expect(find.text('Store profile'), findsOneWidget);
+        expect(find.text('Organization'), findsOneWidget);
         expect(
           find.text('Currency: INR · Timezone: Asia/Kolkata'),
           findsOneWidget,

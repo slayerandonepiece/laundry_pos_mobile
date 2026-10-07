@@ -85,7 +85,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             ),
             titleSpacing: 0,
             title: const Text(
-              'Store profile',
+              'Organization',
               style: TextStyle(
                 fontFamily: AppTextStyles.fontDisplay,
                 fontSize: 18,

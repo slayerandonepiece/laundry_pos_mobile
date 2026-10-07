@@ -15,6 +15,7 @@ import 'package:myshop/features/owner/presentation/change_password_screen.dart';
 import 'package:myshop/features/owner/presentation/expenses_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_profile_screen.dart';
 import 'package:myshop/features/owner/presentation/customer_messages_screen.dart';
+import 'package:myshop/features/owner/presentation/outlets_screen.dart';
 import 'package:myshop/features/owner/presentation/payment_methods_screen.dart';
 import 'package:myshop/features/owner/presentation/plan_status_helper.dart';
 import 'package:myshop/features/owner/presentation/services_screen.dart';
@@ -263,8 +264,26 @@ class MoreScreen extends StatelessWidget {
                       const Divider(color: AppColors.border, height: 1),
                       _buildMenuItem(
                         context,
+                        icon: Icons.store_mall_directory_outlined,
+                        title: 'Outlets',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            settings: const RouteSettings(name: 'outlets'),
+                            builder: (_) => const OutletsScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
                         icon: Icons.storefront_outlined,
-                        title: 'Store profile',
+                        title: 'Organization',
                         trailing: const Icon(
                           Icons.chevron_right,
                           color: AppColors.faintText,
