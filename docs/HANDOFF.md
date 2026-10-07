@@ -96,7 +96,7 @@ Skipped on purpose: PF-02 (the web has no "Organization contact" label) and OO-0
 | 3 | Switcher | Menu-lingers glitch **not reproducible**; speculative fix reverted (showMenu returns at pop start, so it can't be proven). Employee landing in Lake is **by design** (remembered outlet wins). Monitor |
 | 4 | Backend | **Done and committed in `../laundry_pos`**: DB-backed throttle, cookie carries token (one web re-login), per-tenant idempotency keys, `billing_pending` enforced behind the flag. Migration `20261001120000_…` NOT applied to Neon |
 | 5 | Release | Deploy backend before stage mobile (employee-list change); `SESSION_SECRET` must be set in production (user manages it) |
-| 8 | Parity gaps carried over | See "Parity gaps" under the 28 Sep status. Still open: no partial-access mode for `RESTRICTED` (a blocked 403 still shows `BlockedScreen`), no "Needs attention" list, billing card lacks plan/deposit/annual fee |
+| 8 | Parity gaps carried over | See "Parity gaps" under the 28 Sep status. Still open: no partial-access mode for `RESTRICTED` (a blocked 403 still shows `BlockedScreen`), no "Needs attention" list, billing card plan/deposit/annual fee: **done 7 Oct** (Subscription shows Plan, Current term, Paid through, renewal fee) |
 | 9 | Firebase and gating | Remote Config keys not created in the dev/stage/prod consoles; `AppGateService.isMidTransaction` not device-verified; Android `in_app_update` untested (needs a Play listing) |
 | 10 | Backend/API gaps for the web team | No `/api/v1/outlets` route; no announcements endpoint; an employee omitting the outlet on rollups falls back silently instead of getting 403 |
 | 6 | Store gating | No App Store listing yet, so `ios_app_store_id` and force-update stay dormant |
@@ -478,7 +478,7 @@ Open (in order):
 1. 401/403 data-loss edge case (section below) — not done.
 2. Encrypt the Hive cache (AES cipher, key in secure storage, one-time migration for existing installs).
 3. Play Console follow-ups: review the pre-launch report, declare analytics/crash data in the Data safety form and iOS PrivacyInfo, and confirm testers are opted in so the internal-track update appears.
-4. Batch B (needs new backend endpoints first): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts, passwordChangedAt; plus the owner payment path for `billing_pending` (a product decision).
+4. Batch B (needs new backend endpoints first): announcements, outlet directory/detail, read-only workspace for locked/lapsed stores, owner billing facts (plan, annual fee and deposit done 7 Oct via `GET /subscription/invoices`), passwordChangedAt; plus the owner payment path for `billing_pending` (a product decision).
 5. Not yet seen on a device: queued mark-paid staying Paid after refresh; employee hand-over of a prepaid order from Ready; employee sign-in after an owner password reset.
 6. Optional: a pink "previous period" line on the chart (no button), an "Organization-wide" outlet bucket (needs the protected outlet switcher file), `Renews on 2100-01-01` shows a raw ISO date on Subscription.
 

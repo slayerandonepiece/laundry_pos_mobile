@@ -21,7 +21,7 @@ The mobile HTTP API exists. Main `cdfc121` includes the merged offline-ID/outlet
 
 Current workspace fixes and verification: `docs/HANDOFF.md`. Manual device status: `docs/E2E-MANUAL-TEST.md`; remaining scripts: `docs/MANUAL-TEST-CASES.md`. New web enhancement backlog: `docs/WEB-MOBILE-FEATURE-GAPS.md` (60 open checks as of 1 Oct; offline behavior must be preserved).
 
-Checkout now uses enabled store payment methods, including configured COD; do not use the older hardcoded Cash/UPI/pay-later description as a requirement. Full web parity remains pending.
+Checkout (titled Review and pay since 7 Oct) offers the payment methods marked for placing an order, including configured COD, and the collect dialogs offer those marked for after the order; do not use the older hardcoded Cash/UPI/pay-later description as a requirement. Web parity is done except invoice link sharing, which needs a backend `/s/<token>` endpoint.
 
 Design system and screen inventory: `docs/DESIGN-SPEC.md`.
 Working artboards: `design/*.dc.html`.
