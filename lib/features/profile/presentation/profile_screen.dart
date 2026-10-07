@@ -1,5 +1,6 @@
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:flutter/material.dart';
+import 'package:myshop/features/profile/presentation/sync_data_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/constants/app_environment.dart';
@@ -399,6 +400,13 @@ class ProfileScreen extends StatelessWidget {
                 label: 'Switch store',
                 onTap: () => StoreSwitcherDialog.show(context),
               ),
+            _ProfileRow(
+              icon: Icons.sync,
+              label: 'Sync data',
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SyncDataScreen())),
+            ),
             _ProfileRow(
               icon: Icons.lock_outline,
               label: 'Change password',

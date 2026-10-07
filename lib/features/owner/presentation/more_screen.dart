@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:myshop/features/profile/presentation/sync_data_screen.dart';
 import 'package:myshop/shared/widgets/app_version_text.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
@@ -302,6 +303,24 @@ class MoreScreen extends StatelessWidget {
                           MaterialPageRoute(
                             settings: const RouteSettings(name: 'subscription'),
                             builder: (_) => const SubscriptionScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.sync,
+                        title: 'Sync data',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            settings: const RouteSettings(name: 'sync_data'),
+                            builder: (_) => const SyncDataScreen(),
                           ),
                         ),
                       ),
