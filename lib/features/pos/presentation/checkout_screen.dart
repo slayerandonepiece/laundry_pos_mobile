@@ -163,6 +163,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ? 'Enter an amount between ₹1 and ${CurrencyFormatter.format(totalAmount)}'
               : null;
 
+          // What the bill will show: a blank field takes the full total, a
+          // bad number counts as nothing yet, and pay on delivery takes none.
+          final receivedNowPaise = !takesPaymentNow
+              ? 0
+              : receivedPaise == null
+              ? totalAmount
+              : receivedError != null
+              ? 0
+              : receivedPaise;
+          final balanceDuePaise = totalAmount - receivedNowPaise;
+
           return Scaffold(
             backgroundColor: AppColors.surface,
             body: SafeArea(
@@ -193,7 +204,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               onPressed: () => _goBack(context),
                             ),
                             const SizedBox(width: 4),
-                            const Text('Checkout', style: AppTextStyles.h3),
+                            const Text(
+                              'Review and pay',
+                              style: AppTextStyles.h3,
+                            ),
                           ],
                         ),
                         IconButton(
@@ -326,6 +340,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     ),
                                   );
                                 }),
+                                const SizedBox(height: 4),
+                                const Divider(),
+                                const SizedBox(height: 8),
+                                _sumRow(
+                                  'Order total',
+                                  CurrencyFormatter.format(totalAmount),
+                                ),
+                                if (receivedNowPaise > 0) ...[
+                                  const SizedBox(height: 6),
+                                  _sumRow(
+                                    'Received now',
+                                    CurrencyFormatter.format(receivedNowPaise),
+                                  ),
+                                ],
+                                const SizedBox(height: 6),
+                                _sumRow(
+                                  'Balance due',
+                                  CurrencyFormatter.format(balanceDuePaise),
+                                  bold: true,
+                                ),
                               ],
                             ),
                           ),
@@ -406,7 +440,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   ),
                               onChanged: (_) => setState(() {}),
                             ),
-                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextActionButton(
+                                key: const Key('checkout_received_full'),
+                                label:
+                                    'Full ${CurrencyFormatter.format(totalAmount)}',
+                                onPressed: totalAmount <= 0
+                                    ? null
+                                    : () => setState(() {
+                                        _receivedController.text =
+                                            totalAmount % 100 == 0
+                                            ? '${totalAmount ~/ 100}'
+                                            : (totalAmount / 100)
+                                                  .toStringAsFixed(2);
+                                      }),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
                           ],
 
                           AppTextField(
@@ -476,6 +527,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _sumRow(String label, String value, {bool bold = false}) {
+    final style = AppTextStyles.bodySmall.copyWith(
+      fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+      color: bold ? AppColors.text : AppColors.mutedText,
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: style),
+        Text(value, style: style.copyWith(color: AppColors.text)),
+      ],
     );
   }
 

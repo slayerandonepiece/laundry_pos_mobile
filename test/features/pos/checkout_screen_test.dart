@@ -349,6 +349,64 @@ void main() {
       },
     );
 
+    testWidgets('Shows the bill: order total, received now and balance due', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      loadBigCart();
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      expect(find.text('Review and pay'), findsOneWidget);
+      // Nothing chosen yet: the whole total is still due.
+      expect(find.text('Order total'), findsOneWidget);
+      expect(find.text('Balance due'), findsOneWidget);
+      expect(find.text('Received now'), findsNothing);
+
+      // Pay on delivery takes nothing now.
+      await tester.tap(find.text('Cash On Delivery'));
+      await tester.pump();
+      expect(find.text('Received now'), findsNothing);
+
+      // A part payment leaves the rest due.
+      await tester.tap(find.text('Cash'));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('checkout_received_field')),
+        '150',
+      );
+      await tester.pump();
+      expect(find.text('Received now'), findsOneWidget);
+      expect(find.text('₹350'), findsOneWidget);
+    });
+
+    testWidgets('Full fills in the whole total and clears the balance', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      loadBigCart();
+      await tester.pumpWidget(createWidgetUnderTest());
+      await tester.pump();
+
+      await tester.tap(find.text('Cash'));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('checkout_received_full')));
+      await tester.pump();
+
+      final field = tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const Key('checkout_received_field')),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(field.controller!.text, '500');
+      expect(find.text('Place order · ₹500 received now'), findsOneWidget);
+    });
+
     testWidgets('A blank Received now field still sends the full total', (
       tester,
     ) async {
@@ -539,6 +597,9 @@ void main() {
     testWidgets(
       'Notes text is optional and passed through to order-creation event when filled',
       (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
         cartBloc.emit(
           cartBloc.state.copyWith(
             items: {'prod_1': CartItem(product: dummyProduct, quantity: 1)},
