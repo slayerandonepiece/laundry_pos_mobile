@@ -48,3 +48,30 @@ class SubscriptionInvoice {
     'coversTo': coversTo,
   };
 }
+
+/// The organization's billing terms, as the Billing page on the web shows
+/// them. Amounts are paise. [planName] is null on custom terms.
+class SubscriptionPlan {
+  final String? planName;
+  final int annualFeeAmount;
+  final int depositAmount;
+
+  const SubscriptionPlan({
+    this.planName,
+    required this.annualFeeAmount,
+    required this.depositAmount,
+  });
+
+  factory SubscriptionPlan.fromJson(Map<String, dynamic> json) =>
+      SubscriptionPlan(
+        planName: json['planName']?.toString(),
+        annualFeeAmount: (json['annualFeeAmount'] as num?)?.toInt() ?? 0,
+        depositAmount: (json['depositAmount'] as num?)?.toInt() ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'planName': planName,
+    'annualFeeAmount': annualFeeAmount,
+    'depositAmount': depositAmount,
+  };
+}

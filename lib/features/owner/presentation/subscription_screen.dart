@@ -25,6 +25,7 @@ class SubscriptionScreen extends StatefulWidget {
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
   List<SubscriptionInvoice> _invoices = const [];
+  SubscriptionPlan? _plan;
   bool _loading = true;
   bool _failed = false;
 
@@ -33,6 +34,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     super.initState();
     final repo = context.read<OwnerRepository?>();
     _invoices = repo?.getCachedSubscriptionInvoices() ?? const [];
+    _plan = repo?.getCachedSubscriptionPlan();
     _load();
   }
 
@@ -52,6 +54,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       if (!mounted) return;
       setState(() {
         _invoices = fresh;
+        _plan = repo.getCachedSubscriptionPlan();
         _loading = false;
       });
     } catch (_) {
@@ -107,6 +110,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               const SectionHeader(title: 'PLAN STATUS'),
               const SizedBox(height: 8),
               _buildPlanStatusCard(store),
+              const SizedBox(height: 10),
+              if (_plan != null) ...[
+                SizedBox(width: double.infinity, child: _buildPlanCard(_plan!)),
+                const SizedBox(height: 10),
+              ],
+              _buildTermTiles(store),
               const SizedBox(height: 24),
               const SectionHeader(title: 'INVOICES'),
               const SizedBox(height: 8),
@@ -212,6 +221,101 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Same two tiles as the web Billing page. The current term is the paid
+  /// period that ends last, read from the invoices; during a trial it is the
+  /// trial's end instead.
+  Widget _buildTermTiles(StoreSummary? store) {
+    final onTrial =
+        store?.subscriptionState == 'TRIAL' ||
+        store?.subscriptionState == 'TRIAL_ENDING';
+    SubscriptionInvoice? current;
+    for (final i in _invoices) {
+      if (i.coversFrom == null || i.coversTo == null) continue;
+      if (current == null || i.coversTo!.compareTo(current.coversTo!) > 0) {
+        current = i;
+      }
+    }
+    final String termValue;
+    final String termNote;
+    if (onTrial) {
+      termValue = store?.trialEndsAt == null
+          ? '—'
+          : 'Ends ${DateFormatter.formatFull(store!.trialEndsAt)}';
+      termNote = '';
+    } else if (current != null) {
+      termValue = DateFormatter.formatFull(current.coversFrom);
+      termNote = 'to ${DateFormatter.formatFull(current.coversTo)}';
+    } else {
+      termValue = '—';
+      termNote = 'No paid term yet';
+    }
+    final paidThrough = store?.paidThroughDate;
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _termTile(
+              onTrial ? 'TRIAL PERIOD' : 'CURRENT TERM',
+              termValue,
+              termNote,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _termTile(
+              'PAID THROUGH',
+              paidThrough == null || paidThrough.isEmpty
+                  ? 'Not set'
+                  : DateFormatter.formatFull(paidThrough),
+              _plan == null
+                  ? ''
+                  : 'Renewal fee ${CurrencyFormatter.format(_plan!.annualFeeAmount)}',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanCard(SubscriptionPlan plan) {
+    return _termTile(
+      'PLAN',
+      plan.planName ?? 'Custom terms',
+      [
+        'Annual fee ${CurrencyFormatter.format(plan.annualFeeAmount)}',
+        if (plan.depositAmount > 0)
+          'Deposit ${CurrencyFormatter.format(plan.depositAmount)}',
+      ].join(' · '),
+    );
+  }
+
+  Widget _termTile(String label, String value, String note) {
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppTextStyles.fieldLabel),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              fontFamily: AppTextStyles.fontBody,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
+          ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(note, style: AppTextStyles.hint),
+          ],
         ],
       ),
     );

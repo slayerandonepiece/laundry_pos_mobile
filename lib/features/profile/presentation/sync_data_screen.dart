@@ -80,11 +80,14 @@ class _SyncDataScreenState extends State<SyncDataScreen> {
     };
     // Compared with the last sync time. A server value that moves back after
     // a delete is not caught.
-    keys.forEach((dataset, key) {
+    // Plan terms come with the invoices request, so a plan change counts too.
+    final withPlan = {...keys, 'Invoices+plan': 'planUpdatedAt'};
+    withPlan.forEach((dataset, key) {
       final serverAt = server[key];
-      final mine = _cache.getSyncedAt(_syncKey(dataset));
+      final name = dataset == 'Invoices+plan' ? 'Invoices' : dataset;
+      final mine = _cache.getSyncedAt(_syncKey(name));
       if (serverAt != null && (mine == null || serverAt.isAfter(mine))) {
-        _serverNewer.add(dataset);
+        _serverNewer.add(name);
       }
     });
     return _serverNewer.isEmpty

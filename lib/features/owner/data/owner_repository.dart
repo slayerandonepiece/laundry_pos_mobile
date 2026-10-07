@@ -56,6 +56,21 @@ class OwnerRepository {
   String get _invoicesCacheKey =>
       'subscription_invoices::${localCache.getActiveStoreId()}';
 
+  String get _planCacheKey =>
+      'subscription_plan::${localCache.getActiveStoreId()}';
+
+  /// The billing terms last sent by the server; null before the first load
+  /// or when the server did not send them.
+  SubscriptionPlan? getCachedSubscriptionPlan() {
+    try {
+      final raw = localCache.get(_planCacheKey);
+      if (raw is! Map) return null;
+      return SubscriptionPlan.fromJson(Map<String, dynamic>.from(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// What the phone last saw of the billing history; empty when never loaded.
   List<SubscriptionInvoice> getCachedSubscriptionInvoices() {
     try {
@@ -80,10 +95,17 @@ class OwnerRepository {
       for (final row in rows)
         SubscriptionInvoice.fromJson(Map<String, dynamic>.from(row as Map)),
     ];
+    final plan = response['plan'];
     try {
       await localCache.put(_invoicesCacheKey, [
         for (final i in invoices) i.toJson(),
       ]);
+      if (plan is Map) {
+        await localCache.put(
+          _planCacheKey,
+          SubscriptionPlan.fromJson(Map<String, dynamic>.from(plan)).toJson(),
+        );
+      }
     } catch (e) {
       AppLogger.log('OWNER', 'could not cache billing history', error: e);
     }
