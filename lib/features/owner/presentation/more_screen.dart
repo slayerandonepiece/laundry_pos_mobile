@@ -14,6 +14,7 @@ import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/presentation/change_password_screen.dart';
 import 'package:myshop/features/owner/presentation/expenses_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_profile_screen.dart';
+import 'package:myshop/features/owner/presentation/customer_messages_screen.dart';
 import 'package:myshop/features/owner/presentation/payment_methods_screen.dart';
 import 'package:myshop/features/owner/presentation/plan_status_helper.dart';
 import 'package:myshop/features/owner/presentation/services_screen.dart';
@@ -236,6 +237,26 @@ class MoreScreen extends StatelessWidget {
                               name: 'payment_methods',
                             ),
                             builder: (_) => const PaymentMethodsScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.chat_bubble_outline,
+                        title: 'Customer messages',
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.faintText,
+                          size: 20,
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            settings: const RouteSettings(
+                              name: 'customer_messages',
+                            ),
+                            builder: (_) => const CustomerMessagesScreen(),
                           ),
                         ),
                       ),
