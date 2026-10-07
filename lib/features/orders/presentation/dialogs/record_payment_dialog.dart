@@ -68,8 +68,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
           repo.getCachedPaymentMethodsList() ?? await repo.listPaymentMethods();
       if (!mounted) return;
       setState(() {
-        // Cash on delivery is not money received; it is how the order was placed.
-        _methods = methods.where((m) => !m.isCashOnDelivery).toList();
+        _methods = methods.where((m) => m.offeredAfterOrder).toList();
         _loadingMethods = false;
       });
     } catch (_) {

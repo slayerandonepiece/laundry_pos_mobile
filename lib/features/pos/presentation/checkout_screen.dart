@@ -147,7 +147,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               : null;
           final outletName = outlet?.displayName;
 
-          final selectedMethod = state.paymentMethods
+          final offeredMethods = state.paymentMethods
+              .where((m) => m.offeredWhenPlacingOrder)
+              .toList();
+          final selectedMethod = offeredMethods
               .where((m) => m.id == _selectedMethodId)
               .firstOrNull;
           final hasSelection = selectedMethod != null;
@@ -360,7 +363,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           Text('PAYMENT METHOD', style: AppTextStyles.label),
                           const SizedBox(height: 8),
 
-                          if (state.paymentMethods.isEmpty)
+                          if (offeredMethods.isEmpty)
                             const Padding(
                               padding: EdgeInsets.only(bottom: 10),
                               child: Text(
@@ -375,11 +378,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             )
                           else ...[
                             _buildMethodGrid(
-                              state.paymentMethods
+                              offeredMethods
                                   .where((m) => !m.isCashOnDelivery)
                                   .toList(),
                             ),
-                            for (final cod in state.paymentMethods.where(
+                            for (final cod in offeredMethods.where(
                               (m) => m.isCashOnDelivery,
                             )) ...[
                               const SizedBox(height: 10),

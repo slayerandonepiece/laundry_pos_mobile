@@ -9,9 +9,7 @@ import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
-import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
-import 'package:myshop/shared/widgets/centred_dialog.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 class PaymentMethodsScreen extends StatefulWidget {
@@ -26,33 +24,6 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   void initState() {
     super.initState();
     context.read<OwnerBloc>().add(LoadPaymentMethodsEvent());
-  }
-
-  void _confirmDisable(BuildContext context, StorePaymentMethod method) {
-    setState(() {});
-    CentredDialog.show(
-      context: context,
-      child: CentredDialog(
-        title: 'Disable ${method.name}?',
-        subtitle:
-            'Customers will no longer be able to pay with ${method.name} at checkout across all outlets.',
-        confirmLabel: 'Disable method',
-        cancelLabel: 'Keep enabled',
-        isDestructive: true,
-        onConfirm: () {
-          final bloc = context.read<OwnerBloc>();
-          Navigator.of(context).pop();
-          bloc.add(TogglePaymentMethodEvent(id: method.id, active: false));
-        },
-        onCancel: () {
-          Navigator.of(context).pop();
-        },
-      ),
-    ).then((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
   }
 
   @override
@@ -83,7 +54,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
         }
       },
       builder: (context, state) {
-        final methods = state.paymentMethods;
+        final methods = state.paymentMethods.where((m) => m.active).toList();
 
         return Scaffold(
           backgroundColor: AppColors.surface,
@@ -177,9 +148,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                                         ? Icons.qr_code_scanner_outlined
                                         : Icons.payments_outlined,
                                     size: 24,
-                                    color: method.active
-                                        ? AppColors.primary
-                                        : AppColors.mutedText,
+                                    color: AppColors.primary,
                                   ),
                                   const SizedBox(width: 14),
                                   Expanded(
@@ -203,24 +172,18 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                                             style: AppTextStyles.hint,
                                           ),
                                         ],
+                                        const SizedBox(height: 10),
+                                        _stageRow(
+                                          'When placing an order',
+                                          method.offeredWhenPlacingOrder,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        _stageRow(
+                                          'After the order',
+                                          method.offeredAfterOrder,
+                                        ),
                                       ],
                                     ),
-                                  ),
-                                  Switch(
-                                    value: method.active,
-                                    activeThumbColor: AppColors.primary,
-                                    onChanged: (val) {
-                                      if (val) {
-                                        context.read<OwnerBloc>().add(
-                                          TogglePaymentMethodEvent(
-                                            id: method.id,
-                                            active: true,
-                                          ),
-                                        );
-                                      } else {
-                                        _confirmDisable(context, method);
-                                      }
-                                    },
                                   ),
                                 ],
                               ),
@@ -232,12 +195,12 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                         // Nothing to list and nothing loading.
                         const EmptyState(
                           icon: Icons.account_balance_wallet_outlined,
-                          title: 'No payment methods yet',
-                          subtitle: 'Methods set up for your organization will show here so you can switch them on.',
+                          title: 'No payment methods enabled',
+                          subtitle: 'Methods enabled for your organization will show here.',
                         ),
                       ],
                       Text(
-                        'Payment methods are managed by the platform. Enable the ones you accept.',
+                        'Contact support to change which methods are offered.',
                         style: AppTextStyles.hint,
                       ),
                     ],
@@ -248,6 +211,28 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
           ),
         );
       },
+    );
+  }
+
+  /// One stage line: a tick when the method is offered there, a dash when not.
+  Widget _stageRow(String label, bool offered) {
+    return Row(
+      children: [
+        Icon(
+          offered ? Icons.check_circle_rounded : Icons.remove_circle_outline,
+          size: 16,
+          color: offered ? AppColors.success : AppColors.faintText,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontBody,
+            fontSize: 13,
+            color: offered ? AppColors.text : AppColors.faintText,
+          ),
+        ),
+      ],
     );
   }
 }

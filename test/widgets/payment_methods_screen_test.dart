@@ -12,7 +12,6 @@ import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/payment_method_model.dart';
 import 'package:myshop/features/owner/presentation/payment_methods_screen.dart';
-import 'package:myshop/shared/widgets/centred_dialog.dart';
 
 class TrackingOwnerBloc extends Bloc<OwnerEvent, OwnerState>
     implements OwnerBloc {
@@ -85,7 +84,7 @@ void main() {
       await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
       await tester.pumpAndSettle();
 
-      expect(find.text('No payment methods yet'), findsOneWidget);
+      expect(find.text('No payment methods enabled'), findsOneWidget);
     });
 
     testWidgets('shows a spinner, not the empty state, while loading', (
@@ -97,155 +96,102 @@ void main() {
       await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
       await tester.pump();
 
-      expect(find.text('No payment methods yet'), findsNothing);
+      expect(find.text('No payment methods enabled'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsWidgets);
     });
   });
 
-  group('PaymentMethodsScreen Confirmation Dialog Tests', () {
-    testWidgets(
-      'Disabling an active payment method shows confirmation dialog with correct texts and does not dispatch toggle event yet',
-      (tester) async {
-        final bloc = TrackingOwnerBloc();
-        await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
-        await tester.pumpAndSettle();
+  group('PaymentMethodsScreen stages', () {
+    testWidgets('read-only: no switches, shows the contact-support help', (
+      tester,
+    ) async {
+      final bloc = TrackingOwnerBloc(
+        OwnerState(
+          paymentMethods: [
+            StorePaymentMethod(id: 'a', name: 'Cash', code: 'CASH'),
+            StorePaymentMethod(
+              id: 'b',
+              name: 'Old',
+              code: 'OLD',
+              active: false,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
+      await tester.pumpAndSettle();
 
-        bloc.dispatchedEvents.clear();
+      expect(find.byType(Switch), findsNothing);
+      expect(find.text('Cash'), findsOneWidget);
+      expect(find.text('Old'), findsNothing); // disabled methods are hidden
+      expect(
+        find.text('Contact support to change which methods are offered.'),
+        findsOneWidget,
+      );
+    });
 
-        final cashSwitch = find.byWidgetPredicate(
-          (w) => w is Switch && w.value == true,
-        );
-        expect(cashSwitch, findsOneWidget);
+    testWidgets('stage decides which of the two columns a method is in', (
+      tester,
+    ) async {
+      final bloc = TrackingOwnerBloc(
+        OwnerState(
+          paymentMethods: [
+            StorePaymentMethod(
+              id: 'a',
+              name: 'Card',
+              code: 'CARD',
+              stage: 'PRE_ORDER',
+            ),
+            StorePaymentMethod(
+              id: 'b',
+              name: 'Cash',
+              code: 'CASH',
+              stage: 'BOTH',
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
+      await tester.pumpAndSettle();
 
-        // Tap to toggle off
-        await tester.tap(cashSwitch);
-        await tester.pumpAndSettle();
+      expect(find.text('When placing an order'), findsNWidgets(2));
+      expect(find.text('After the order'), findsNWidgets(2));
+      // Card: ticked up front only. Cash: ticked in both places.
+      expect(find.byIcon(Icons.check_circle_rounded), findsNWidgets(3));
+      expect(find.byIcon(Icons.remove_circle_outline), findsNWidgets(1));
+    });
+  });
 
-        // Confirmation dialog is shown
-        expect(find.byType(CentredDialog), findsOneWidget);
-        expect(find.text('Disable Cash?'), findsOneWidget);
-        expect(
-          find.text(
-            'Customers will no longer be able to pay with Cash at checkout across all outlets.',
-          ),
-          findsOneWidget,
-        );
-        expect(find.text('Disable method'), findsOneWidget);
-        expect(find.text('Keep enabled'), findsOneWidget);
+  group('StorePaymentMethod stage rules', () {
+    StorePaymentMethod m(String code, String stage) =>
+        StorePaymentMethod(id: code, code: code, name: code, stage: stage);
 
-        // No TogglePaymentMethodEvent should be dispatched yet
-        expect(
-          bloc.dispatchedEvents.whereType<TogglePaymentMethodEvent>(),
-          isEmpty,
-        );
-      },
-    );
+    test('PRE_ORDER is first only, POST_ORDER second only, BOTH both', () {
+      expect(m('UPI', 'PRE_ORDER').offeredWhenPlacingOrder, isTrue);
+      expect(m('UPI', 'PRE_ORDER').offeredAfterOrder, isFalse);
+      expect(m('UPI', 'POST_ORDER').offeredWhenPlacingOrder, isFalse);
+      expect(m('UPI', 'POST_ORDER').offeredAfterOrder, isTrue);
+      expect(m('UPI', 'BOTH').offeredWhenPlacingOrder, isTrue);
+      expect(m('UPI', 'BOTH').offeredAfterOrder, isTrue);
+    });
 
-    testWidgets(
-      'Cancelling via "Keep enabled" closes dialog and leaves method enabled without dispatching toggle event',
-      (tester) async {
-        final bloc = TrackingOwnerBloc();
-        await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
-        await tester.pumpAndSettle();
+    test('COD is never offered after the order, even when stage is BOTH', () {
+      expect(m('COD', 'BOTH').offeredAfterOrder, isFalse);
+      expect(m('COD', 'BOTH').offeredWhenPlacingOrder, isTrue);
+    });
 
-        bloc.dispatchedEvents.clear();
-
-        final cashSwitch = find.byWidgetPredicate(
-          (w) => w is Switch && w.value == true,
-        );
-        expect(cashSwitch, findsOneWidget);
-
-        // Tap switch to trigger confirmation
-        await tester.tap(cashSwitch);
-        await tester.pumpAndSettle();
-
-        expect(find.byType(CentredDialog), findsOneWidget);
-
-        // Tap cancel button
-        await tester.tap(find.text('Keep enabled'));
-        await tester.pumpAndSettle();
-
-        // Dialog should be dismissed
-        expect(find.byType(CentredDialog), findsNothing);
-
-        // No toggle event should have been dispatched
-        expect(
-          bloc.dispatchedEvents.whereType<TogglePaymentMethodEvent>(),
-          isEmpty,
-        );
-
-        // Switch should visually remain on/true
-        final switchWidget = tester.widget<Switch>(find.byType(Switch).first);
-        expect(switchWidget.value, isTrue);
-      },
-    );
-
-    testWidgets(
-      'Confirming via "Disable method" dispatches TogglePaymentMethodEvent with active: false and closes dialog',
-      (tester) async {
-        final bloc = TrackingOwnerBloc();
-        await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
-        await tester.pumpAndSettle();
-
-        bloc.dispatchedEvents.clear();
-
-        final cashSwitch = find.byWidgetPredicate(
-          (w) => w is Switch && w.value == true,
-        );
-        expect(cashSwitch, findsOneWidget);
-
-        // Tap switch to trigger confirmation
-        await tester.tap(cashSwitch);
-        await tester.pumpAndSettle();
-
-        expect(find.byType(CentredDialog), findsOneWidget);
-
-        // Tap confirm button
-        await tester.tap(find.text('Disable method'));
-        await tester.pumpAndSettle();
-
-        // Dialog is closed
-        expect(find.byType(CentredDialog), findsNothing);
-
-        // TogglePaymentMethodEvent should have been dispatched with id and active: false
-        final toggleEvents = bloc.dispatchedEvents
-            .whereType<TogglePaymentMethodEvent>()
-            .toList();
-        expect(toggleEvents.length, equals(1));
-        expect(toggleEvents.first.id, equals('pm-cash'));
-        expect(toggleEvents.first.active, isFalse);
-      },
-    );
-
-    testWidgets(
-      'Enabling a disabled method stays instant without showing confirmation dialog',
-      (tester) async {
-        final bloc = TrackingOwnerBloc();
-        await tester.pumpWidget(buildTestApp(ownerBloc: bloc));
-        await tester.pumpAndSettle();
-
-        bloc.dispatchedEvents.clear();
-
-        final upiSwitch = find.byWidgetPredicate(
-          (w) => w is Switch && w.value == false,
-        );
-        expect(upiSwitch, findsOneWidget);
-
-        // Tap disabled switch to enable it
-        await tester.tap(upiSwitch);
-        await tester.pumpAndSettle();
-
-        // No dialog should appear
-        expect(find.byType(CentredDialog), findsNothing);
-
-        // TogglePaymentMethodEvent dispatched immediately with active: true
-        final toggleEvents = bloc.dispatchedEvents
-            .whereType<TogglePaymentMethodEvent>()
-            .toList();
-        expect(toggleEvents.length, equals(1));
-        expect(toggleEvents.first.id, equals('pm-upi'));
-        expect(toggleEvents.first.active, isTrue);
-      },
-    );
+    test('a missing or unknown stage (old cache) behaves as BOTH', () {
+      final fromOld = StorePaymentMethod.fromJson({'id': 'x', 'name': 'Cash'});
+      expect(fromOld.stage, 'BOTH');
+      expect(
+        StorePaymentMethod.fromJson({
+          'id': 'x',
+          'name': 'Cash',
+          'stage': 'nope',
+        }).stage,
+        'BOTH',
+      );
+      expect(StorePaymentMethod.fromJson(fromOld.toJson()).stage, 'BOTH');
+    });
   });
 }
