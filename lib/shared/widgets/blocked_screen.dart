@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/text_styles.dart';
+import '../../core/utils/phone_call.dart';
 import 'app_button.dart';
 import 'app_inset.dart';
 
@@ -11,7 +10,6 @@ class BlockedScreen extends StatelessWidget {
   final bool isOwner;
   final String? paidThroughDate;
   final String? ownerPhone;
-  final String? billingUrl;
   final VoidCallback onRetry;
   final VoidCallback onSignOut;
   final int? pendingCount;
@@ -22,18 +20,14 @@ class BlockedScreen extends StatelessWidget {
     required this.isOwner,
     this.paidThroughDate,
     this.ownerPhone,
-    this.billingUrl,
     required this.onRetry,
     required this.onSignOut,
     this.pendingCount,
   });
 
-  void _callOwner(BuildContext context) async {
+  void _callOwner(BuildContext context) {
     if (ownerPhone == null || ownerPhone!.isEmpty) return;
-    final uri = Uri.parse('tel:$ownerPhone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
+    callPhone(context, ownerPhone!);
   }
 
   @override
@@ -183,21 +177,6 @@ class BlockedScreen extends StatelessWidget {
                   label: 'Call store owner',
                   icon: const Icon(Icons.call, size: 18, color: Colors.white),
                   onPressed: () => _callOwner(context),
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (isOwner &&
-                  normReason == 'billing_pending' &&
-                  billingUrl != null &&
-                  billingUrl!.isNotEmpty) ...[
-                PrimaryButton(
-                  label: 'Complete payment',
-                  onPressed: () async {
-                    final uri = Uri.tryParse(billingUrl!);
-                    if (uri != null && await canLaunchUrl(uri)) {
-                      await launchUrl(uri);
-                    }
-                  },
                 ),
                 const SizedBox(height: 12),
               ],

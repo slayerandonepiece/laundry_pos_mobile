@@ -144,28 +144,13 @@ if [[ "$PLATFORM" == android || "$PLATFORM" == both ]]; then
     "--dart-define=ENV=$ENVIRONMENT" --obfuscate \
     "--split-debug-info=$ANDROID_SYMBOLS"
   AAB="build/app/outputs/bundle/${ENVIRONMENT}Release/app-${ENVIRONMENT}-release.aab"
-  JSON_PATH="android/app/src/$ENVIRONMENT/google-services.json"
-  EXPECTED_PACKAGE=com.reddygona.klenpos
-  [[ "$ENVIRONMENT" == stage ]] && EXPECTED_PACKAGE=com.reddygona.klenpos.staging
   if $DRY_RUN; then
-    say "DRY RUN: read mobilesdk_app_id from $JSON_PATH for package $EXPECTED_PACKAGE using python3"
-    say "DRY RUN: firebase crashlytics:symbols:upload --app=<id from JSON> $ANDROID_SYMBOLS"
+    say "DRY RUN: Gradle copies and uploads Dart symbols after the bundle (see android/app/build.gradle.kts)"
   else
-    ANDROID_APP_ID="$(python3 - "$JSON_PATH" "$EXPECTED_PACKAGE" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-matches = [c.get('client_info', {}).get('mobilesdk_app_id') for c in data.get('client', [])
-           if c.get('client_info', {}).get('android_client_info', {}).get('package_name') == sys.argv[2]]
-if len(matches) != 1 or not matches[0]:
-    raise SystemExit(f'expected exactly one Firebase client for {sys.argv[2]}')
-print(matches[0])
-PY
-)"
     [[ -f "$AAB" ]] || fail "Android bundle not found: $AAB"
-    firebase crashlytics:symbols:upload --app="$ANDROID_APP_ID" "$ANDROID_SYMBOLS"
     open -R "$AAB"
   fi
-  ANDROID_RESULT="bundle $AAB; symbols $ANDROID_SYMBOLS"
+  ANDROID_RESULT="bundle $AAB; Dart symbols uploaded by Gradle from $ANDROID_SYMBOLS"
 fi
 
 if [[ "$PLATFORM" == ios || "$PLATFORM" == both ]]; then
@@ -216,6 +201,7 @@ PY
     [[ "$ACTUAL_VERSION" == "$VERSION_NAME" ]] || fail "Archive version mismatch: expected $VERSION_NAME"
     [[ "$ACTUAL_BUILD" == "$BUILD_NUMBER" ]] || fail "Archive build mismatch: expected $BUILD_NUMBER"
     # dSYMs are uploaded by the "[firebase_crashlytics] Upload Symbols" build phase during the archive.
+    # On iOS the Dart symbols are inside App.framework.dSYM, so that phase covers them too.
     # Xcode opens Organizer by itself after archiving, so the archive is not reopened here.
     IOS_RESULT="archive $ARCHIVE; Dart symbols $IOS_SYMBOLS; dSYMs uploaded by the Xcode build phase"
   fi

@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Firebase CLI tool cache from Crashlytics symbol uploads
+.crashlytics/
