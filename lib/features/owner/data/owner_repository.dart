@@ -5,6 +5,7 @@ import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
@@ -620,6 +621,10 @@ class OwnerRepository {
         : IdempotencyKeyGenerator.generate();
     lastWriteQueued = false;
     final cap = _captureScope();
+    final blockedOutlet = orgWide
+        ? null
+        : (outletId ?? _actionOutletId(cap.scope));
+    OutletBillingGuard.ensureWritable(localCache, blockedOutlet);
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       return _createExpenseOffline(
@@ -657,6 +662,12 @@ class OwnerRepository {
       );
       return expense;
     } catch (e) {
+      final lapsed = await OutletBillingGuard.translate(
+        localCache,
+        blockedOutlet,
+        e,
+      );
+      if (lapsed is OutletBlockedException) throw lapsed;
       if (await _shouldQueue(e)) {
         return _createExpenseOffline(
           title: title,
@@ -914,6 +925,8 @@ class OwnerRepository {
     lastWriteQueued = false;
     final cap = _captureScope();
     final effectivePaidDate = paidDate ?? DateFormatter.todayIsoDateString();
+    final blockedOutlet = _actionOutletId(cap.scope);
+    OutletBillingGuard.ensureWritable(localCache, blockedOutlet);
     final isOffline = await ConnectivityService.instance.checkIsOffline();
     if (isOffline) {
       await _markExpensePaidOffline(
@@ -928,6 +941,12 @@ class OwnerRepository {
       await _markExpensePaidDirect(expenseId, paidDate: paidDate);
       await _setCachedExpensePaid(cap, {expenseId}, effectivePaidDate);
     } catch (e) {
+      final lapsed = await OutletBillingGuard.translate(
+        localCache,
+        blockedOutlet,
+        e,
+      );
+      if (lapsed is OutletBlockedException) throw lapsed;
       if (await _shouldQueue(e)) {
         await _markExpensePaidOffline(
           expenseId,

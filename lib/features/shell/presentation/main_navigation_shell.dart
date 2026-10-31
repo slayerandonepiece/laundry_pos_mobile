@@ -14,6 +14,7 @@ import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/presentation/more_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_orders_screen.dart';
+import 'package:myshop/features/owner/presentation/subscription_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
@@ -83,7 +84,21 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       _initialScreenLogged = true;
       AppAnalytics.screenView(isOwner ? 'dashboard' : 'orders');
     }
-    final notice = authState is AuthenticatedState
+    // One banner: a blocked outlet takes the place of the plan notice.
+    final activeOutlet = context.watch<OutletScopeCubit?>()?.state.activeOutlet;
+    final notice = activeOutlet != null && activeOutlet.isBlocked
+        ? outletBlockedNotice(
+            activeOutlet.displayName,
+            isOwner: isOwner,
+            onViewDetails: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'subscription'),
+                builder: (_) => const SubscriptionScreen(),
+              ),
+            ),
+          )
+        : authState is AuthenticatedState
         ? resolveAccessNotice(authState.currentStore, isOwner: isOwner)
         : null;
 

@@ -16,9 +16,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository authRepository;
   final LocalCacheService _localCache;
 
-  AuthBloc({required this.authRepository, LocalCacheService? localCache})
-    : _localCache = localCache ?? LocalCacheService(),
-      super(AuthInitialState()) {
+  /// Called after a status refresh re-cached the outlets, so their billing
+  /// reaches the screens even when nothing about the store itself changed.
+  final void Function()? onOutletsRefreshed;
+
+  AuthBloc({
+    required this.authRepository,
+    LocalCacheService? localCache,
+    this.onOutletsRefreshed,
+  }) : _localCache = localCache ?? LocalCacheService(),
+       super(AuthInitialState()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<RefreshAuthStatusEvent>(_onRefreshAuthStatus);
     on<LoginSubmittedEvent>(_onLoginSubmitted);
@@ -74,6 +81,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final result = await authRepository.checkSession();
       if (result == null || state is! AuthenticatedState) return;
+      onOutletsRefreshed?.call();
       final refreshed = result.stores
           .where((s) => s.storeId == current.currentStore.storeId)
           .firstOrNull;

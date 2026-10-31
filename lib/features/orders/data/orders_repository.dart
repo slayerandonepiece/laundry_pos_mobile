@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
@@ -379,6 +380,10 @@ class OrdersRepository {
   /// to avoid a circular import between OrdersRepository and SyncEngine).
   Future<Order> updateStatus(String orderCode, String status) async {
     final cachedJson = _cachedOrderWithPending(orderCode);
+    OutletBillingGuard.ensureWritable(
+      _localCache,
+      cachedJson?['outletId']?.toString() ?? _localCache.getActiveOutletId(),
+    );
     if (cachedJson != null) {
       final current = Order.fromJson(cachedJson);
       final from = _statusOrder.indexOf(current.status.trim().toLowerCase());
@@ -443,6 +448,10 @@ class OrdersRepository {
     // Never record more than is owed: a repeated tap or a second queued
     // "collect" must not double-charge the customer.
     final cachedJson = _cachedOrderWithPending(orderCode);
+    OutletBillingGuard.ensureWritable(
+      _localCache,
+      cachedJson?['outletId']?.toString() ?? _localCache.getActiveOutletId(),
+    );
     if (cachedJson != null) {
       final order = Order.fromJson(cachedJson);
       if (amount <= 0 || (order.totalAmount > 0 && amount > order.balanceDue)) {
@@ -925,6 +934,26 @@ class OrdersRepository {
       // Handles a failed request. Returns true when the rest of this group
       // must not be sent (this run), false to carry on with the next batch.
       Future<bool> handleFailure(Object e, int start, int end) async {
+        if (e is AuthException &&
+            e.code == 'FORBIDDEN' &&
+            e.reason == 'payment_lapsed' &&
+            key != null) {
+          // One outlet is unpaid while the organization is not: refresh its
+          // billing, and if that outlet really is blocked park its actions
+          // instead of retrying them against a 403 forever.
+          await OutletBillingGuard.refresh?.call();
+          if (OutletBillingGuard.isBlocked(_localCache, key)) {
+            for (final action in groupDue.sublist(start)) {
+              final id = action['clientActionId']?.toString();
+              if (id != null && id.isNotEmpty) {
+                forbiddenDeadLetterIds.add(id);
+                lastErrorById[id] = 'outlet blocked';
+              }
+            }
+            allBatchesOk = false;
+            return true;
+          }
+        }
         if (e is AuthException && e.code == 'FORBIDDEN') {
           final recoverableAccess = switch (e.reason) {
             'payment_lapsed' ||

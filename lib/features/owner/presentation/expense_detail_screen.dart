@@ -1,3 +1,4 @@
+import 'package:myshop/shared/widgets/outlet_blocked.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -235,7 +236,9 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
               if (!_expense.isPaid) ...[
                 PrimaryButton(
                   label: 'Mark as paid',
-                  onPressed: _handleMarkPaid,
+                  onPressed: context.outletBlocked(_expense.outletId)
+                      ? null
+                      : _handleMarkPaid,
                 ),
                 const SizedBox(height: 14),
               ],

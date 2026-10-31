@@ -13,6 +13,7 @@ import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
 import 'package:myshop/features/owner/data/models/expense_model.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
+import 'package:myshop/shared/widgets/outlet_blocked.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_text_field.dart';
@@ -454,12 +455,16 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
+                      color: context.outletBlocked()
+                          ? AppColors.disabledBg
+                          : AppColors.primary,
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: const Icon(Icons.add, color: Colors.white, size: 20),
                   ),
-                  onPressed: () => _showAddExpenseDialog(context),
+                  onPressed: context.outletBlocked()
+                      ? null
+                      : () => _showAddExpenseDialog(context),
                 ),
               ),
             ],
@@ -730,7 +735,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                 ? 'Add expense'
                                 : 'Clear filters',
                             onAction: allExpenses.isEmpty
-                                ? () => _showAddExpenseDialog(context)
+                                ? (context.outletBlocked()
+                                      ? null
+                                      : () => _showAddExpenseDialog(context))
                                 : () {
                                     _searchController.clear();
                                     setState(() {
@@ -844,7 +851,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                       ),
                                       const SizedBox(height: 5),
                                       InkWell(
-                                        onTap: !expense.isPaid
+                                        onTap:
+                                            !expense.isPaid &&
+                                                !context.outletBlocked(
+                                                  expense.outletId,
+                                                )
                                             ? () => _showMarkPaidDatePicker(
                                                 context,
                                                 expense,

@@ -1,3 +1,4 @@
+import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -124,7 +125,12 @@ class OutletRequiredScreen extends StatelessWidget {
                               ],
                             ),
                           ),
-                          if (outlet.isDefault)
+                          if (outlet.isBlocked)
+                            const StatusPill(
+                              label: 'Blocked',
+                              variant: PillVariant.danger,
+                            )
+                          else if (outlet.isDefault)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
