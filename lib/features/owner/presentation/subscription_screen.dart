@@ -13,7 +13,10 @@ import 'package:myshop/features/owner/data/models/subscription_invoice_model.dar
 import 'package:myshop/features/owner/data/owner_repository.dart';
 import 'package:myshop/features/owner/presentation/plan_status_helper.dart';
 import 'package:myshop/features/owner/presentation/subscription_invoice_viewer_screen.dart';
+import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
+import 'package:myshop/features/shell/data/models/outlet_model.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
+import 'package:myshop/shared/widgets/outlet_blocked.dart';
 import 'package:myshop/shared/widgets/section_header.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -117,6 +120,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ],
               _buildTermTiles(store),
               const SizedBox(height: 24),
+              ..._buildOutlets(context),
               const SectionHeader(title: 'INVOICES'),
               const SizedBox(height: 8),
               _buildInvoices(context),
@@ -321,6 +325,105 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     );
   }
 
+  /// One row per outlet from the billing the app already holds. Shown only
+  /// when there is more than one outlet or one is blocked, so a single-outlet
+  /// organization looks as before.
+  List<Widget> _buildOutlets(BuildContext context) {
+    final outlets =
+        context.watch<OutletScopeCubit?>()?.state.allowed ?? const <Outlet>[];
+    if (outlets.length < 2 && !outlets.any((o) => o.isBlocked)) {
+      return const [];
+    }
+    String? planOf(Outlet o) => _invoices
+        .where((i) => i.outletName == o.displayName && i.planName != null)
+        .map((i) => i.planName)
+        .firstOrNull;
+    return [
+      const SectionHeader(title: 'OUTLETS'),
+      const SizedBox(height: 8),
+      for (final o in outlets) ...[
+        _buildOutletTile(context, o, planOf(o)),
+        const SizedBox(height: 10),
+      ],
+      const SizedBox(height: 14),
+    ];
+  }
+
+  Widget _buildOutletTile(BuildContext context, Outlet o, String? plan) {
+    final b = o.billing;
+    final (label, color) = switch (b?.state) {
+      'blocked' => ('Blocked', AppColors.danger),
+      'awaiting' => ('Awaiting payment', AppColors.warning),
+      'trial' => ('Trial', AppColors.mutedText),
+      'ending' => (
+        b?.daysLeft == null ? 'Due soon' : 'Due in ${b!.daysLeft} days',
+        AppColors.warning,
+      ),
+      _ => ('Paid', AppColors.success),
+    };
+    final detail = [
+      ?plan,
+      if (b?.paidThroughDate != null)
+        'Paid through ${DateFormatter.formatFull(b!.paidThroughDate)}',
+    ].join(' · ');
+    return AppCard(
+      key: ValueKey('billing-outlet-${o.id}'),
+      padding: const EdgeInsets.all(14),
+      child: _outletRow(context, o, detail, label, color),
+    );
+  }
+
+  Widget _outletRow(
+    BuildContext context,
+    Outlet o,
+    String detail,
+    String label,
+    Color color,
+  ) {
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          o.displayName,
+          style: const TextStyle(
+            fontFamily: AppTextStyles.fontBody,
+            fontSize: 14.5,
+            fontWeight: FontWeight.w700,
+            color: AppColors.text,
+          ),
+        ),
+        if (detail.isNotEmpty) ...[
+          const SizedBox(height: 3),
+          Text(detail, style: AppTextStyles.hint),
+        ],
+      ],
+    );
+    final status = Text(
+      label,
+      style: TextStyle(
+        fontFamily: AppTextStyles.fontBody,
+        fontSize: 12.5,
+        fontWeight: FontWeight.w700,
+        color: color,
+      ),
+    );
+    // Big text: the status goes under the name instead of squeezing it.
+    if (context.largeText) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [info, const SizedBox(height: 6), status],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: info),
+        const SizedBox(width: 10),
+        status,
+      ],
+    );
+  }
+
   Widget _buildInvoices(BuildContext context) {
     if (_invoices.isEmpty) {
       if (_loading) {
@@ -400,6 +503,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         invoice.method!.toUpperCase() == 'CASH' ? 'Cash' : invoice.method!,
     ].join(' · ');
 
+    final outletPlan = [
+      if (invoice.outletName != null) invoice.outletName!,
+      if (invoice.planName != null) invoice.planName!,
+    ].join(' · ');
+    final note = invoice.note?.trim() ?? '';
+    final discount = invoice.discountPercent > 0
+        ? '${invoice.discountPercent}% off${note.isEmpty ? '' : ' · $note'}'
+        : null;
+
     return AppCard(
       key: ValueKey('subscription-invoice-${invoice.invoiceSeq}'),
       padding: EdgeInsets.zero,
@@ -451,6 +563,24 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(paidLine, style: AppTextStyles.hint),
+                  if (outletPlan.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      outletPlan,
+                      key: ValueKey(
+                        'invoice-outlet-plan-${invoice.invoiceSeq}',
+                      ),
+                      style: AppTextStyles.hint,
+                    ),
+                  ],
+                  if (discount != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      discount,
+                      key: ValueKey('invoice-discount-${invoice.invoiceSeq}'),
+                      style: AppTextStyles.hint,
+                    ),
+                  ],
                   if (covers != null) ...[
                     const SizedBox(height: 2),
                     Text('Covers $covers', style: AppTextStyles.hint),

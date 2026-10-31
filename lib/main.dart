@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:in_app_update_flutter/in_app_update_flutter.dart';
 import 'package:firebase_analytics/observer.dart';
+import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_environment.dart';
 import 'package:myshop/core/error/crash_context.dart';
@@ -533,7 +534,12 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
     _authBloc = AuthBloc(
       authRepository: widget.authRepository,
       localCache: widget.localCache,
+      onOutletsRefreshed: () => _outletScopeCubit.hydrate(),
     )..add(CheckAuthStatusEvent());
+    OutletBillingGuard.refresh = () async {
+      await widget.authRepository.refreshOutletContext();
+      if (mounted) _outletScopeCubit.hydrate();
+    };
 
     _outletScopeCubit = OutletScopeCubit(localCache: widget.localCache);
 
@@ -556,6 +562,10 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
       if (_authBloc.state is AuthenticatedState) {
         if (reason == null || reason.isEmpty) {
           _handleOutletAccessLost();
+        } else if (reason == 'payment_lapsed') {
+          // One outlet or the whole organization: a fresh status says which
+          // (a blocked organization lands on the Plan expired screen).
+          _authBloc.add(RefreshAuthStatusEvent());
         } else {
           _authBloc.add(
             AccessForbiddenEvent(

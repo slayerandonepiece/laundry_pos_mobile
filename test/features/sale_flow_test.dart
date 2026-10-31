@@ -339,6 +339,9 @@ class _FakeLocalCacheService implements LocalCacheService {
   final List<Map<String, dynamic>> syncQueue = [];
 
   @override
+  String? getActiveOutletId() => null;
+
+  @override
   List<Map<String, dynamic>>? getCachedProducts() => cachedProducts;
 
   @override

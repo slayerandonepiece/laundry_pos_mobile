@@ -1,6 +1,7 @@
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
@@ -188,6 +189,10 @@ class PosRepository {
     Map<String, dynamic>? initialPayment,
     String? outletId,
   }) async {
+    OutletBillingGuard.ensureWritable(
+      _localCache,
+      outletId ?? _localCache.getActiveOutletId(),
+    );
     // The order's local key until the server assigns its EL- code; also
     // sent so a retry of a create whose reply was lost returns the same
     // order (docs/OFFLINE-ID-SYNC-PLAN.md §3).

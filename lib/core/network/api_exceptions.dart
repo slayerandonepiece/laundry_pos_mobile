@@ -40,3 +40,18 @@ class NotFoundException extends ApiException {
 class RateLimitException extends ApiException {
   RateLimitException(super.message) : super(statusCode: 429);
 }
+
+/// A write refused because its outlet is blocked until it is paid, either
+/// known from the cached billing or answered 403 `payment_lapsed`.
+class OutletBlockedException extends ApiException {
+  OutletBlockedException(String outletName, {required bool isOwner})
+    : super(
+        outletBlockedMessage(outletName, isOwner: isOwner),
+        statusCode: 403,
+      );
+}
+
+String outletBlockedMessage(String outletName, {required bool isOwner}) =>
+    isOwner
+    ? '$outletName is blocked until it is paid.'
+    : '$outletName is blocked. Please check with your store owner.';

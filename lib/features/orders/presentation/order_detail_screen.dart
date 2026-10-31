@@ -21,6 +21,7 @@ import 'package:myshop/features/orders/presentation/dialogs/status_dialog.dart';
 import 'package:myshop/features/orders/presentation/invoice_actions_sheet.dart';
 import 'package:myshop/features/orders/presentation/invoice_viewer_screen.dart';
 import 'package:myshop/features/orders/presentation/order_activity_screen.dart';
+import 'package:myshop/shared/widgets/outlet_blocked.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_inset.dart';
@@ -102,6 +103,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 : null) ??
             _order;
         final isDelivered = order.isDelivered;
+        final blocked = context.outletBlocked(order.outletId);
         final hasBalanceDue = order.balanceDue > 0;
         final isReady = order.status.toLowerCase() == 'ready';
 
@@ -409,13 +411,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         size: 19,
                         color: Colors.white,
                       ),
-                      onPressed: () =>
-                          CollectPaymentDialog.show(context, order: order),
+                      onPressed: blocked
+                          ? null
+                          : () => CollectPaymentDialog.show(
+                              context,
+                              order: order,
+                            ),
                     )
                   else
                     PrimaryButton(
                       label: 'Update status',
-                      onPressed: () => StatusDialog.show(context, order: order),
+                      onPressed: blocked
+                          ? null
+                          : () => StatusDialog.show(context, order: order),
                     ),
                   const SizedBox(height: 10),
                   if (context.read<OrdersRepository>().isShareEnabledFor(
@@ -503,9 +511,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         size: 19,
                         color: Colors.white,
                       ),
-                      onPressed: () {
-                        RecordPaymentDialog.show(context, order: order);
-                      },
+                      onPressed: blocked
+                          ? null
+                          : () {
+                              RecordPaymentDialog.show(context, order: order);
+                            },
                     ),
                     const SizedBox(height: 10),
                     AppInset(

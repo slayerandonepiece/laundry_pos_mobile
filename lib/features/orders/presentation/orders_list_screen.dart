@@ -19,6 +19,7 @@ import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
 import 'package:myshop/features/profile/presentation/profile_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
+import 'package:myshop/shared/widgets/outlet_blocked.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_dropdown.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
@@ -302,8 +303,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'New order',
-        backgroundColor: AppColors.primary,
-        onPressed: () => _startNewOrder(context),
+        backgroundColor: context.outletBlocked()
+            ? AppColors.disabledBg
+            : AppColors.primary,
+        onPressed: context.outletBlocked()
+            ? null
+            : () => _startNewOrder(context),
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
@@ -604,6 +609,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }) {
     final hasBalance = order.balanceDue > 0;
     final isReady = order.status.toLowerCase() == 'ready';
+    final blocked = context.outletBlocked(order.outletId);
 
     return AppCard(
       padding: const EdgeInsets.all(15),
@@ -719,9 +725,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           if (isReady && !order.isDelivered) ...[
             const SizedBox(height: 13),
             InkWell(
-              onTap: () {
-                CollectPaymentDialog.show(context, order: order);
-              },
+              onTap: blocked
+                  ? null
+                  : () {
+                      CollectPaymentDialog.show(context, order: order);
+                    },
               borderRadius: BorderRadius.circular(9),
               child: Container(
                 constraints: const BoxConstraints(minHeight: 46),
@@ -756,9 +764,11 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           ] else if (order.isDelivered && hasBalance) ...[
             const SizedBox(height: 13),
             InkWell(
-              onTap: () {
-                RecordPaymentDialog.show(context, order: order);
-              },
+              onTap: blocked
+                  ? null
+                  : () {
+                      RecordPaymentDialog.show(context, order: order);
+                    },
               borderRadius: BorderRadius.circular(9),
               child: Container(
                 constraints: const BoxConstraints(minHeight: 46),
