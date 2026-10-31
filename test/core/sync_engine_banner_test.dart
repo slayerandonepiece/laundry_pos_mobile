@@ -22,6 +22,10 @@ class _Orders extends OrdersRepository {
   Future<bool> processPendingSyncQueue() async =>
       pushResult ?? await super.processPendingSyncQueue();
 
+  // Not under test here; keeps the scripted request log to orders paging.
+  @override
+  Future<List<Map<String, dynamic>>> syncMessageTemplates() async => [];
+
   @override
   Future<bool> syncOrdersDelta({
     int maxBatches = 10,

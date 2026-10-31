@@ -184,6 +184,10 @@ class SyncEngine {
       if (_localCache.getTotalPendingCount() > 0) {
         SyncManager.instance.startSync('Saving changes to cloud...', true);
       }
+      // Owner changes (a new service) go first: queued orders may use them.
+      final ownerOk = await _ownerRepository.processPendingOwnerActions();
+      AppLogger.log(_tag, '_runSync(): owner actions drain outcome=$ownerOk');
+
       final pushOk = await _ordersRepository.processPendingSyncQueue();
       AppLogger.log(_tag, '_runSync(): push outcome=$pushOk');
       // Only attempt to pull remote changes if push reached the server —
@@ -192,9 +196,6 @@ class SyncEngine {
       final pullOk = pushOk ? await _ordersRepository.syncOrdersDelta() : true;
       pullAdvanced = _localCache.getLastSyncCursor() != cursorBefore;
       AppLogger.log(_tag, '_runSync(): pull outcome=$pullOk');
-
-      final ownerOk = await _ownerRepository.processPendingOwnerActions();
-      AppLogger.log(_tag, '_runSync(): owner actions drain outcome=$ownerOk');
 
       ok = pushOk && pullOk && ownerOk;
     } catch (e) {
@@ -250,6 +251,7 @@ class SyncEngine {
         // and had nothing to retry it). Never runs two scans at once.
         _retryMissingInvoicesInBackground();
         _backfillScopesInBackground();
+        _refreshMessageTemplatesInBackground();
       } else {
         final currentQueue = _localCache.getPendingSyncQueue();
         final currentOwnerQueue = _localCache.getPendingOwnerActionsQueue();
@@ -333,6 +335,16 @@ class SyncEngine {
       AppLogger.log(_tag, 'retryNow(): revive/probe failed', error: e);
     }
     return trigger();
+  }
+
+  /// Keeps the customer-message templates on the phone so Share update can
+  /// hide itself for statuses whose message is off. Best effort.
+  Future<void> _refreshMessageTemplatesInBackground() async {
+    try {
+      await _ordersRepository.syncMessageTemplates();
+    } catch (e) {
+      AppLogger.log(_tag, 'syncMessageTemplates(): failed', error: e);
+    }
   }
 
   Future<void> _retryMissingInvoicesInBackground() async {

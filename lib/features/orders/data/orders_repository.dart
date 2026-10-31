@@ -552,6 +552,25 @@ class OrdersRepository {
   List<Map<String, dynamic>>? getCachedMessageTemplates() =>
       _localCache.getCachedMessageTemplates();
 
+  /// False only when the cached template for [status] is switched off. With no
+  /// cache yet (or an unknown status) it stays true; the server still decides
+  /// when the share is tapped.
+  bool isShareEnabledFor(String status) {
+    final key = switch (status) {
+      'Pending' => 'PENDING',
+      'In Progress' => 'IN_PROGRESS',
+      'Ready' => 'READY',
+      'Delivered' => 'DELIVERED',
+      _ => null,
+    };
+    final cached = getCachedMessageTemplates();
+    if (key == null || cached == null) return true;
+    for (final t in cached) {
+      if (t['statusKey'] == key) return t['enabled'] == true;
+    }
+    return true;
+  }
+
   /// Owner-only. Cancels an order that has not been delivered; the server
   /// decides (Delivered is final) and needs the connection, so this is never
   /// queued. The order leaves the phone once the server confirms.

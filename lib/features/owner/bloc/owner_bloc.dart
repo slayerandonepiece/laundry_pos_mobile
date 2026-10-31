@@ -298,6 +298,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         amount: event.amount,
         due: event.due,
         monthly: event.monthly,
+        fixed: event.fixed,
         idempotencyKey: event.idempotencyKey,
         outletId: event.outletId,
         orgWide: event.orgWide,
@@ -339,6 +340,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         amount: event.amount,
         due: event.due,
         outletId: event.outletId,
+        paidDate: event.paidDate,
       );
       final message = _writeMessage('Expense updated');
       final updated = await ownerRepository.listExpenses();
@@ -404,6 +406,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
       await ownerRepository.markExpensePaid(
         event.expenseId,
         paidDate: event.paidDate,
+        amount: event.amount,
       );
       final message = _writeMessage('Expense marked paid');
       final updated = await ownerRepository.listExpenses();

@@ -23,6 +23,9 @@ class MockOrdersRepository implements OrdersRepository {
       cachedOrders;
 
   @override
+  bool isShareEnabledFor(String status) => true;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

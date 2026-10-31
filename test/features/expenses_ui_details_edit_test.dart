@@ -534,6 +534,10 @@ void main() {
         await tester.tap(find.text('Mark as paid'));
         await tester.pumpAndSettle();
 
+        // The dialog already holds today's date; opening it shows the bounds.
+        await tester.tap(find.byKey(const Key('mark_paid_date')));
+        await tester.pumpAndSettle();
+
         final datePicker = tester.widget<DatePickerDialog>(
           find.byType(DatePickerDialog),
         );
@@ -544,6 +548,9 @@ void main() {
         expect(datePicker.initialDate, today);
         expect(datePicker.lastDate, today);
         expect(datePicker.firstDate, oneYearAgo);
+
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
 
         // Confirming dispatches MarkExpensePaidEvent with today's YYYY-MM-DD
         await tester.tap(find.text('Mark paid'));

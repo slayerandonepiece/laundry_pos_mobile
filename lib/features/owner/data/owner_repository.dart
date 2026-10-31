@@ -516,6 +516,7 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    bool fixed = true,
     String? idempotencyKey,
     String? outletHeader,
     String? outletId,
@@ -532,6 +533,7 @@ class OwnerRepository {
       'due': due,
       'monthly': monthly,
       'idempotencyKey': key,
+      if (monthly && !fixed) 'fixed': false,
     };
     if (orgWide) {
       headers = {'X-Outlet-Id': kNoOutletHeader};
@@ -556,6 +558,7 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    bool fixed = true,
     required String idempotencyKey,
     required ({String? store, String scope}) cap,
     String? outletId,
@@ -574,6 +577,7 @@ class OwnerRepository {
       amount: amount,
       due: due,
       monthly: monthly,
+      fixed: fixed,
     );
     await _patchCachedExpenses(
       cap,
@@ -593,6 +597,7 @@ class OwnerRepository {
         'amount': amount,
         'due': due,
         'monthly': monthly,
+        'fixed': fixed,
         'idempotencyKey': idempotencyKey,
         if (outletId != null && outletId.isNotEmpty) 'outletId': outletId,
         if (orgWide) 'orgWide': true,
@@ -611,6 +616,7 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    bool fixed = true,
     String? idempotencyKey,
     String? outletId,
     bool orgWide = false,
@@ -628,6 +634,7 @@ class OwnerRepository {
         amount: amount,
         due: due,
         monthly: monthly,
+        fixed: fixed,
         idempotencyKey: key,
         cap: cap,
         outletId: outletId,
@@ -642,6 +649,7 @@ class OwnerRepository {
         amount: amount,
         due: due,
         monthly: monthly,
+        fixed: fixed,
         idempotencyKey: key,
         outletId: outletId,
         orgWide: orgWide,
@@ -664,6 +672,7 @@ class OwnerRepository {
           amount: amount,
           due: due,
           monthly: monthly,
+          fixed: fixed,
           idempotencyKey: key,
           cap: cap,
           outletId: outletId,
@@ -682,6 +691,7 @@ class OwnerRepository {
     required int amount,
     required String due,
     String? outletId,
+    String? paidDate,
   }) async {
     lastWriteQueued = false;
     _requireSyncedExpense(id);
@@ -696,6 +706,7 @@ class OwnerRepository {
       'amount': amount,
       'due': due,
       if (outletId != null && outletId.isNotEmpty) 'outletId': outletId,
+      if (paidDate != null && paidDate.isNotEmpty) 'paidDate': paidDate,
     };
 
     final cap = _captureScope();
@@ -816,12 +827,13 @@ class OwnerRepository {
   Future<void> _setCachedExpensePaid(
     ({String? store, String scope}) cap,
     Set<String> ids,
-    String paidDate,
-  ) => _patchCachedExpenses(cap, (scope, cached) {
+    String paidDate, {
+    int? amount,
+  }) => _patchCachedExpenses(cap, (scope, cached) {
     var changed = false;
     for (var i = 0; i < cached.length; i++) {
       if (ids.contains(cached[i]['id']?.toString())) {
-        cached[i] = {...cached[i], 'paid': paidDate};
+        cached[i] = {...cached[i], 'paid': paidDate, 'amount': ?amount};
         changed = true;
       }
     }
@@ -842,10 +854,11 @@ class OwnerRepository {
         case 'mark_expense_paid':
           final id = payload['expenseId']?.toString();
           final paid = payload['paidDate']?.toString();
+          final paidAmount = (payload['amount'] as num?)?.toInt();
           if (id == null || paid == null) continue;
           for (var i = 0; i < list.length; i++) {
             if (list[i]['id']?.toString() == id) {
-              list[i] = {...list[i], 'paid': paid};
+              list[i] = {...list[i], 'paid': paid, 'amount': ?paidAmount};
             }
           }
         case 'create_expense':
@@ -866,6 +879,7 @@ class OwnerRepository {
               amount: (payload['amount'] as num?)?.toInt() ?? 0,
               due: payload['due']?.toString() ?? '',
               monthly: payload['monthly'] == true,
+              fixed: payload['fixed'] != false,
             ).toJson(),
           );
       }
@@ -876,10 +890,12 @@ class OwnerRepository {
   Future<void> _markExpensePaidDirect(
     String expenseId, {
     String? paidDate,
+    int? amount,
     String? outletHeader,
   }) async {
     final body = <String, dynamic>{
       if (paidDate != null && paidDate.isNotEmpty) 'paidDate': paidDate,
+      'amount': ?amount,
     };
     await apiClient.post(
       ApiEndpoints.markExpensePaid(expenseId),
@@ -892,17 +908,27 @@ class OwnerRepository {
     String expenseId,
     ({String? store, String scope}) cap, {
     String? paidDate,
+    int? amount,
   }) async {
     lastWriteQueued = true;
     final effectivePaidDate = paidDate ?? DateFormatter.todayIsoDateString();
-    await _setCachedExpensePaid(cap, {expenseId}, effectivePaidDate);
+    await _setCachedExpensePaid(
+      cap,
+      {expenseId},
+      effectivePaidDate,
+      amount: amount,
+    );
 
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'mark_expense_paid',
       'outletId': _actionOutletId(cap.scope),
       'scope': cap.scope,
-      'payload': {'expenseId': expenseId, 'paidDate': effectivePaidDate},
+      'payload': {
+        'expenseId': expenseId,
+        'paidDate': effectivePaidDate,
+        'amount': ?amount,
+      },
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
@@ -910,7 +936,11 @@ class OwnerRepository {
   }
 
   /// Marks an expense paid
-  Future<void> markExpensePaid(String expenseId, {String? paidDate}) async {
+  Future<void> markExpensePaid(
+    String expenseId, {
+    String? paidDate,
+    int? amount,
+  }) async {
     lastWriteQueued = false;
     final cap = _captureScope();
     final effectivePaidDate = paidDate ?? DateFormatter.todayIsoDateString();
@@ -920,19 +950,30 @@ class OwnerRepository {
         expenseId,
         cap,
         paidDate: effectivePaidDate,
+        amount: amount,
       );
       return;
     }
 
     try {
-      await _markExpensePaidDirect(expenseId, paidDate: paidDate);
-      await _setCachedExpensePaid(cap, {expenseId}, effectivePaidDate);
+      await _markExpensePaidDirect(
+        expenseId,
+        paidDate: paidDate,
+        amount: amount,
+      );
+      await _setCachedExpensePaid(
+        cap,
+        {expenseId},
+        effectivePaidDate,
+        amount: amount,
+      );
     } catch (e) {
       if (await _shouldQueue(e)) {
         await _markExpensePaidOffline(
           expenseId,
           cap,
           paidDate: effectivePaidDate,
+          amount: amount,
         );
         return;
       }
@@ -1781,6 +1822,7 @@ class OwnerRepository {
               amount: (payload['amount'] as num?)?.toInt() ?? 0,
               due: payload['due']?.toString() ?? '',
               monthly: payload['monthly'] == true,
+              fixed: payload['fixed'] != false,
               idempotencyKey: payload['idempotencyKey']?.toString(),
               outletId: effectiveOutletId,
               orgWide: payloadOrgWide,
@@ -1814,6 +1856,7 @@ class OwnerRepository {
             await _markExpensePaidDirect(
               resolvedId,
               paidDate: payloadPaidDate,
+              amount: (payload['amount'] as num?)?.toInt(),
               outletHeader: actionHeader,
             );
             await _setCachedExpensePaid(
@@ -1823,6 +1866,7 @@ class OwnerRepository {
               ),
               {resolvedId, rawId},
               payloadPaidDate,
+              amount: (payload['amount'] as num?)?.toInt(),
             );
             break;
 
@@ -1922,6 +1966,24 @@ class OwnerRepository {
                 'active': payload['active'] == true,
               };
               await localCache.setCachedPaymentMethods(cached);
+            }
+            break;
+
+          case 'upsert_product':
+            final response = await apiClient.post(
+              ApiEndpoints.products,
+              body: payload,
+            );
+            final saved = Product.fromJson(
+              Map<String, dynamic>.from(response as Map),
+            );
+            final cached = localCache.getCachedProducts() ?? [];
+            final idx = cached.indexWhere(
+              (p) => p['id']?.toString() == saved.id,
+            );
+            if (idx != -1) {
+              cached[idx] = saved.toJson();
+              await localCache.setCachedProducts(cached);
             }
             break;
 
@@ -2072,8 +2134,28 @@ class OwnerRepository {
             'type': 'item',
             'price': price,
           };
-    final response = await apiClient.post(ApiEndpoints.products, body: body);
-    return Product.fromJson(Map<String, dynamic>.from(response as Map));
+    // Local first: the catalogue shows the change at once and the save is
+    // queued, so a slow or absent connection never holds the form open. The
+    // product id is made on the phone, so orders can already use it, and
+    // the sync sends the owner queue before orders.
+    lastWriteQueued = true;
+    final product = Product.fromJson(body);
+    final cached = localCache.getCachedProducts() ?? [];
+    final idx = cached.indexWhere((p) => p['id']?.toString() == id);
+    if (idx == -1) {
+      cached.insert(0, product.toJson());
+    } else {
+      cached[idx] = product.toJson();
+    }
+    await localCache.setCachedProducts(cached);
+    await localCache.enqueueOwnerAction({
+      'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
+      'type': 'upsert_product',
+      'payload': body,
+      'queuedAt': DateTime.now().toIso8601String(),
+    });
+    SyncEngine.instance.trigger();
+    return product;
   }
 
   /// Creates a new catalogue service/product

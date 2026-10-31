@@ -418,21 +418,25 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       onPressed: () => StatusDialog.show(context, order: order),
                     ),
                   const SizedBox(height: 10),
-                  SecondaryButton(
-                    label: 'Share update',
-                    icon: const Icon(
-                      Icons.ios_share,
-                      size: 17,
-                      color: AppColors.primary,
+                  if (context.read<OrdersRepository>().isShareEnabledFor(
+                    order.status,
+                  )) ...[
+                    SecondaryButton(
+                      label: 'Share update',
+                      icon: const Icon(
+                        Icons.ios_share,
+                        size: 17,
+                        color: AppColors.primary,
+                      ),
+                      textColor: AppColors.primary,
+                      onPressed: () => shareOrderUpdate(
+                        context,
+                        context.read<OrdersRepository>(),
+                        order,
+                      ),
                     ),
-                    textColor: AppColors.primary,
-                    onPressed: () => shareOrderUpdate(
-                      context,
-                      context.read<OrdersRepository>(),
-                      order,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                  ],
 
                   // Inset message
                   AppInset(
@@ -472,21 +476,25 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   ],
                 ] else ...[
                   // Settled / Delivered Flow (Screen 9f)
-                  SecondaryButton(
-                    label: 'Share update',
-                    icon: const Icon(
-                      Icons.ios_share,
-                      size: 17,
-                      color: AppColors.primary,
+                  if (context.read<OrdersRepository>().isShareEnabledFor(
+                    order.status,
+                  )) ...[
+                    SecondaryButton(
+                      label: 'Share update',
+                      icon: const Icon(
+                        Icons.ios_share,
+                        size: 17,
+                        color: AppColors.primary,
+                      ),
+                      textColor: AppColors.primary,
+                      onPressed: () => shareOrderUpdate(
+                        context,
+                        context.read<OrdersRepository>(),
+                        order,
+                      ),
                     ),
-                    textColor: AppColors.primary,
-                    onPressed: () => shareOrderUpdate(
-                      context,
-                      context.read<OrdersRepository>(),
-                      order,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
+                  ],
                   if (order.balanceDue > 0) ...[
                     PrimaryButton(
                       label: 'Record payment',

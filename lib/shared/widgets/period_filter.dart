@@ -174,11 +174,15 @@ class PeriodFilter extends StatefulWidget {
   final ValueChanged<PeriodRange> onChanged;
   final DateTime? now;
 
+  /// Whether the "This week" preset is offered.
+  final bool showWeek;
+
   const PeriodFilter({
     super.key,
     required this.value,
     required this.onChanged,
     this.now,
+    this.showWeek = true,
   });
 
   @override
@@ -269,6 +273,22 @@ class _PeriodFilterState extends State<PeriodFilter> {
     }
   }
 
+  /// Tapping the calendar again closes custom; if a custom range is applied,
+  /// fall back to the current month.
+  void _toggleCustom() {
+    if (!_customOpen) {
+      setState(() => _customOpen = true);
+    } else if (widget.value.isCustom) {
+      _preset(PeriodRange.thisMonth);
+    } else {
+      setState(() {
+        _customOpen = false;
+        _from = null;
+        _to = null;
+      });
+    }
+  }
+
   void _preset(PeriodRange r) {
     setState(() {
       _customOpen = false;
@@ -293,12 +313,14 @@ class _PeriodFilterState extends State<PeriodFilter> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _chip(
-                'This week',
-                v.key == '7d',
-                () => _preset(PeriodRange.last7),
-              ),
-              const SizedBox(width: 6),
+              if (widget.showWeek) ...[
+                _chip(
+                  'This week',
+                  v.key == '7d',
+                  () => _preset(PeriodRange.last7),
+                ),
+                const SizedBox(width: 6),
+              ],
               _chip(
                 currentMonthLabel,
                 v.key == PeriodRange.thisMonth.key,
@@ -316,11 +338,11 @@ class _PeriodFilterState extends State<PeriodFilter> {
                 child: Semantics(
                   button: true,
                   selected: _customOpen,
-                  onTap: () => setState(() => _customOpen = true),
+                  onTap: _toggleCustom,
                   label: 'Custom range',
                   excludeSemantics: true,
                   child: GestureDetector(
-                    onTap: () => setState(() => _customOpen = true),
+                    onTap: _toggleCustom,
                     behavior: HitTestBehavior.opaque,
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(

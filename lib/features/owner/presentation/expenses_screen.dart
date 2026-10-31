@@ -23,6 +23,7 @@ import 'package:myshop/shared/widgets/status_pill.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
 import 'expense_detail_screen.dart';
+import 'mark_paid_dialog.dart';
 
 export 'edit_expense_screen.dart';
 export 'expense_detail_screen.dart';
@@ -34,13 +35,65 @@ class ExpensesScreen extends StatefulWidget {
   State<ExpensesScreen> createState() => _ExpensesScreenState();
 }
 
+/// Bills split by how they recur, so a fixed rent is not mixed up with a
+/// bill that changes every month or a one-off purchase.
+List<({String title, List<Expense> items})> _groupExpenses(
+  List<Expense> expenses,
+) {
+  final groups = [
+    (
+      'Fixed monthly bills',
+      [
+        for (final e in expenses)
+          if (e.monthly && e.fixed) e,
+      ],
+    ),
+    (
+      'Variable monthly bills',
+      [
+        for (final e in expenses)
+          if (e.monthly && !e.fixed) e,
+      ],
+    ),
+    (
+      'Other expenses',
+      [
+        for (final e in expenses)
+          if (!e.monthly) e,
+      ],
+    ),
+  ];
+  return [
+    for (final g in groups)
+      if (g.$2.isNotEmpty) (title: g.$1, items: g.$2),
+  ];
+}
+
+class _GroupHeader extends StatelessWidget {
+  final String title;
+  final int count;
+
+  const _GroupHeader({required this.title, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 8),
+      child: Text(
+        '${title.toUpperCase()} · $count',
+        style: AppTextStyles.fieldLabel,
+      ),
+    );
+  }
+}
+
 class _ExpensesScreenState extends State<ExpensesScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedPeriod =
       '30d'; // 'today' | '7d' | '30d' | 'quarter' | 'custom'
   DateTime? _customFrom;
   DateTime? _customTo;
-  String _activeFilter = 'all'; // 'all' | 'unpaid' | 'recurring'
+  String _activeFilter = 'all'; // 'all' | 'unpaid' | 'paid'
   String _searchQuery = '';
 
   @override
@@ -268,25 +321,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     BuildContext context,
     Expense expense,
   ) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final oneYearAgo = DateTime(today.year - 1, today.month, today.day);
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: today,
-      firstDate: oneYearAgo,
-      lastDate: today,
-      helpText: 'Select payment date',
-      confirmText: 'Mark paid',
-    );
-
-    if (picked != null && context.mounted) {
-      final paidDateStr = DateFormatter.toIsoDateString(picked);
-      context.read<OwnerBloc>().add(
-        MarkExpensePaidEvent(expense.id, paidDate: paidDateStr),
-      );
-    }
+    await showMarkPaidDialog(context, expense);
   }
 
   void _openExpenseDetails(BuildContext context, Expense expense) {
@@ -411,7 +446,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           }
 
           if (_activeFilter == 'unpaid') return !e.isPaid;
-          if (_activeFilter == 'recurring') return e.monthly;
+          if (_activeFilter == 'paid') return e.isPaid;
           return true;
         }).toList();
 
@@ -685,17 +720,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             ),
                             const SizedBox(width: 8),
                             AppFilterChip(
-                              label: 'Unpaid $unpaidCountInPeriod',
+                              label: 'Due $unpaidCountInPeriod',
                               isSelected: _activeFilter == 'unpaid',
                               onTap: () =>
                                   setState(() => _activeFilter = 'unpaid'),
                             ),
                             const SizedBox(width: 8),
                             AppFilterChip(
-                              label: 'Recurring',
-                              isSelected: _activeFilter == 'recurring',
+                              label: 'Paid',
+                              isSelected: _activeFilter == 'paid',
                               onTap: () =>
-                                  setState(() => _activeFilter = 'recurring'),
+                                  setState(() => _activeFilter = 'paid'),
                             ),
                           ],
                         ),
@@ -741,136 +776,151 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           ),
                         )
                       else
-                        ...displayedExpenses.map((expense) {
-                          final dueDt = _parseDate(expense.due);
-                          final isUpcoming =
-                              !expense.isPaid &&
-                              dueDt != null &&
-                              dueDt.isAfter(todayStart);
+                        for (final group in _groupExpenses(
+                          displayedExpenses,
+                        )) ...[
+                          _GroupHeader(
+                            title: group.title,
+                            count: group.items.length,
+                          ),
+                          ...group.items.map((expense) {
+                            final dueDt = _parseDate(expense.due);
+                            final isUpcoming =
+                                !expense.isPaid &&
+                                dueDt != null &&
+                                dueDt.isAfter(todayStart);
 
-                          final String attributionText;
-                          if (expense.outletId == null ||
-                              expense.outletId!.isEmpty) {
-                            attributionText = 'Organization-wide';
-                          } else {
-                            final outlet = outletScope?.allowed
-                                .where((o) => o.id == expense.outletId)
-                                .firstOrNull;
-                            attributionText =
-                                outlet?.displayName ?? expense.outletId!;
-                          }
+                            final String attributionText;
+                            if (expense.outletId == null ||
+                                expense.outletId!.isEmpty) {
+                              attributionText = 'Organization-wide';
+                            } else {
+                              final outlet = outletScope?.allowed
+                                  .where((o) => o.id == expense.outletId)
+                                  .firstOrNull;
+                              attributionText =
+                                  outlet?.displayName ?? expense.outletId!;
+                            }
 
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 11),
-                            child: AppCard(
-                              padding: const EdgeInsets.all(14),
-                              onTap: () =>
-                                  _openExpenseDetails(context, expense),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Text(
-                                              expense.title,
-                                              style: const TextStyle(
-                                                fontFamily:
-                                                    AppTextStyles.fontBody,
-                                                fontSize: 14.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.text,
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 11),
+                              child: AppCard(
+                                padding: const EdgeInsets.all(14),
+                                onTap: () =>
+                                    _openExpenseDetails(context, expense),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                expense.title,
+                                                style: const TextStyle(
+                                                  fontFamily:
+                                                      AppTextStyles.fontBody,
+                                                  fontSize: 14.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.text,
+                                                ),
                                               ),
-                                            ),
-                                            if (expense.monthly) ...[
-                                              const SizedBox(width: 7),
-                                              const StatusPill(
-                                                label: 'Monthly',
-                                                variant: PillVariant.inProgress,
-                                              ),
+                                              if (expense.monthly) ...[
+                                                const SizedBox(width: 7),
+                                                StatusPill(
+                                                  label: expense.fixed
+                                                      ? 'Monthly'
+                                                      : 'Monthly · varies',
+                                                  variant:
+                                                      PillVariant.inProgress,
+                                                ),
+                                              ],
                                             ],
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '${expense.category} · Due ${expense.due}',
-                                          style: AppTextStyles.hint,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          attributionText,
-                                          style: const TextStyle(
-                                            fontFamily: AppTextStyles.fontBody,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.mutedText,
                                           ),
-                                        ),
-                                        if (expense.isPaid &&
-                                            expense.paid != null &&
-                                            expense.paid!.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${expense.category} · Due ${expense.due}',
+                                            style: AppTextStyles.hint,
+                                          ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            'Paid ${expense.paid}',
+                                            attributionText,
                                             style: const TextStyle(
                                               fontFamily:
                                                   AppTextStyles.fontBody,
                                               fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.success,
+                                              fontWeight: FontWeight.w500,
+                                              color: AppColors.mutedText,
                                             ),
                                           ),
+                                          if (expense.isPaid &&
+                                              expense.paid != null &&
+                                              expense.paid!.isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Paid ${expense.paid}',
+                                              style: const TextStyle(
+                                                fontFamily:
+                                                    AppTextStyles.fontBody,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.success,
+                                              ),
+                                            ),
+                                          ],
                                         ],
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          '${!expense.fixed && !expense.isPaid ? '~' : ''}'
+                                          '${CurrencyFormatter.format(expense.amount)}',
+                                          style: const TextStyle(
+                                            fontFamily:
+                                                AppTextStyles.fontDisplay,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.text,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 5),
+                                        InkWell(
+                                          onTap: !expense.isPaid
+                                              ? () => _showMarkPaidDatePicker(
+                                                  context,
+                                                  expense,
+                                                )
+                                              : null,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          child: StatusPill(
+                                            label: expense.isPaid
+                                                ? 'Paid'
+                                                : (isUpcoming
+                                                      ? 'Upcoming'
+                                                      : 'Unpaid'),
+                                            variant: expense.isPaid
+                                                ? PillVariant.paid
+                                                : (isUpcoming
+                                                      ? PillVariant.neutral
+                                                      : PillVariant.warning),
+                                          ),
+                                        ),
                                       ],
                                     ),
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        CurrencyFormatter.format(
-                                          expense.amount,
-                                        ),
-                                        style: const TextStyle(
-                                          fontFamily: AppTextStyles.fontDisplay,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppColors.text,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 5),
-                                      InkWell(
-                                        onTap: !expense.isPaid
-                                            ? () => _showMarkPaidDatePicker(
-                                                context,
-                                                expense,
-                                              )
-                                            : null,
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: StatusPill(
-                                          label: expense.isPaid
-                                              ? 'Paid'
-                                              : (isUpcoming
-                                                    ? 'Upcoming'
-                                                    : 'Unpaid'),
-                                          variant: expense.isPaid
-                                              ? PillVariant.paid
-                                              : (isUpcoming
-                                                    ? PillVariant.neutral
-                                                    : PillVariant.warning),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        }),
+                            );
+                          }),
+                        ],
                     ],
                   ),
                 ),
@@ -912,6 +962,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String _category = 'Operations';
   late String _due = DateFormatter.todayIsoDateString();
   bool _monthly = false;
+  bool _fixed = true;
   bool _outletInitialized = false;
   String? _selectedOutletId;
   String? _errorMessage;
@@ -961,6 +1012,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         amount: amountInPaise,
         due: _due,
         monthly: _monthly,
+        fixed: _fixed,
         idempotencyKey: _idempotencyKey,
         outletId: _selectedOutletId,
         orgWide: _selectedOutletId == null,
@@ -1160,6 +1212,22 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 ],
               ),
             ),
+            if (_monthly)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: SwitchListTile(
+                  key: const Key('same_amount_switch'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  activeThumbColor: AppColors.primary,
+                  title: const Text('Same amount every month'),
+                  subtitle: Text(
+                    _fixed ? 'Rent, subscriptions, EMIs.' : 'Electricity, water, etc. You enter the amount when you pay.',
+                    style: AppTextStyles.hint,
+                  ),
+                  value: _fixed,
+                  onChanged: (v) => setState(() => _fixed = v),
+                ),
+              ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
               Text(

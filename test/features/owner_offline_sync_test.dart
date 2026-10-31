@@ -247,6 +247,44 @@ void main() {
     });
 
     test(
+      'markExpensePaid with the month\'s amount: cached, queued and sent',
+      () async {
+        await localCache.setCachedExpenses([
+          {
+            'id': 'exp_102',
+            'title': 'Electricity',
+            'category': 'Utilities',
+            'amount': 25000,
+            'due': '2026-09-01',
+            'paid': null,
+            'monthly': true,
+            'fixed': false,
+          },
+        ]);
+
+        mockConnectivity.mockOffline = true;
+        await ownerRepo.markExpensePaid(
+          'exp_102',
+          paidDate: '2026-09-05',
+          amount: 31850,
+        );
+
+        final cached = localCache.getCachedExpenses()!.first;
+        expect(cached['paid'], '2026-09-05');
+        expect(cached['amount'], 31850);
+        final queue = localCache.getPendingOwnerActionsQueue();
+        expect(queue.first['payload']['amount'], 31850);
+
+        mockConnectivity.mockOffline = false;
+        await ownerRepo.processPendingOwnerActions();
+        expect(mockApiClient.postBodies.last, {
+          'paidDate': '2026-09-05',
+          'amount': 31850,
+        });
+      },
+    );
+
+    test(
       'togglePaymentMethod online PATCHes body {\'enabled\': <bool>}',
       () async {
         await localCache.setCachedPaymentMethods([
@@ -1020,6 +1058,14 @@ void main() {
         active: true,
       );
 
+      // Saved locally and queued: nothing has hit the server yet.
+      expect(mockApiClient.postUrls, isNot(contains(ApiEndpoints.products)));
+      expect(
+        localCache.getCachedProducts()!.any((p) => p['id'] == 'prod-item-1'),
+        isTrue,
+      );
+      expect(await ownerRepo.processPendingOwnerActions(), isTrue);
+
       expect(mockApiClient.postUrls.last, ApiEndpoints.products);
       expect(mockApiClient.putUrls, isEmpty);
       expect(
@@ -1058,6 +1104,7 @@ void main() {
         active: true,
         extra: 3500,
       );
+      expect(await ownerRepo.processPendingOwnerActions(), isTrue);
 
       expect(mockApiClient.postUrls.last, ApiEndpoints.products);
       expect(mockApiClient.putUrls, isEmpty);

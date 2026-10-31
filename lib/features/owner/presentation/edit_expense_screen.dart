@@ -26,6 +26,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
   late final TextEditingController _amountController;
   late String _category;
   late String _due;
+  late String? _paid;
   late String? _selectedOutletId;
   String? _errorMessage;
   bool _submitting = false;
@@ -43,7 +44,24 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
     );
     _category = widget.expense.category;
     _due = widget.expense.due;
+    _paid = widget.expense.isPaid ? widget.expense.paid : null;
     _selectedOutletId = widget.expense.outletId;
+  }
+
+  Future<void> _pickPaidDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final current = DateFormatter.parseCalendarDate(_paid ?? '') ?? today;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current.isAfter(today) ? today : current,
+      firstDate: DateTime(today.year - 2, today.month, today.day),
+      lastDate: today,
+      helpText: 'Select payment date',
+    );
+    if (picked != null && mounted) {
+      setState(() => _paid = DateFormatter.toIsoDateString(picked));
+    }
   }
 
   @override
@@ -114,6 +132,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
         amount: amountInPaise,
         due: _due,
         outletId: _selectedOutletId,
+        paidDate: _paid != widget.expense.paid ? _paid : null,
       ),
     );
   }
@@ -269,6 +288,40 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
                     fontFamily: AppTextStyles.fontBody,
                     fontSize: 11.5,
                     color: AppColors.mutedText,
+                  ),
+                ),
+              ],
+              if (_paid != null) ...[
+                const SizedBox(height: 14),
+                InkWell(
+                  key: const Key('edit_paid_date'),
+                  onTap: _pickPaidDate,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'PAID ON',
+                      labelStyle: AppTextStyles.fieldLabel,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      suffixIcon: const Icon(
+                        Icons.calendar_today,
+                        size: 18,
+                        color: AppColors.mutedText,
+                      ),
+                    ),
+                    child: Text(
+                      _paid!,
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.fontBody,
+                        fontSize: 14.5,
+                        color: AppColors.text,
+                      ),
+                    ),
                   ),
                 ),
               ],

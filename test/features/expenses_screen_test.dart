@@ -18,6 +18,7 @@ import 'package:myshop/features/owner/presentation/expenses_screen.dart';
 class FakeOwnerRepository extends OwnerRepository {
   List<Expense> expenses = [];
   String? lastMarkedPaidId;
+  int? lastPaidAmount;
   Map<String, dynamic>? lastCreatedExpense;
   Future<List<StaffMember>> Function()? listStaffOverride;
   void Function()? onListExpenses;
@@ -43,6 +44,7 @@ class FakeOwnerRepository extends OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    bool fixed = true,
     String? idempotencyKey,
     String? outletId,
     bool orgWide = false,
@@ -53,6 +55,7 @@ class FakeOwnerRepository extends OwnerRepository {
       'amount': amount,
       'due': due,
       'monthly': monthly,
+      'fixed': fixed,
       'idempotencyKey': idempotencyKey,
       'outletId': outletId,
       'orgWide': orgWide,
@@ -71,7 +74,12 @@ class FakeOwnerRepository extends OwnerRepository {
   }
 
   @override
-  Future<void> markExpensePaid(String id, {String? paidDate}) async {
+  Future<void> markExpensePaid(
+    String id, {
+    String? paidDate,
+    int? amount,
+  }) async {
+    lastPaidAmount = amount;
     lastMarkedPaidId = id;
     final index = expenses.indexWhere((e) => e.id == id);
     if (index >= 0) {
@@ -99,6 +107,7 @@ class FakeOwnerRepository extends OwnerRepository {
     required int amount,
     required String due,
     String? outletId,
+    String? paidDate,
   }) async {
     final index = expenses.indexWhere((e) => e.id == id);
     if (index >= 0) {
@@ -470,6 +479,68 @@ void main() {
       expect(fakeRepo.lastCreatedExpense!['amount'], 150000); // 1500 * 100
     });
 
+    testWidgets('Bills are grouped by how they recur', (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      fakeRepo.expenses.add(
+        Expense(
+          id: 'exp-5',
+          title: 'Water Bill',
+          category: 'Utilities',
+          amount: 40000,
+          due: todayStr,
+          monthly: true,
+          fixed: false,
+        ),
+      );
+      await tester.pumpWidget(buildTestWidget());
+      await pumpExpenses(tester);
+
+      expect(find.text('FIXED MONTHLY BILLS · 2'), findsOneWidget);
+      expect(find.text('VARIABLE MONTHLY BILLS · 1'), findsOneWidget);
+      expect(find.text('OTHER EXPENSES · 2'), findsOneWidget);
+      expect(find.text('Monthly · varies'), findsOneWidget);
+    });
+
+    testWidgets('Paying a variable bill asks for this month\'s amount', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      fakeRepo.expenses.add(
+        Expense(
+          id: 'exp-5',
+          title: 'Water Bill',
+          category: 'Utilities',
+          amount: 40000,
+          due: todayStr,
+          monthly: true,
+          fixed: false,
+        ),
+      );
+      await tester.pumpWidget(buildTestWidget());
+      await pumpExpenses(tester);
+
+      await tester.tap(find.text('Water Bill'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mark as paid'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('mark_paid_amount')),
+        '512.5',
+      );
+      await tester.tap(find.text('Mark paid'));
+      await pumpExpenses(tester);
+
+      expect(fakeRepo.lastMarkedPaidId, 'exp-5');
+      expect(fakeRepo.lastPaidAmount, 51250);
+    });
+
     testWidgets(
       'Marking an expense paid pushes ExpenseDetailScreen and confirms via date picker',
       (tester) async {
@@ -488,11 +559,11 @@ void main() {
         expect(find.byType(ExpenseDetailScreen), findsOneWidget);
         expect(find.text('Mark as paid'), findsOneWidget);
 
-        // Tap 'Mark as paid' opens DatePickerDialog
+        // Tap 'Mark as paid' opens the one-step dialog (date defaults to today)
         await tester.tap(find.text('Mark as paid'));
         await tester.pumpAndSettle();
 
-        expect(find.byType(DatePickerDialog), findsOneWidget);
+        expect(find.text('PAID ON'), findsOneWidget);
 
         // Tap confirm button 'Mark paid'
         await tester.tap(find.text('Mark paid'));

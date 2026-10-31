@@ -85,6 +85,7 @@ class AddExpenseEvent extends OwnerEvent {
   final int amount;
   final String due;
   final bool monthly;
+  final bool fixed;
   final String? idempotencyKey;
   final String? outletId;
   final bool orgWide;
@@ -95,6 +96,7 @@ class AddExpenseEvent extends OwnerEvent {
     required this.amount,
     required this.due,
     this.monthly = false,
+    this.fixed = true,
     this.idempotencyKey,
     this.outletId,
     this.orgWide = false,
@@ -109,6 +111,9 @@ class UpdateExpenseEvent extends OwnerEvent {
   final String due;
   final String? outletId;
 
+  /// New paid date for an already paid expense; null leaves it as is.
+  final String? paidDate;
+
   UpdateExpenseEvent({
     required this.expenseId,
     required this.title,
@@ -116,6 +121,7 @@ class UpdateExpenseEvent extends OwnerEvent {
     required this.amount,
     required this.due,
     this.outletId,
+    this.paidDate,
   });
 }
 
@@ -129,7 +135,10 @@ class MarkExpensePaidEvent extends OwnerEvent {
   final String expenseId;
   final String? paidDate;
 
-  MarkExpensePaidEvent(this.expenseId, {this.paidDate});
+  /// The real amount, in paise, for a bill whose amount changes monthly.
+  final int? amount;
+
+  MarkExpensePaidEvent(this.expenseId, {this.paidDate, this.amount});
 }
 
 class LoadStaffEvent extends OwnerEvent {

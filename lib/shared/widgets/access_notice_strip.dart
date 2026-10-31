@@ -26,7 +26,7 @@ AccessNotice? resolveAccessNotice(
     case 'TRIAL_ENDING':
       final ends = _formatDate(store.trialEndsAt);
       return AccessNotice(
-        ends == null ? 'Free trial' : 'Free trial · Ends $ends',
+        ends == null ? 'Free trial' : 'Trial ends $ends',
         isWarning: store.subscriptionState?.toUpperCase() == 'TRIAL_ENDING',
       );
     case 'SUBSCRIPTION_ENDING':
@@ -67,7 +67,7 @@ class AccessNoticeStrip extends StatelessWidget {
         bottom: false,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(

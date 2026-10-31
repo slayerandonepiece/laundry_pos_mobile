@@ -9,6 +9,9 @@ class Expense {
   final bool monthly;
   final String? seriesId;
 
+  /// False for a monthly bill whose amount changes every month.
+  final bool fixed;
+
   Expense({
     required this.id,
     this.outletId,
@@ -19,6 +22,7 @@ class Expense {
     this.paid,
     this.monthly = false,
     this.seriesId,
+    this.fixed = true,
   });
 
   bool get isPaid => paid != null && paid!.isNotEmpty;
@@ -38,6 +42,7 @@ class Expense {
       paid: json['paid']?.toString(),
       monthly: json['monthly'] == true,
       seriesId: json['seriesId']?.toString(),
+      fixed: json['fixed'] != false,
     );
   }
 
@@ -52,6 +57,7 @@ class Expense {
       'paid': paid,
       'monthly': monthly,
       'seriesId': seriesId,
+      'fixed': fixed,
     };
   }
 }

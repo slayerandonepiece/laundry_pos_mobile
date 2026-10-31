@@ -5,7 +5,6 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/sync/connectivity_service.dart';
 import '../../../core/theme/text_styles.dart';
 import '../../../core/utils/currency_formatter.dart';
-import '../../../core/utils/date_formatter.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/centred_dialog.dart';
@@ -17,6 +16,7 @@ import '../bloc/owner_event.dart';
 import '../bloc/owner_state.dart';
 import '../data/models/expense_model.dart';
 import 'edit_expense_screen.dart';
+import 'mark_paid_dialog.dart';
 
 class ExpenseDetailScreen extends StatefulWidget {
   final Expense expense;
@@ -36,27 +36,7 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
     _expense = widget.expense;
   }
 
-  Future<void> _handleMarkPaid() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final oneYearAgo = DateTime(today.year - 1, today.month, today.day);
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: today,
-      firstDate: oneYearAgo,
-      lastDate: today,
-      helpText: 'Select payment date',
-      confirmText: 'Mark paid',
-    );
-
-    if (picked != null && mounted) {
-      final paidDateStr = DateFormatter.toIsoDateString(picked);
-      context.read<OwnerBloc>().add(
-        MarkExpensePaidEvent(_expense.id, paidDate: paidDateStr),
-      );
-    }
-  }
+  Future<void> _handleMarkPaid() => showMarkPaidDialog(context, _expense);
 
   void _openEdit(BuildContext context) async {
     final bloc = context.read<OwnerBloc>();

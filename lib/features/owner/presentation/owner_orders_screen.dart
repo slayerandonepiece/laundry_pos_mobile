@@ -101,8 +101,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     super.dispose();
   }
 
-  /// The web Sales page opens on This week, so the phone does too.
-  static const _defaultPeriod = PeriodRange.last7;
+  static const _defaultPeriod = PeriodRange.thisMonth;
 
   /// Any narrowing beyond the defaults — decides whether Clear is offered.
   bool get _hasActiveFilters =>
@@ -604,6 +603,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
               opacity: _quickViewActive ? 0.4 : 1,
               child: PeriodFilter(
                 key: const ValueKey('orders-period-filter'),
+                showWeek: false,
                 value: _period,
                 onChanged: (r) => setState(() {
                   _period = r;
