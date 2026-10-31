@@ -8,6 +8,7 @@ import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
+import 'package:myshop/core/utils/phone_call.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
 import 'package:myshop/features/orders/bloc/orders_bloc.dart';
@@ -189,16 +190,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         ],
                       ),
                       InkWell(
-                        onTap: () async {
-                          final cleanPhone = order.phone.replaceAll(
-                            RegExp(r'[^0-9]'),
-                            '',
-                          );
-                          final url = Uri.parse('tel:$cleanPhone');
-                          if (await canLaunchUrl(url)) {
-                            await launchUrl(url);
-                          }
-                        },
+                        onTap: () => callPhone(context, order.phone),
                         borderRadius: BorderRadius.circular(99),
                         child: Container(
                           width: 42,

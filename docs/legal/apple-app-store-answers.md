@@ -58,7 +58,7 @@ Main flows to try: sign in, create an order (Orders tab, plus button), record a 
 
 Account deletion: owners go to More, Account, Delete account (type DELETE to confirm). Employees go to Profile, Delete account. Deleting starts a 90-day grace period; signing in again during that time shows a Restore screen. The demo organization is protected: its deletion requests are recorded but never executed, and the account is restored automatically after 24 hours, so please feel free to try the flow.
 
-External services: our own backend API (Next.js on Vercel) with a PostgreSQL database on Neon; Google Firebase (Crashlytics, Analytics, Remote Config). There is no payment processor and no in-app purchase: store subscriptions are agreed and invoiced directly with each business outside the app, and the Subscription screen only shows billing history.
+External services: our own backend API (Next.js on Vercel) with a PostgreSQL database on Neon; Google Firebase (Crashlytics, Analytics, Remote Config). There is no payment processor and no in-app purchase: store subscriptions are agreed and invoiced directly with each business outside the app, and the Subscription screen shows the business's plan, its price and billing history for reference only; there is no way to pay in the app.
 
 Regions: the app behaves the same everywhere it is available and is currently intended for businesses in India.
 ```

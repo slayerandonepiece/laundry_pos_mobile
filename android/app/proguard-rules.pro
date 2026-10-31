@@ -71,3 +71,7 @@
 
 # --- Firebase & Crashlytics ---
 -dontwarn com.google.firebase.**
+# Keep exception class names readable in Crashlytics reports
+-keep public class * extends java.lang.Exception
+-keep class com.google.firebase.crashlytics.** { *; }
+-dontwarn com.google.firebase.crashlytics.**

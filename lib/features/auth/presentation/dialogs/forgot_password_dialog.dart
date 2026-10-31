@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/theme/text_styles.dart';
+import '../../../../core/utils/phone_call.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_inset.dart';
 
@@ -20,12 +19,9 @@ class ForgotPasswordDialog extends StatelessWidget {
     );
   }
 
-  void _callOwner(BuildContext context) async {
+  void _callOwner(BuildContext context) {
     if (storePhone == null || storePhone!.isEmpty) return;
-    final uri = Uri.parse('tel:$storePhone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
+    callPhone(context, storePhone!);
   }
 
   @override

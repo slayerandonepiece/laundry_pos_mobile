@@ -178,7 +178,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                 Text(auth.user.phone, style: AppTextStyles.h3),
                 const SizedBox(height: 6),
                 const Text(
-                  'This is the only personal data we hold about you.',
+                  'We also hold your name. Both are deleted with your account.',
                   style: AppTextStyles.hint,
                 ),
               ],

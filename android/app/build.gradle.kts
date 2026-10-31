@@ -103,3 +103,43 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Upload Dart symbols to Crashlytics after an obfuscated release build, e.g.
+// `flutter build appbundle --flavor prod --obfuscate --split-debug-info=build/symbols`.
+// The symbols are first copied to ~/klenpos-symbols/<flavor>/<version>/android,
+// because build/ is wiped by `flutter clean` and old crashes need their own symbols.
+val splitDebugInfo = project.findProperty("split-debug-info")?.toString()
+if (splitDebugInfo != null) {
+    val flutterRoot = rootProject.projectDir.parentFile
+    val symbolsDir = File(splitDebugInfo).let { if (it.isAbsolute) it else flutterRoot.resolve(splitDebugInfo) }
+    val packageSuffix = mapOf("dev" to ".dev", "stage" to ".staging", "prod" to "")
+
+    packageSuffix.forEach { (flavor, suffix) ->
+        val json = file("src/$flavor/google-services.json")
+        if (!json.exists()) return@forEach
+        @Suppress("UNCHECKED_CAST")
+        val clients = (groovy.json.JsonSlurper().parse(json) as Map<String, Any?>)["client"] as List<Map<String, Any?>>
+        val appId = clients
+            .map { it["client_info"] as Map<String, Any?> }
+            .firstOrNull { (it["android_client_info"] as Map<String, Any?>)["package_name"] == "com.reddygona.klenpos$suffix" }
+            ?.get("mobilesdk_app_id") as String?
+            ?: throw GradleException("No Firebase Android app for com.reddygona.klenpos$suffix in $json")
+
+        val name = flavor.replaceFirstChar { it.uppercase() }
+        val keepDir = File(
+            System.getProperty("user.home"),
+            "klenpos-symbols/$flavor/${flutter.versionName}+${flutter.versionCode}/android",
+        )
+        val keep = tasks.register<Copy>("keep${name}DartSymbols") {
+            onlyIf { symbolsDir.canonicalFile != keepDir.canonicalFile }
+            from(symbolsDir)
+            into(keepDir)
+        }
+        val upload = tasks.register<Exec>("upload${name}DartSymbols") {
+            dependsOn(keep)
+            commandLine("firebase", "crashlytics:symbols:upload", "--app=$appId", keepDir.absolutePath)
+        }
+        tasks.matching { it.name == "bundle${name}Release" || it.name == "assemble${name}Release" }
+            .configureEach { finalizedBy(upload) }
+    }
+}
