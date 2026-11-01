@@ -6,6 +6,8 @@ import '../../core/sync/connectivity_service.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/theme/text_styles.dart';
 import '../../features/shell/bloc/outlet_scope_cubit.dart';
+import 'outlet_blocked.dart';
+import 'status_pill.dart';
 
 class OutletTitleSwitcher extends StatefulWidget {
   final String screenLabel;
@@ -206,6 +208,17 @@ class _OutletTitleSwitcherState extends State<OutletTitleSwitcher> {
             subtitleColor: subtitleColor,
             isSelected: isSelected,
             showCloudDownload: !isCached && !isSelected,
+            tag: outlet.isBlocked
+                ? const StatusPill(
+                    label: 'Blocked',
+                    variant: PillVariant.danger,
+                  )
+                : outlet.dueInDays == null
+                ? null
+                : StatusPill(
+                    label: 'Due in ${outlet.dueInDays} days',
+                    variant: PillVariant.warning,
+                  ),
           ),
         );
       }),
@@ -329,6 +342,7 @@ class _MenuOutletRow extends StatelessWidget {
   final Color subtitleColor;
   final bool isSelected;
   final bool showCloudDownload;
+  final Widget? tag;
 
   const _MenuOutletRow({
     required this.avatar,
@@ -338,7 +352,20 @@ class _MenuOutletRow extends StatelessWidget {
     required this.subtitleColor,
     required this.isSelected,
     required this.showCloudDownload,
+    this.tag,
   });
+
+  Widget _title() => Text(
+    title,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: const TextStyle(
+      fontFamily: AppTextStyles.fontBody,
+      fontSize: 13.5,
+      fontWeight: FontWeight.w700,
+      color: AppColors.text,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -366,17 +393,17 @@ class _MenuOutletRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: AppTextStyles.fontBody,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
+                if (tag != null && context.largeText) ...[
+                  _title(),
+                  const SizedBox(height: 3),
+                  tag!,
+                ] else
+                  Row(
+                    children: [
+                      Flexible(child: _title()),
+                      if (tag != null) ...[const SizedBox(width: 6), tag!],
+                    ],
                   ),
-                ),
                 const SizedBox(height: 1),
                 Text(
                   subtitle,

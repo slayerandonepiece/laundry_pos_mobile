@@ -7,6 +7,7 @@ import '../logging/app_logger.dart';
 import '../network/api_exceptions.dart';
 import '../storage/local_cache.dart';
 import 'connectivity_service.dart';
+import 'server_action_queue.dart';
 import 'sync_freshness.dart';
 import 'sync_manager.dart';
 import '../../features/auth/data/models/user_model.dart';
@@ -41,7 +42,19 @@ class SyncEngine {
   @visibleForTesting
   static set instance(SyncEngine value) => _instance = value;
 
+  /// True while a sync run is in flight. Screens show a loader instead of a
+  /// "Sync now"/"Retry" button meanwhile, so a tap can't pile on a request.
+  static final ValueNotifier<bool> busy = ValueNotifier(false);
+
   static const int _maxSilentFailures = 3;
+  static const Duration _retryDelay = Duration(seconds: 30);
+  Timer? _retryTimer;
+
+  /// Set when the engine paused only because the server kept being
+  /// unreachable (not because a change was refused): such a pause still
+  /// retries by itself, just less often.
+  bool _pausedByStreak = false;
+  static const Duration _slowRetryDelay = Duration(minutes: 2);
 
   final OrdersRepository _ordersRepository;
   final OwnerRepository _ownerRepository;
@@ -75,8 +88,11 @@ class SyncEngine {
     AppLogger.log(_tag, 'trigger(): starting new sync run');
     final future = _runSync();
     _inFlight = future;
+    busy.value = true;
     future.whenComplete(() {
       _inFlight = null;
+      busy.value = false;
+      _scheduleRetry();
       if (_retriggerRequested) {
         _retriggerRequested = false;
         AppLogger.log(
@@ -93,6 +109,36 @@ class SyncEngine {
       }
     });
     return future;
+  }
+
+  Map<String, ServerActionHandler> get _serverActionHandlers => {
+    'cancel_order': (a) => _ordersRepository.cancelOrderNow(
+      a.payload['code'].toString(),
+      a.payload['reason'].toString(),
+    ),
+    'update_expense': (a) => _ownerRepository.updateExpenseNow(
+      a.targetId,
+      Map<String, dynamic>.from(a.payload),
+    ),
+    'delete_expense': (a) => _ownerRepository.deleteExpenseNow(a.targetId),
+  };
+
+  /// Something is still queued and the engine has not given up (paused): try
+  /// again shortly, instead of waiting for the next app resume. Covers a
+  /// server that was unreachable while the phone itself stayed online, so no
+  /// connectivity change ever fires.
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    if (_safePendingCount() == 0) return;
+    final paused = SyncManager.instance.value.isSyncPaused;
+    if (paused && !_pausedByStreak) return;
+    _retryTimer = Timer(paused ? _slowRetryDelay : _retryDelay, trigger);
+  }
+
+  /// Stops a scheduled retry (sign-out, tests).
+  void cancelRetry() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
   }
 
   /// For triggers nobody asked for (app resume): skips the run when the phone
@@ -164,7 +210,12 @@ class SyncEngine {
       return;
     }
     AppLogger.log(_tag, '_runSync(): start');
-    if (ConnectivityService.instance.isOffline) {
+    // The cached flag can go stale (a 5xx at the wrong moment marks the phone
+    // offline and the OS never fires another change), so a run that finds it
+    // set looks again before giving up — this is what lets the 30s retry
+    // recover by itself.
+    if (ConnectivityService.instance.isOffline &&
+        await ConnectivityService.instance.checkIsOffline()) {
       final count = _safePendingCount();
       AppLogger.log(
         _tag,
@@ -184,8 +235,20 @@ class SyncEngine {
       if (_localCache.getTotalPendingCount() > 0) {
         SyncManager.instance.startSync('Saving changes to cloud...', true);
       }
+      // Owner changes (a new service) go first: queued orders may use them.
+      final ownerOk = await _ownerRepository.processPendingOwnerActions();
+      AppLogger.log(_tag, '_runSync(): owner actions drain outcome=$ownerOk');
+
       final pushOk = await _ordersRepository.processPendingSyncQueue();
       AppLogger.log(_tag, '_runSync(): push outcome=$pushOk');
+
+      // Requests only the server can decide (cancel order, delete expense...)
+      // go last among the pushes: they refer to orders and bills the queues
+      // above may only just have created.
+      final actionsOk = pushOk
+          ? await ServerActionQueue.instance.process(_serverActionHandlers)
+          : true;
+      AppLogger.log(_tag, '_runSync(): server actions outcome=$actionsOk');
       // Only attempt to pull remote changes if push reached the server —
       // otherwise we're offline/unreachable and a pull would just fail too.
       final cursorBefore = _localCache.getLastSyncCursor();
@@ -193,10 +256,7 @@ class SyncEngine {
       pullAdvanced = _localCache.getLastSyncCursor() != cursorBefore;
       AppLogger.log(_tag, '_runSync(): pull outcome=$pullOk');
 
-      final ownerOk = await _ownerRepository.processPendingOwnerActions();
-      AppLogger.log(_tag, '_runSync(): owner actions drain outcome=$ownerOk');
-
-      ok = pushOk && pullOk && ownerOk;
+      ok = pushOk && pullOk && ownerOk && actionsOk;
     } catch (e) {
       failure = e;
       AppLogger.log(_tag, '_runSync(): unexpected error during sync', error: e);
@@ -237,6 +297,7 @@ class SyncEngine {
 
     if (ok) {
       _failureStreak = 0;
+      _pausedByStreak = false;
       SyncFreshness.mark();
       if (pendingCount == 0) {
         AppLogger.log(
@@ -250,6 +311,7 @@ class SyncEngine {
         // and had nothing to retry it). Never runs two scans at once.
         _retryMissingInvoicesInBackground();
         _backfillScopesInBackground();
+        _refreshMessageTemplatesInBackground();
       } else {
         final currentQueue = _localCache.getPendingSyncQueue();
         final currentOwnerQueue = _localCache.getPendingOwnerActionsQueue();
@@ -295,6 +357,7 @@ class SyncEngine {
         _tag,
         '_runSync(): failure streak exhausted -> setSyncPaused',
       );
+      _pausedByStreak = true;
       SyncManager.instance.setSyncPaused(pendingCount);
     } else {
       _leaveSyncingState(pendingCount);
@@ -327,12 +390,23 @@ class SyncEngine {
     try {
       await _ordersRepository.reviveDeadLetterQueue();
       await _ownerRepository.reviveDeadLetterQueue();
+      await ServerActionQueue.instance.reviveFailed();
       await ConnectivityService.instance.checkIsOffline();
     } catch (e) {
       // Callers fire-and-forget this; still attempt the sync below.
       AppLogger.log(_tag, 'retryNow(): revive/probe failed', error: e);
     }
     return trigger();
+  }
+
+  /// Keeps the customer-message templates on the phone so Share update can
+  /// hide itself for statuses whose message is off. Best effort.
+  Future<void> _refreshMessageTemplatesInBackground() async {
+    try {
+      await _ordersRepository.syncMessageTemplates();
+    } catch (e) {
+      AppLogger.log(_tag, 'syncMessageTemplates(): failed', error: e);
+    }
   }
 
   Future<void> _retryMissingInvoicesInBackground() async {

@@ -8,6 +8,11 @@ class SubscriptionInvoice {
   final String paidAt; // yyyy-MM-dd
   final String? coversFrom;
   final String? coversTo;
+  final String? outletName; // null on a deposit
+  final String? planName; // null on older invoices
+  final int? listAmount; // paise, before the discount
+  final int discountPercent; // 0-100
+  final String? note;
 
   const SubscriptionInvoice({
     required this.invoiceSeq,
@@ -18,6 +23,11 @@ class SubscriptionInvoice {
     required this.paidAt,
     this.coversFrom,
     this.coversTo,
+    this.outletName,
+    this.planName,
+    this.listAmount,
+    this.discountPercent = 0,
+    this.note,
   });
 
   bool get isDeposit => type.toUpperCase() == 'DEPOSIT';
@@ -34,6 +44,11 @@ class SubscriptionInvoice {
       paidAt: json['paidAt']?.toString() ?? '',
       coversFrom: json['coversFrom']?.toString(),
       coversTo: json['coversTo']?.toString(),
+      outletName: json['outletName']?.toString(),
+      planName: json['planName']?.toString(),
+      listAmount: (json['listAmount'] as num?)?.toInt(),
+      discountPercent: (json['discountPercent'] as num?)?.toInt() ?? 0,
+      note: json['note']?.toString(),
     );
   }
 
@@ -46,6 +61,11 @@ class SubscriptionInvoice {
     'paidAt': paidAt,
     'coversFrom': coversFrom,
     'coversTo': coversTo,
+    'outletName': outletName,
+    'planName': planName,
+    'listAmount': listAmount,
+    'discountPercent': discountPercent,
+    'note': note,
   };
 }
 

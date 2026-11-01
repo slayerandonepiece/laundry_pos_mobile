@@ -5,9 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/core/utils/idempotency.dart';
@@ -379,6 +381,10 @@ class OrdersRepository {
   /// to avoid a circular import between OrdersRepository and SyncEngine).
   Future<Order> updateStatus(String orderCode, String status) async {
     final cachedJson = _cachedOrderWithPending(orderCode);
+    OutletBillingGuard.ensureWritable(
+      _localCache,
+      cachedJson?['outletId']?.toString() ?? _localCache.getActiveOutletId(),
+    );
     if (cachedJson != null) {
       final current = Order.fromJson(cachedJson);
       final from = _statusOrder.indexOf(current.status.trim().toLowerCase());
@@ -443,6 +449,10 @@ class OrdersRepository {
     // Never record more than is owed: a repeated tap or a second queued
     // "collect" must not double-charge the customer.
     final cachedJson = _cachedOrderWithPending(orderCode);
+    OutletBillingGuard.ensureWritable(
+      _localCache,
+      cachedJson?['outletId']?.toString() ?? _localCache.getActiveOutletId(),
+    );
     if (cachedJson != null) {
       final order = Order.fromJson(cachedJson);
       if (amount <= 0 || (order.totalAmount > 0 && amount > order.balanceDue)) {
@@ -552,9 +562,29 @@ class OrdersRepository {
   List<Map<String, dynamic>>? getCachedMessageTemplates() =>
       _localCache.getCachedMessageTemplates();
 
-  /// Owner-only. Cancels an order that has not been delivered; the server
-  /// decides (Delivered is final) and needs the connection, so this is never
-  /// queued. The order leaves the phone once the server confirms.
+  /// False only when the cached template for [status] is switched off. With no
+  /// cache yet (or an unknown status) it stays true; the server still decides
+  /// when the share is tapped.
+  bool isShareEnabledFor(String status) {
+    final key = switch (status) {
+      'Pending' => 'PENDING',
+      'In Progress' => 'IN_PROGRESS',
+      'Ready' => 'READY',
+      'Delivered' => 'DELIVERED',
+      _ => null,
+    };
+    final cached = getCachedMessageTemplates();
+    if (key == null || cached == null) return true;
+    for (final t in cached) {
+      if (t['statusKey'] == key) return t['enabled'] == true;
+    }
+    return true;
+  }
+
+  /// Owner-only. Asks the server to cancel an order that has not been
+  /// delivered. The server decides (Delivered is final), so the request goes
+  /// in the server-action queue: the order shows "Cancelling…" and only leaves
+  /// the phone once the server confirms.
   Future<void> cancelOrder(String orderCode, String reason) async {
     final cachedJson = _cachedOrderWithPending(orderCode);
     if (cachedJson != null) {
@@ -572,10 +602,31 @@ class OrdersRepository {
     if (trimmed.length < 3 || trimmed.length > 500) {
       throw const OrderRuleException('Reason must be 3 to 500 characters.');
     }
-    await _apiClient.post(
-      ApiEndpoints.orderCancel(orderCode),
-      body: {'reason': trimmed},
-    );
+    try {
+      await ServerActionQueue.instance.enqueue(
+        type: 'cancel_order',
+        targetId: orderCode,
+        label: 'Cancelling…',
+        summary: 'Cancel order $orderCode',
+        payload: {'code': orderCode, 'reason': trimmed},
+      );
+    } on StateError catch (e) {
+      throw OrderRuleException(e.message);
+    }
+  }
+
+  /// Sends the cancel to the server. Called by the server-action queue, never
+  /// by a screen, so a slow connection does not hold anyone up.
+  Future<void> cancelOrderNow(String orderCode, String reason) async {
+    try {
+      await _apiClient.post(
+        ApiEndpoints.orderCancel(orderCode),
+        body: {'reason': reason},
+      );
+    } on ApiException catch (e) {
+      // 404: an earlier attempt that timed out already went through.
+      if (e.statusCode != 404) rethrow;
+    }
     final ctx = _captureContext();
     final list = _readOrdersIn(ctx);
     if (list != null) {
@@ -925,6 +976,26 @@ class OrdersRepository {
       // Handles a failed request. Returns true when the rest of this group
       // must not be sent (this run), false to carry on with the next batch.
       Future<bool> handleFailure(Object e, int start, int end) async {
+        if (e is AuthException &&
+            e.code == 'FORBIDDEN' &&
+            e.reason == 'payment_lapsed' &&
+            key != null) {
+          // One outlet is unpaid while the organization is not: refresh its
+          // billing, and if that outlet really is blocked park its actions
+          // instead of retrying them against a 403 forever.
+          await OutletBillingGuard.refresh?.call();
+          if (OutletBillingGuard.isBlocked(_localCache, key)) {
+            for (final action in groupDue.sublist(start)) {
+              final id = action['clientActionId']?.toString();
+              if (id != null && id.isNotEmpty) {
+                forbiddenDeadLetterIds.add(id);
+                lastErrorById[id] = 'outlet blocked';
+              }
+            }
+            allBatchesOk = false;
+            return true;
+          }
+        }
         if (e is AuthException && e.code == 'FORBIDDEN') {
           final recoverableAccess = switch (e.reason) {
             'payment_lapsed' ||

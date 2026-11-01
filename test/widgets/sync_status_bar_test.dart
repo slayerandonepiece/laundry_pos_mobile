@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/shared/widgets/sync_status_bar.dart';
 
@@ -187,6 +188,34 @@ void main() {
 
         expect(contentTop(tester), resting + 36);
       });
+    });
+
+    testWidgets('while a sync run is in flight the retry link is a loader', (
+      tester,
+    ) async {
+      var taps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(children: [SyncStatusBar(onSyncNow: () => taps++)]),
+          ),
+        ),
+      );
+      SyncManager.instance.setPendingOnline(2);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Sync now'), findsOneWidget);
+
+      SyncEngine.busy.value = true;
+      addTearDown(() => SyncEngine.busy.value = false);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Sync now'), findsNothing);
+      expect(find.byKey(const Key('sync_action_loader')), findsOneWidget);
+      expect(taps, 0);
+
+      SyncEngine.busy.value = false;
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Sync now'), findsOneWidget);
+      expect(find.byKey(const Key('sync_action_loader')), findsNothing);
     });
   });
 }

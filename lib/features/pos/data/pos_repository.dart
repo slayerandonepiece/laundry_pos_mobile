@@ -1,6 +1,7 @@
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
@@ -71,12 +72,26 @@ class PosRepository {
       }
       final response = await _apiClient.get(ApiEndpoints.products);
       if (response is List) {
-        final products = response
-            .map((p) => Product.fromJson(Map<String, dynamic>.from(p as Map)))
-            .toList();
-        await _localCache.setCachedProducts(
-          products.map((p) => p.toJson()).toList(),
-        );
+        // Saves still waiting in the owner queue are not on the server yet;
+        // keep them in the list instead of letting the reply erase them.
+        final rows = [
+          for (final p in response)
+            Product.fromJson(Map<String, dynamic>.from(p as Map)).toJson(),
+        ];
+        for (final a in _localCache.getPendingOwnerActionsQueue()) {
+          if (a['type'] != 'upsert_product') continue;
+          final queued = Product.fromJson(
+            Map<String, dynamic>.from(a['payload'] as Map),
+          ).toJson();
+          final i = rows.indexWhere((r) => r['id'] == queued['id']);
+          if (i == -1) {
+            rows.insert(0, queued);
+          } else {
+            rows[i] = queued;
+          }
+        }
+        final products = rows.map(Product.fromJson).toList();
+        await _localCache.setCachedProducts(rows);
         SyncManager.instance.completeSync();
         return products;
       }
@@ -174,6 +189,10 @@ class PosRepository {
     Map<String, dynamic>? initialPayment,
     String? outletId,
   }) async {
+    OutletBillingGuard.ensureWritable(
+      _localCache,
+      outletId ?? _localCache.getActiveOutletId(),
+    );
     // The order's local key until the server assigns its EL- code; also
     // sent so a retry of a create whose reply was lost returns the same
     // order (docs/OFFLINE-ID-SYNC-PLAN.md §3).

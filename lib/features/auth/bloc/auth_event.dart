@@ -1,6 +1,13 @@
 abstract class AuthEvent {}
 
-class CheckAuthStatusEvent extends AuthEvent {}
+class CheckAuthStatusEvent extends AuthEvent {
+  /// App start only: open from the saved session and let the server confirm it
+  /// afterwards. Every other caller (password just set, retry on the blocked
+  /// screen...) needs the server's current answer, not the saved one.
+  final bool fromSavedSession;
+
+  CheckAuthStatusEvent({this.fromSavedSession = false});
+}
 
 /// Silent re-check of the session while the app is in use (for example on
 /// resume). Unlike [CheckAuthStatusEvent] it shows no loading screen and never

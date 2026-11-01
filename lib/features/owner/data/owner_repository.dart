@@ -5,11 +5,14 @@ import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:myshop/core/constants/api_endpoints.dart';
 import 'package:myshop/core/logging/app_logger.dart';
 import 'package:myshop/core/network/api_client.dart';
+import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
+import 'package:myshop/core/utils/phone_normalizer.dart';
 import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
 import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
@@ -516,6 +519,7 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    bool fixed = true,
     String? idempotencyKey,
     String? outletHeader,
     String? outletId,
@@ -532,6 +536,7 @@ class OwnerRepository {
       'due': due,
       'monthly': monthly,
       'idempotencyKey': key,
+      if (monthly && !fixed) 'fixed': false,
     };
     if (orgWide) {
       headers = {'X-Outlet-Id': kNoOutletHeader};
@@ -556,6 +561,7 @@ class OwnerRepository {
     required int amount,
     required String due,
     bool monthly = false,
+    bool fixed = true,
     required String idempotencyKey,
     required ({String? store, String scope}) cap,
     String? outletId,
@@ -574,6 +580,7 @@ class OwnerRepository {
       amount: amount,
       due: due,
       monthly: monthly,
+      fixed: fixed,
     );
     await _patchCachedExpenses(
       cap,
@@ -593,6 +600,7 @@ class OwnerRepository {
         'amount': amount,
         'due': due,
         'monthly': monthly,
+        'fixed': fixed,
         'idempotencyKey': idempotencyKey,
         if (outletId != null && outletId.isNotEmpty) 'outletId': outletId,
         if (orgWide) 'orgWide': true,
@@ -604,13 +612,15 @@ class OwnerRepository {
     return localExpense;
   }
 
-  /// Creates a new expense
+  /// Creates a new expense. Local first: it shows in the list at once and is
+  /// sent in the background (a slow connection never holds the form up).
   Future<Expense> createExpense({
     required String title,
     required String category,
     required int amount,
     required String due,
     bool monthly = false,
+    bool fixed = true,
     String? idempotencyKey,
     String? outletId,
     bool orgWide = false,
@@ -620,61 +630,27 @@ class OwnerRepository {
         : IdempotencyKeyGenerator.generate();
     lastWriteQueued = false;
     final cap = _captureScope();
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    if (isOffline) {
-      return _createExpenseOffline(
-        title: title,
-        category: category,
-        amount: amount,
-        due: due,
-        monthly: monthly,
-        idempotencyKey: key,
-        cap: cap,
-        outletId: outletId,
-        orgWide: orgWide,
-      );
-    }
-
-    try {
-      final expense = await _createExpenseDirect(
-        title: title,
-        category: category,
-        amount: amount,
-        due: due,
-        monthly: monthly,
-        idempotencyKey: key,
-        outletId: outletId,
-        orgWide: orgWide,
-      );
-      final placed = _withRequestedOutlet(
-        expense,
-        orgWide ? null : (outletId ?? _actionOutletId(cap.scope)),
-      );
-      await _patchCachedExpenses(
-        cap,
-        ensureCurrent: true,
-        (scope, cached) => _placeExpense(scope, cached, placed),
-      );
-      return expense;
-    } catch (e) {
-      if (await _shouldQueue(e)) {
-        return _createExpenseOffline(
-          title: title,
-          category: category,
-          amount: amount,
-          due: due,
-          monthly: monthly,
-          idempotencyKey: key,
-          cap: cap,
-          outletId: outletId,
-          orgWide: orgWide,
-        );
-      }
-      rethrow;
-    }
+    final blockedOutlet = orgWide
+        ? null
+        : (outletId ?? _actionOutletId(cap.scope));
+    OutletBillingGuard.ensureWritable(localCache, blockedOutlet);
+    return _createExpenseOffline(
+      title: title,
+      category: category,
+      amount: amount,
+      due: due,
+      monthly: monthly,
+      fixed: fixed,
+      idempotencyKey: key,
+      cap: cap,
+      outletId: outletId,
+      orgWide: orgWide,
+    );
   }
 
-  /// Updates an existing expense (online only)
+  /// Asks the server to update an expense. The server decides, so the request
+  /// goes in the server-action queue: the bill shows "Updating…" and changes
+  /// on the phone once the server confirms. Returns at once.
   Future<void> updateExpense(
     String id, {
     required String title,
@@ -682,22 +658,28 @@ class OwnerRepository {
     required int amount,
     required String due,
     String? outletId,
+    String? paidDate,
   }) async {
     lastWriteQueued = false;
     _requireSyncedExpense(id);
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    if (isOffline) {
-      throw OwnerRefusedException('This needs a connection');
-    }
+    await _enqueueExpenseAction(
+      type: 'update_expense',
+      id: id,
+      label: 'Updating…',
+      summary: 'Update "${title.trim()}"',
+      payload: {
+        'title': title.trim(),
+        'category': category.trim(),
+        'amount': amount,
+        'due': due,
+        if (outletId != null && outletId.isNotEmpty) 'outletId': outletId,
+        if (paidDate != null && paidDate.isNotEmpty) 'paidDate': paidDate,
+      },
+    );
+  }
 
-    final body = <String, dynamic>{
-      'title': title.trim(),
-      'category': category.trim(),
-      'amount': amount,
-      'due': due,
-      if (outletId != null && outletId.isNotEmpty) 'outletId': outletId,
-    };
-
+  /// Sends the update. Called by the server-action queue, never by a screen.
+  Future<void> updateExpenseNow(String id, Map<String, dynamic> body) async {
     final cap = _captureScope();
     final response = await apiClient.put(
       ApiEndpoints.expenseById(id),
@@ -715,23 +697,62 @@ class OwnerRepository {
     );
   }
 
-  /// Deletes an expense (online only)
+  /// Asks the server to delete an expense; the bill shows "Deleting…" and
+  /// leaves the phone once the server confirms. Returns at once.
   Future<void> deleteExpense(String id) async {
     lastWriteQueued = false;
     _requireSyncedExpense(id);
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    if (isOffline) {
-      throw OwnerRefusedException('This needs a connection');
-    }
+    await _enqueueExpenseAction(
+      type: 'delete_expense',
+      id: id,
+      label: 'Deleting…',
+      summary: 'Delete "${_cachedExpenseTitle(id)}"',
+    );
+  }
 
+  /// Sends the delete. Called by the server-action queue. A bill the server
+  /// no longer has counts as deleted.
+  Future<void> deleteExpenseNow(String id) async {
     final cap = _captureScope();
-    await apiClient.delete(ApiEndpoints.expenseById(id));
+    try {
+      await apiClient.delete(ApiEndpoints.expenseById(id));
+    } on ApiException catch (e) {
+      if (e.statusCode != 404) rethrow;
+    }
 
     await _patchCachedExpenses(cap, (scope, cached) {
       final before = cached.length;
       cached.removeWhere((e) => e['id']?.toString() == id);
       return cached.length != before;
     });
+  }
+
+  String _cachedExpenseTitle(String id) {
+    for (final e in localCache.getCachedExpenses() ?? const []) {
+      if (e['id']?.toString() == id) return e['title']?.toString() ?? 'expense';
+    }
+    return 'expense';
+  }
+
+  Future<void> _enqueueExpenseAction({
+    required String type,
+    required String id,
+    required String label,
+    required String summary,
+    Map<String, dynamic> payload = const {},
+  }) async {
+    try {
+      await ServerActionQueue.instance.enqueue(
+        type: type,
+        targetId: id,
+        label: label,
+        summary: summary,
+        payload: payload,
+      );
+    } on StateError catch (e) {
+      throw OwnerRefusedException(e.message);
+    }
+    SyncEngine.instance.trigger();
   }
 
   /// A bill created offline has no server id yet, so the server can't edit or
@@ -816,12 +837,13 @@ class OwnerRepository {
   Future<void> _setCachedExpensePaid(
     ({String? store, String scope}) cap,
     Set<String> ids,
-    String paidDate,
-  ) => _patchCachedExpenses(cap, (scope, cached) {
+    String paidDate, {
+    int? amount,
+  }) => _patchCachedExpenses(cap, (scope, cached) {
     var changed = false;
     for (var i = 0; i < cached.length; i++) {
       if (ids.contains(cached[i]['id']?.toString())) {
-        cached[i] = {...cached[i], 'paid': paidDate};
+        cached[i] = {...cached[i], 'paid': paidDate, 'amount': ?amount};
         changed = true;
       }
     }
@@ -842,10 +864,11 @@ class OwnerRepository {
         case 'mark_expense_paid':
           final id = payload['expenseId']?.toString();
           final paid = payload['paidDate']?.toString();
+          final paidAmount = (payload['amount'] as num?)?.toInt();
           if (id == null || paid == null) continue;
           for (var i = 0; i < list.length; i++) {
             if (list[i]['id']?.toString() == id) {
-              list[i] = {...list[i], 'paid': paid};
+              list[i] = {...list[i], 'paid': paid, 'amount': ?paidAmount};
             }
           }
         case 'create_expense':
@@ -866,6 +889,7 @@ class OwnerRepository {
               amount: (payload['amount'] as num?)?.toInt() ?? 0,
               due: payload['due']?.toString() ?? '',
               monthly: payload['monthly'] == true,
+              fixed: payload['fixed'] != false,
             ).toJson(),
           );
       }
@@ -876,10 +900,12 @@ class OwnerRepository {
   Future<void> _markExpensePaidDirect(
     String expenseId, {
     String? paidDate,
+    int? amount,
     String? outletHeader,
   }) async {
     final body = <String, dynamic>{
       if (paidDate != null && paidDate.isNotEmpty) 'paidDate': paidDate,
+      'amount': ?amount,
     };
     await apiClient.post(
       ApiEndpoints.markExpensePaid(expenseId),
@@ -892,17 +918,27 @@ class OwnerRepository {
     String expenseId,
     ({String? store, String scope}) cap, {
     String? paidDate,
+    int? amount,
   }) async {
     lastWriteQueued = true;
     final effectivePaidDate = paidDate ?? DateFormatter.todayIsoDateString();
-    await _setCachedExpensePaid(cap, {expenseId}, effectivePaidDate);
+    await _setCachedExpensePaid(
+      cap,
+      {expenseId},
+      effectivePaidDate,
+      amount: amount,
+    );
 
     await localCache.enqueueOwnerAction({
       'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
       'type': 'mark_expense_paid',
       'outletId': _actionOutletId(cap.scope),
       'scope': cap.scope,
-      'payload': {'expenseId': expenseId, 'paidDate': effectivePaidDate},
+      'payload': {
+        'expenseId': expenseId,
+        'paidDate': effectivePaidDate,
+        'amount': ?amount,
+      },
       'queuedAt': DateTime.now().toIso8601String(),
     });
 
@@ -910,34 +946,22 @@ class OwnerRepository {
   }
 
   /// Marks an expense paid
-  Future<void> markExpensePaid(String expenseId, {String? paidDate}) async {
+  Future<void> markExpensePaid(
+    String expenseId, {
+    String? paidDate,
+    int? amount,
+  }) async {
     lastWriteQueued = false;
     final cap = _captureScope();
     final effectivePaidDate = paidDate ?? DateFormatter.todayIsoDateString();
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    if (isOffline) {
-      await _markExpensePaidOffline(
-        expenseId,
-        cap,
-        paidDate: effectivePaidDate,
-      );
-      return;
-    }
-
-    try {
-      await _markExpensePaidDirect(expenseId, paidDate: paidDate);
-      await _setCachedExpensePaid(cap, {expenseId}, effectivePaidDate);
-    } catch (e) {
-      if (await _shouldQueue(e)) {
-        await _markExpensePaidOffline(
-          expenseId,
-          cap,
-          paidDate: effectivePaidDate,
-        );
-        return;
-      }
-      rethrow;
-    }
+    OutletBillingGuard.ensureWritable(localCache, _actionOutletId(cap.scope));
+    // Local first: shown as paid at once, sent in the background.
+    await _markExpensePaidOffline(
+      expenseId,
+      cap,
+      paidDate: effectivePaidDate,
+      amount: amount,
+    );
   }
 
   /// Reads staff from the local cache only — no network call.
@@ -1048,6 +1072,15 @@ class OwnerRepository {
     String? defaultOutletId,
   }) async {
     lastWriteQueued = false;
+    if (name.trim().isEmpty) {
+      throw ValidationException('Employee name is required');
+    }
+    if (!isServerValidPhone(phone)) {
+      throw ValidationException('Enter a valid phone number (8–15 digits)');
+    }
+    if (password.length < 8 || password.length > 128) {
+      throw ValidationException('Password must be 8–128 characters');
+    }
     final key = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
         ? idempotencyKey.trim()
         : IdempotencyKeyGenerator.generate();
@@ -1084,16 +1117,23 @@ class OwnerRepository {
     );
   }
 
-  /// Explicit desired state makes queued replay idempotent. The endpoint
-  /// accepts active alone, so a stale cached name/phone cannot overwrite an
-  /// edit made on another device while this action waited offline.
+  /// Explicit desired state makes queued replay idempotent. The PUT requires
+  /// name and phone, so they are read fresh from the server (not the cache) —
+  /// a stale name/phone cannot overwrite an edit made on another device while
+  /// this action waited offline.
   Future<void> _setStaffActiveDirect({
     required String employeeId,
     required bool active,
   }) async {
+    final row = await _fetchStaffRow(employeeId);
+    if (row == null) throw _staffUnknown;
     await apiClient.put(
       ApiEndpoints.employeeDetail(employeeId),
-      body: {'active': active},
+      body: {
+        'name': row['name']?.toString() ?? '',
+        'phone': row['phone']?.toString() ?? '',
+        'active': active,
+      },
     );
   }
 
@@ -1155,39 +1195,13 @@ class OwnerRepository {
   /// Toggles active status of employee
   Future<void> toggleStaffActive(String employeeId) async {
     lastWriteQueued = false;
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    Map<String, dynamic>? row;
-    try {
-      row = await _staffRow(employeeId, online: !isOffline);
-    } catch (e) {
-      if (!await _shouldQueue(e)) rethrow;
-    }
+    // Local first: read the current state from the phone, show the change at
+    // once, send it in the background.
+    final row = await _staffRow(employeeId, online: false);
     // Never guess the current state from a missing row.
     if (row == null) throw _staffUnknown;
     final newActive = row['active'] == false;
-
-    if (isOffline) {
-      await _setStaffActiveOffline(employeeId: employeeId, active: newActive);
-      return;
-    }
-
-    try {
-      await _setStaffActiveDirect(employeeId: employeeId, active: newActive);
-      final freshCached = localCache.getCachedStaff() ?? [];
-      final freshIdx = freshCached.indexWhere(
-        (s) => s['id']?.toString() == employeeId,
-      );
-      if (freshIdx != -1) {
-        freshCached[freshIdx] = {...freshCached[freshIdx], 'active': newActive};
-        await localCache.setCachedStaff(freshCached);
-      }
-    } catch (e) {
-      if (await _shouldQueue(e)) {
-        await _setStaffActiveOffline(employeeId: employeeId, active: newActive);
-        return;
-      }
-      rethrow;
-    }
+    await _setStaffActiveOffline(employeeId: employeeId, active: newActive);
   }
 
   /// [active] null means "leave the employee's status alone": the PUT still
@@ -1204,8 +1218,11 @@ class OwnerRepository {
     List<String>? outletIds,
     String? defaultOutletId,
   }) async {
-    if (name.trim().isEmpty || phone.trim().isEmpty) {
-      throw ValidationException('Employee name and phone are required');
+    if (name.trim().isEmpty) {
+      throw ValidationException('Employee name is required');
+    }
+    if (!isServerValidPhone(phone)) {
+      throw ValidationException('Enter a valid phone number (8–15 digits)');
     }
     if (password != null &&
         password.isNotEmpty &&
@@ -1488,28 +1505,9 @@ class OwnerRepository {
 
   /// Toggles active state of payment method
   Future<void> togglePaymentMethod(String id, bool active) async {
+    // Local first: the change shows at once and is sent in the background.
     lastWriteQueued = false;
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    if (isOffline) {
-      await _togglePaymentMethodOffline(id, active);
-      return;
-    }
-
-    try {
-      await _togglePaymentMethodDirect(id, active);
-      final cached = localCache.getCachedPaymentMethods() ?? [];
-      final idx = cached.indexWhere((m) => m['id']?.toString() == id);
-      if (idx != -1) {
-        cached[idx] = {...cached[idx], 'active': active};
-        await localCache.setCachedPaymentMethods(cached);
-      }
-    } catch (e) {
-      if (await _shouldQueue(e)) {
-        await _togglePaymentMethodOffline(id, active);
-        return;
-      }
-      rethrow;
-    }
+    await _togglePaymentMethodOffline(id, active);
   }
 
   /// Reads store profile from the local cache only — no network call.
@@ -1651,39 +1649,29 @@ class OwnerRepository {
     required String email,
   }) async {
     lastWriteQueued = false;
-    final isOffline = await ConnectivityService.instance.checkIsOffline();
-    if (isOffline) {
-      return _updateStoreProfileOffline(
-        storeName: storeName,
-        address: address,
-        phone: phone,
-        name: name,
-        email: email,
+    // Same rules as the server, so a save that can never succeed is not queued.
+    if (storeName.trim().isEmpty ||
+        address.trim().isEmpty ||
+        !isServerValidPhone(phone)) {
+      throw ValidationException(
+        'Enter the store name, address and a valid phone number (8–15 digits)',
       );
     }
-
-    try {
-      final profile = await _updateStoreProfileDirect(
-        storeName: storeName,
-        address: address,
-        phone: phone,
-        name: name,
-        email: email,
-      );
-      await localCache.setCachedStoreProfile(profile.toJson());
-      return profile;
-    } catch (e) {
-      if (await _shouldQueue(e)) {
-        return _updateStoreProfileOffline(
-          storeName: storeName,
-          address: address,
-          phone: phone,
-          name: name,
-          email: email,
-        );
-      }
-      rethrow;
+    if (name.trim().length < 2) {
+      throw ValidationException('Owner name must be at least 2 characters');
     }
+    final mail = email.trim();
+    if (mail.isNotEmpty &&
+        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(mail)) {
+      throw ValidationException('Enter a valid email address');
+    }
+    return _updateStoreProfileOffline(
+      storeName: storeName,
+      address: address,
+      phone: phone,
+      name: name,
+      email: email,
+    );
   }
 
   /// Only the server rejecting the action itself (validation, conflict, not
@@ -1781,6 +1769,7 @@ class OwnerRepository {
               amount: (payload['amount'] as num?)?.toInt() ?? 0,
               due: payload['due']?.toString() ?? '',
               monthly: payload['monthly'] == true,
+              fixed: payload['fixed'] != false,
               idempotencyKey: payload['idempotencyKey']?.toString(),
               outletId: effectiveOutletId,
               orgWide: payloadOrgWide,
@@ -1814,6 +1803,7 @@ class OwnerRepository {
             await _markExpensePaidDirect(
               resolvedId,
               paidDate: payloadPaidDate,
+              amount: (payload['amount'] as num?)?.toInt(),
               outletHeader: actionHeader,
             );
             await _setCachedExpensePaid(
@@ -1823,6 +1813,7 @@ class OwnerRepository {
               ),
               {resolvedId, rawId},
               payloadPaidDate,
+              amount: (payload['amount'] as num?)?.toInt(),
             );
             break;
 
@@ -1922,6 +1913,24 @@ class OwnerRepository {
                 'active': payload['active'] == true,
               };
               await localCache.setCachedPaymentMethods(cached);
+            }
+            break;
+
+          case 'upsert_product':
+            final response = await apiClient.post(
+              ApiEndpoints.products,
+              body: payload,
+            );
+            final saved = Product.fromJson(
+              Map<String, dynamic>.from(response as Map),
+            );
+            final cached = localCache.getCachedProducts() ?? [];
+            final idx = cached.indexWhere(
+              (p) => p['id']?.toString() == saved.id,
+            );
+            if (idx != -1) {
+              cached[idx] = saved.toJson();
+              await localCache.setCachedProducts(cached);
             }
             break;
 
@@ -2072,8 +2081,28 @@ class OwnerRepository {
             'type': 'item',
             'price': price,
           };
-    final response = await apiClient.post(ApiEndpoints.products, body: body);
-    return Product.fromJson(Map<String, dynamic>.from(response as Map));
+    // Local first: the catalogue shows the change at once and the save is
+    // queued, so a slow or absent connection never holds the form open. The
+    // product id is made on the phone, so orders can already use it, and
+    // the sync sends the owner queue before orders.
+    lastWriteQueued = true;
+    final product = Product.fromJson(body);
+    final cached = localCache.getCachedProducts() ?? [];
+    final idx = cached.indexWhere((p) => p['id']?.toString() == id);
+    if (idx == -1) {
+      cached.insert(0, product.toJson());
+    } else {
+      cached[idx] = product.toJson();
+    }
+    await localCache.setCachedProducts(cached);
+    await localCache.enqueueOwnerAction({
+      'clientActionId': 'owner_${DateTime.now().microsecondsSinceEpoch}',
+      'type': 'upsert_product',
+      'payload': body,
+      'queuedAt': DateTime.now().toIso8601String(),
+    });
+    SyncEngine.instance.trigger();
+    return product;
   }
 
   /// Creates a new catalogue service/product

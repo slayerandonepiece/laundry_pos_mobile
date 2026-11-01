@@ -358,13 +358,12 @@ class OrdersBloc extends Bloc<OrdersEvent, OrdersState> {
     emit(state.copyWith(isUpdatingStatus: true, error: null));
     try {
       await ordersRepository.cancelOrder(event.orderCode, event.reason);
+      SyncEngine.instance.trigger();
+      // The order stays until the server confirms; it shows "Cancelling…".
       emit(
         state.copyWith(
           isUpdatingStatus: false,
-          allOrders: state.allOrders
-              .where((o) => o.orderCode != event.orderCode)
-              .toList(),
-          actionSuccessMessage: 'Order cancelled',
+          actionSuccessMessage: 'Cancel request sent',
         ),
       );
     } catch (e) {

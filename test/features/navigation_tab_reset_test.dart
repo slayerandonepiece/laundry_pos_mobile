@@ -184,7 +184,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('Free trial · Ends 15 Oct 2026'), findsOneWidget);
+      expect(find.text('Trial ends 15 Oct 2026'), findsOneWidget);
     });
 
     testWidgets('An ordinary store shows no plan strip', (tester) async {

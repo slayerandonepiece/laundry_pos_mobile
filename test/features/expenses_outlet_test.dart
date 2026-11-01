@@ -7,6 +7,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:myshop/core/network/api_client.dart';
 import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
+import 'package:myshop/core/sync/sync_engine.dart';
 import 'package:myshop/core/storage/secure_storage.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
@@ -203,6 +205,12 @@ void main() {
       await localCache.setActiveStoreId('store_1');
       await localCache.setCachedStoreDetails({'role': 'OWNER'});
       await localCache.setAllowedOutletsForStore('store_1', outlets);
+
+      await localCache.setServerActions([]);
+      ServerActionQueue.instance.reload();
+      // The repositories trigger a sync after queueing; keep the real engine
+      // out of it (signed out = it skips) so each test drains by hand.
+      SyncEngine.instance = SyncEngine.internal(localCache: _NoStoreCache());
 
       mockConnectivity = _MockConnectivityService(mockOffline: false);
       ConnectivityService.instance = mockConnectivity;
@@ -654,51 +662,65 @@ void main() {
       expect(allOutletsUri.queryParameters.containsKey('outletId'), isFalse);
     });
 
-    test('updateExpense and deleteExpense throw clear exception when offline and never enqueue', () async {
-      mockConnectivity.mockOffline = true;
-      final apiClient = _RecordingApiClient();
-      final repo = OwnerRepository(
-        apiClient: apiClient,
-        localCache: localCache,
-      );
+    test(
+      'updateExpense and deleteExpense queue as server requests, even offline',
+      () async {
+        mockConnectivity.mockOffline = true;
+        final apiClient = _RecordingApiClient();
+        final repo = OwnerRepository(
+          apiClient: apiClient,
+          localCache: localCache,
+        );
 
-      // Populate cache with an expense
-      await localCache.setCachedExpenses([
-        {
-          'id': 'exp-100',
-          'title': 'Paper Cups',
-          'category': 'Supplies',
-          'amount': 500,
-          'due': '2026-10-01',
-          'monthly': false,
-        },
-      ]);
+        await localCache.setCachedExpenses([
+          {
+            'id': 'exp-100',
+            'title': 'Paper Cups',
+            'category': 'Supplies',
+            'amount': 500,
+            'due': '2026-10-01',
+            'monthly': false,
+          },
+          {
+            'id': 'exp-102',
+            'title': 'Napkins',
+            'category': 'Supplies',
+            'amount': 200,
+            'due': '2026-10-01',
+            'monthly': false,
+          },
+        ]);
 
-      // updateExpense throws offline
-      expect(
-        () => repo.updateExpense(
+        await repo.updateExpense(
           'exp-100',
           title: 'Paper Cups & Plates',
           category: 'Supplies',
           amount: 800,
           due: '2026-10-01',
-        ),
-        throwsA(
-          predicate((e) => e.toString().contains('This needs a connection')),
-        ),
-      );
+        );
+        await repo.deleteExpense('exp-102');
 
-      // deleteExpense throws offline
-      expect(
-        () => repo.deleteExpense('exp-100'),
-        throwsA(
-          predicate((e) => e.toString().contains('This needs a connection')),
-        ),
-      );
+        // Returned at once: nothing sent, nothing changed on the phone yet.
+        expect(apiClient.putUrls, isEmpty);
+        expect(apiClient.deleteUrls, isEmpty);
+        expect(localCache.getCachedExpenses(), hasLength(2));
+        expect(localCache.getPendingOwnerActionsQueue(), isEmpty);
+        final queued = ServerActionQueue.instance.actions.value;
+        expect(
+          [for (final a in queued) a.type],
+          ['update_expense', 'delete_expense'],
+        );
+        expect(localCache.getTotalPendingCount(), 2);
 
-      // Queue remains empty
-      expect(localCache.getPendingOwnerActionsQueue(), isEmpty);
-    });
+        // A second request for the same bill is refused while one is waiting.
+        await expectLater(
+          repo.deleteExpense('exp-100'),
+          throwsA(
+            predicate((e) => e.toString().contains('already processing')),
+          ),
+        );
+      },
+    );
 
     test(
       'updateExpense and deleteExpense online update/remove cached item',
@@ -731,6 +753,8 @@ void main() {
           due: '2026-10-02',
           outletId: 'o2',
         );
+        expect(apiClient.putUrls, isEmpty, reason: 'queued, not sent yet');
+        await drainServerActions(repo);
 
         expect(apiClient.putUrls.length, 1);
         expect(apiClient.putUrls.first, contains('/api/v1/expenses/exp-101'));
@@ -751,6 +775,7 @@ void main() {
 
         // Online delete
         await repo.deleteExpense('exp-101');
+        await drainServerActions(repo);
         expect(apiClient.deleteUrls.length, 1);
         expect(
           apiClient.deleteUrls.first,
@@ -841,6 +866,7 @@ void main() {
         due: '2026-10-01',
         outletId: 'o2',
       );
+      await drainServerActions(repo);
 
       List<String> ids(String scope) => [
         for (final e in localCache.getCachedExpensesForScope(scope)!)
@@ -862,6 +888,7 @@ void main() {
 
       // Delete exp-2 while viewing o1: gone from every scope that had it.
       await repo.deleteExpense('exp-2');
+      await drainServerActions(repo);
       expect(ids('all'), ['exp-1']);
       expect(ids('o2'), ['exp-1']);
       expect(localCache.getCachedExpensesForScope('o3'), isNull);
@@ -890,6 +917,8 @@ void main() {
         ]);
 
         await repo.markExpensePaid('exp-201', paidDate: '2026-10-04');
+        expect(apiClient.postUrls, isEmpty, reason: 'local first, sent later');
+        await repo.processPendingOwnerActions();
 
         expect(apiClient.postUrls.length, 1);
         expect(
@@ -980,56 +1009,50 @@ void main() {
       expect((recordingClient.postBodies[1]['paidDate'] as String).length, 10);
     });
 
-    test('OwnerBloc update and delete success and offline handling', () async {
-      final apiClient = _RecordingApiClient();
-      final repo = OwnerRepository(
-        apiClient: apiClient,
-        localCache: localCache,
-      );
-      final bloc = OwnerBloc(ownerRepository: repo);
-      addTearDown(bloc.close);
+    test(
+      'OwnerBloc update and delete are accepted at once and queued',
+      () async {
+        final apiClient = _RecordingApiClient();
+        final repo = OwnerRepository(
+          apiClient: apiClient,
+          localCache: localCache,
+        );
+        final bloc = OwnerBloc(ownerRepository: repo);
+        addTearDown(bloc.close);
 
-      // 1. Online update success
-      mockConnectivity.mockOffline = false;
-      bloc.add(
-        UpdateExpenseEvent(
-          expenseId: 'exp-bloc-1',
-          title: 'Updated Title',
-          category: 'Repairs',
-          amount: 4500,
-          due: '2026-10-05',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(bloc.state.actionMessage, 'Expense updated');
-      expect(bloc.state.error, isNull);
+        // Slow or offline makes no difference: the request is queued.
+        for (final offline in [false, true]) {
+          mockConnectivity.mockOffline = offline;
+          await localCache.setServerActions([]);
+          ServerActionQueue.instance.reload();
 
-      // 2. Offline update failure surfaces 'This needs a connection'
-      mockConnectivity.mockOffline = true;
-      bloc.add(
-        UpdateExpenseEvent(
-          expenseId: 'exp-bloc-1',
-          title: 'Fail Title',
-          category: 'Repairs',
-          amount: 4500,
-          due: '2026-10-05',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(bloc.state.error, 'This needs a connection');
+          bloc.add(
+            UpdateExpenseEvent(
+              expenseId: 'exp-bloc-1',
+              title: 'Updated Title',
+              category: 'Repairs',
+              amount: 4500,
+              due: '2026-10-05',
+            ),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          expect(bloc.state.actionMessage, 'Update request sent');
+          expect(bloc.state.error, isNull);
+          expect(apiClient.putUrls, isEmpty);
 
-      // 3. Offline delete failure surfaces 'This needs a connection'
-      bloc.add(DeleteExpenseEvent('exp-bloc-1'));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(bloc.state.error, 'This needs a connection');
+          // A second request for the same bill is refused with a clear reason.
+          bloc.add(DeleteExpenseEvent('exp-bloc-1'));
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          expect(bloc.state.error, contains('already processing'));
+        }
 
-      // 4. Online delete success
-      mockConnectivity.mockOffline = false;
-      bloc.add(DeleteExpenseEvent('exp-bloc-1'));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(bloc.state.actionMessage, 'Expense deleted');
-      expect(bloc.state.error, isNull);
-    });
+        await localCache.setServerActions([]);
+        ServerActionQueue.instance.reload();
+        bloc.add(DeleteExpenseEvent('exp-bloc-1'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(bloc.state.actionMessage, 'Delete request sent');
+      },
+    );
   });
 
   group('Expenses & Dashboard Outlet Scope Widget Tests', () {
@@ -1160,3 +1183,18 @@ class _WidgetFakeLocalCache extends LocalCacheService {
   @override
   bool hasCachedOrdersFor({String? outletId, required bool allOutlets}) => true;
 }
+
+class _NoStoreCache extends LocalCacheService {
+  @override
+  String? getActiveStoreId() => null;
+}
+
+/// Sends queued server actions the way the sync engine does.
+Future<void> drainServerActions(OwnerRepository repo) =>
+    ServerActionQueue.instance.process({
+      'update_expense': (a) => repo.updateExpenseNow(
+        a.targetId,
+        Map<String, dynamic>.from(a.payload),
+      ),
+      'delete_expense': (a) => repo.deleteExpenseNow(a.targetId),
+    });

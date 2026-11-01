@@ -26,7 +26,7 @@ void main() {
           _store(state: 'TRIAL', trialEndsAt: '2026-10-15'),
           isOwner: isOwner,
         );
-        expect(notice?.message, 'Free trial · Ends 15 Oct 2026');
+        expect(notice?.message, 'Trial ends 15 Oct 2026');
         expect(notice?.isWarning, isFalse);
       }
     });
@@ -36,7 +36,7 @@ void main() {
         _store(state: 'TRIAL_ENDING', trialEndsAt: '2026-10-05'),
         isOwner: true,
       );
-      expect(notice?.message, 'Free trial · Ends 5 Oct 2026');
+      expect(notice?.message, 'Trial ends 5 Oct 2026');
       expect(notice?.isWarning, isTrue);
     });
 
@@ -87,12 +87,12 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: AccessNoticeStrip(
-            notice: AccessNotice('Free trial · Ends 5 Oct 2026'),
+            notice: AccessNotice('Trial ends 5 Oct 2026'),
           ),
         ),
       ),
     );
 
-    expect(find.text('Free trial · Ends 5 Oct 2026'), findsOneWidget);
+    expect(find.text('Trial ends 5 Oct 2026'), findsOneWidget);
   });
 }

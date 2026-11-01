@@ -209,19 +209,36 @@ class AuthRepository {
         error: e,
       );
       // Offline fallback: restore session from local cache
-      final cachedUserMap = _localCache.getCachedUser();
-      final cachedStoreMap = _localCache.getCachedStoreDetails();
-      final cachedStoresList = _localCache.getCachedAvailableStores();
-      if (cachedUserMap != null && cachedStoreMap != null) {
-        final user = User.fromJson(cachedUserMap);
-        final currentStore = StoreSummary.fromJson(cachedStoreMap);
-        final stores = cachedStoresList != null
-            ? cachedStoresList.map((m) => StoreSummary.fromJson(m)).toList()
-            : [currentStore];
-        return AuthResult(user: user, stores: stores);
-      }
+      return _cachedResult();
+    }
+  }
+
+  /// The signed-in session as saved on the phone, with no network call, or
+  /// null when there is no token or nothing saved. The app opens from this
+  /// at once and verifies with the server in the background, so a slow
+  /// connection (or a database waking up) never holds the splash screen.
+  Future<AuthResult?> cachedSession() async {
+    try {
+      final token = await _secureStorage.getToken();
+      if (token == null || token.isEmpty) return null;
+      return _cachedResult();
+    } catch (e) {
+      AppLogger.log(_tag, 'cachedSession unavailable', error: e);
       return null;
     }
+  }
+
+  AuthResult? _cachedResult() {
+    final cachedUserMap = _localCache.getCachedUser();
+    final cachedStoreMap = _localCache.getCachedStoreDetails();
+    final cachedStoresList = _localCache.getCachedAvailableStores();
+    if (cachedUserMap == null || cachedStoreMap == null) return null;
+    final user = User.fromJson(cachedUserMap);
+    final currentStore = StoreSummary.fromJson(cachedStoreMap);
+    final stores = cachedStoresList != null
+        ? cachedStoresList.map((m) => StoreSummary.fromJson(m)).toList()
+        : [currentStore];
+    return AuthResult(user: user, stores: stores);
   }
 
   /// Sets a new password when mustChangePassword == true

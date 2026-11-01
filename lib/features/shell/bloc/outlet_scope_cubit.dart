@@ -39,6 +39,25 @@ class OutletScope {
       isOwner = false,
       missingCache = true;
 
+  /// The one outlet being viewed, or null for All outlets / nothing chosen.
+  Outlet? get activeOutlet {
+    if (allOutlets || activeOutletId == null) return null;
+    for (final o in allowed) {
+      if (o.id == activeOutletId) return o;
+    }
+    return null;
+  }
+
+  /// True when the outlet being viewed is blocked until it is paid.
+  bool get activeOutletBlocked => activeOutlet?.isBlocked ?? false;
+
+  bool isBlocked(String? outletId) {
+    for (final o in allowed) {
+      if (o.id == outletId) return o.isBlocked;
+    }
+    return false;
+  }
+
   /// Employee assigned to zero outlets — every order call 403s by design
   /// (O4): block the shell, don't render orders/New sale behind it.
   bool get blockedNoOutlet => !isOwner && !missingCache && allowed.isEmpty;
@@ -85,6 +104,18 @@ class OutletScopeCubit extends Cubit<OutletScope> {
     if (activeOutletId != null && !allowed.any((o) => o.id == activeOutletId)) {
       _localCache.clearActiveOutletId();
       activeOutletId = null;
+    }
+
+    // An employee with a blocked outlet and no outlet chosen starts on the
+    // server's default open outlet instead of being asked.
+    if (!isOwner && activeOutletId == null && allowed.length > 1) {
+      final open = allowed.where((o) => !o.isBlocked).toList();
+      if (open.isNotEmpty && open.length < allowed.length) {
+        activeOutletId =
+            (open.where((o) => o.isDefault).firstOrNull ?? open.first).id;
+        _localCache.setActiveOutletId(activeOutletId);
+        _localCache.setAllOutletsScope(false);
+      }
     }
 
     if (allowed.length == 1) {
@@ -141,8 +172,19 @@ class OutletScopeCubit extends Cubit<OutletScope> {
       final remembered = key == null
           ? null
           : _localCache.getRememberedOutlet(key.$1, key.$2);
-      if (remembered != null && allowed.any((o) => o.id == remembered)) {
+      final usable =
+          remembered != null &&
+          allowed.any((o) => o.id == remembered && !o.isBlocked);
+      // With a blocked outlet in play, start on the server's default (an open
+      // outlet) instead of asking; without one nothing changes.
+      final open = allowed.where((o) => !o.isBlocked).toList();
+      final fallback = allowed.any((o) => o.isBlocked) && open.isNotEmpty
+          ? (open.where((o) => o.isDefault).firstOrNull ?? open.first)
+          : null;
+      if (usable) {
         _localCache.setActiveOutletId(remembered);
+      } else if (fallback != null) {
+        _localCache.setActiveOutletId(fallback.id);
       } else {
         _localCache.clearActiveOutletId();
       }

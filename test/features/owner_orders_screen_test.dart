@@ -78,6 +78,9 @@ class MockOrdersRepository implements OrdersRepository {
   List<Order> getCachedOrdersList() => cachedOrders;
 
   @override
+  bool isShareEnabledFor(String status) => true;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -722,9 +725,12 @@ void main() {
 
         final filter = find.byKey(const ValueKey('orders-period-filter'));
         expect(filter, findsOneWidget);
-        // Same chips as the dashboard cards (7 days, this month, last month).
+        // Months only (no week), plus the custom range.
+        expect(
+          find.descendant(of: filter, matching: find.text('This week')),
+          findsNothing,
+        );
         for (final label in [
-          'This week',
           PeriodRange.currentMonthLabel(),
           PeriodRange.previousMonthLabel(),
         ]) {
@@ -734,19 +740,18 @@ void main() {
           );
         }
 
-        // Opens on This week, like the web Sales page: nothing to clear yet.
+        // Opens on the current month: nothing to clear yet.
         expect(find.text('Clear'), findsNothing);
+        expect(find.text('ORD-101'), findsOneWidget);
 
-        // A preset that still covers today's orders keeps them.
+        // Changing the period is a filter: Clear is offered.
         await tester.tap(
           find.descendant(
             of: filter,
-            matching: find.text(PeriodRange.currentMonthLabel()),
+            matching: find.text(PeriodRange.previousMonthLabel()),
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('ORD-101'), findsOneWidget);
-        // Changing the period is a filter: Clear is offered.
         expect(find.text('Clear'), findsOneWidget);
 
         await tester.tap(
@@ -758,6 +763,18 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('FROM'), findsOneWidget);
         expect(find.text('TO'), findsOneWidget);
+
+        // Tapping the calendar again closes the From / To row.
+        await tester.tap(
+          find
+              .descendant(
+                of: filter,
+                matching: find.byIcon(Icons.calendar_today_outlined),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('FROM'), findsNothing);
       },
     );
 

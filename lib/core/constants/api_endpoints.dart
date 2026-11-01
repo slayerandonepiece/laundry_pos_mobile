@@ -11,6 +11,7 @@ class ApiEndpoints {
   // Auth
   static String get login => '$baseUrl/api/v1/auth/login';
   static String get logout => '$baseUrl/api/v1/auth/logout';
+  static String get health => '$baseUrl/api/v1/health';
   static String get syncStatus => '$baseUrl/api/v1/sync/status';
   static String get messageTemplates => '$baseUrl/api/v1/message-templates';
   static String get sessionStatus => '$baseUrl/api/v1/auth/status';

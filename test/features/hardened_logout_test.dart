@@ -43,6 +43,11 @@ class MockLocalCache extends LocalCacheService {
   List<Map<String, dynamic>> getPendingSyncQueue() => queue;
 
   @override
+  List<Map<String, dynamic>> getPendingOwnerActionsQueue() => ownerQueue;
+
+  List<Map<String, dynamic>> ownerQueue = [];
+
+  @override
   Future<void> clear() async {
     clearCalled = true;
   }
@@ -295,6 +300,63 @@ void main() {
         await mockSecureStorage.saveToken('valid-token');
         mockLocalCache.queue = [
           {'id': 'order-1', 'type': 'create'},
+        ];
+
+        final fakeConnectivity = FakeConnectivityService(offline: false);
+        final fakeSyncEngine = FakeSyncEngine();
+
+        final apiClient = ApiClient(
+          dio: createMockDio((_) async => mockJsonResponse({'ok': true})),
+        );
+        final authRepo = AuthRepository(
+          apiClient: apiClient,
+          secureStorage: mockSecureStorage,
+          localCache: mockLocalCache,
+        );
+        final fakeAuthBloc = FakeAuthBloc(
+          authRepository: authRepo,
+          localCache: mockLocalCache,
+        );
+
+        await tester.pumpWidget(
+          createTestableWidget(
+            connectivityService: fakeConnectivity,
+            localCache: mockLocalCache,
+            syncEngine: fakeSyncEngine,
+            authRepository: authRepo,
+            authBloc: fakeAuthBloc,
+          ),
+        );
+
+        await tester.tap(find.text('Log out'));
+        await tester.pumpAndSettle();
+
+        // Should show unsynced orders dialog
+        expect(find.text('Unsynced orders'), findsOneWidget);
+        expect(
+          find.text('You have unsynced orders. Please sync them first.'),
+          findsOneWidget,
+        );
+        expect(find.text('Sync now'), findsOneWidget);
+        expect(find.text('Cancel'), findsOneWidget);
+
+        // Tap Cancel -> dialog closes, no state change
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Unsynced orders'), findsNothing);
+        expect(find.text('Log out?'), findsNothing);
+        expect(fakeAuthBloc.logoutEventReceived, isFalse);
+        expect(await mockSecureStorage.getToken(), equals('valid-token'));
+      },
+    );
+
+    testWidgets(
+      'Scenario 2d: a queued owner change alone also warns before logout',
+      (tester) async {
+        await mockSecureStorage.saveToken('valid-token');
+        mockLocalCache.ownerQueue = [
+          {'type': 'create_expense', 'clientActionId': 'a1'},
         ];
 
         final fakeConnectivity = FakeConnectivityService(offline: false);

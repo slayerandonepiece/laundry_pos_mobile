@@ -16,10 +16,12 @@ import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/pos/presentation/customer_details_screen.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
 import 'package:myshop/features/shell/data/models/outlet_model.dart';
+import 'package:myshop/shared/widgets/outlet_blocked.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_dropdown.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
+import 'package:myshop/shared/widgets/server_action_tag.dart';
 import 'package:myshop/shared/widgets/filter_dropdown_row.dart';
 import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 import 'package:myshop/shared/widgets/period_filter.dart';
@@ -101,8 +103,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
     super.dispose();
   }
 
-  /// The web Sales page opens on This week, so the phone does too.
-  static const _defaultPeriod = PeriodRange.last7;
+  static const _defaultPeriod = PeriodRange.thisMonth;
 
   /// Any narrowing beyond the defaults — decides whether Clear is offered.
   bool get _hasActiveFilters =>
@@ -324,12 +325,16 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.primary,
+                  color: context.outletBlocked()
+                      ? AppColors.disabledBg
+                      : AppColors.primary,
                   borderRadius: BorderRadius.circular(9),
                 ),
                 child: const Icon(Icons.add, color: Colors.white, size: 20),
               ),
-              onPressed: () => _startNewOrder(context),
+              onPressed: context.outletBlocked()
+                  ? null
+                  : () => _startNewOrder(context),
             ),
           ),
         ],
@@ -604,6 +609,7 @@ class _OwnerOrdersScreenState extends State<OwnerOrdersScreen> {
               opacity: _quickViewActive ? 0.4 : 1,
               child: PeriodFilter(
                 key: const ValueKey('orders-period-filter'),
+                showWeek: false,
                 value: _period,
                 onChanged: (r) => setState(() {
                   _period = r;
@@ -1005,6 +1011,7 @@ class _OwnerOrderCard extends StatelessWidget {
                   '${outletLabel != null ? ' · $outletLabel' : ''}',
                   style: AppTextStyles.hint,
                 ),
+                ServerActionTag(targetId: order.orderCode),
               ],
             ),
           ),

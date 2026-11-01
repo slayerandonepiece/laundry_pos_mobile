@@ -483,9 +483,36 @@ class LocalCacheService {
     List<Map<String, dynamic>> queue,
   ) => _box.put(keyDeadLetterOwnerActionsQueue, queue);
 
-  /// Combined count of orders pending sync and owner actions pending sync.
+  // Actions only the server can decide (cancel order, delete expense, ...):
+  // one list, each with a status of queued or failed.
+  static const String keyServerActions = 'pending_server_actions_list';
+  List<Map<String, dynamic>> getServerActions() {
+    // Counted on every sync check; no box open (a fake cache in a test, a
+    // sign-out in progress) simply means nothing is queued.
+    final Object? raw;
+    try {
+      raw = _box.get(keyServerActions);
+    } on HiveError {
+      return [];
+    }
+    if (raw is List) {
+      return raw.map((e) => deepCopy(e) as Map<String, dynamic>).toList();
+    }
+    return [];
+  }
+
+  Future<void> setServerActions(List<Map<String, dynamic>> actions) =>
+      _box.put(keyServerActions, actions);
+
+  int _serverActionsWithStatus(bool failed) => getServerActions()
+      .where((a) => (a['status'] == 'failed') == failed)
+      .length;
+
+  /// Combined count of orders, owner actions and server requests pending sync.
   int getTotalPendingCount() {
-    return getPendingSyncQueue().length + getPendingOwnerActionsQueue().length;
+    return getPendingSyncQueue().length +
+        getPendingOwnerActionsQueue().length +
+        _serverActionsWithStatus(false);
   }
 
   /// Orders + owner actions parked after exhausting their retries. They are
@@ -493,7 +520,8 @@ class LocalCacheService {
   /// cycle) but are still unsynced data the user must be told about.
   int getTotalDeadLetterCount() {
     return getDeadLetterQueue().length +
-        getDeadLetterOwnerActionsQueue().length;
+        getDeadLetterOwnerActionsQueue().length +
+        _serverActionsWithStatus(true);
   }
 
   // Generic key-value helpers for offline storage

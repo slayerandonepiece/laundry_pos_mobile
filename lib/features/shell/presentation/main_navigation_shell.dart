@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
@@ -14,6 +15,7 @@ import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/presentation/more_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_dashboard_screen.dart';
 import 'package:myshop/features/owner/presentation/owner_orders_screen.dart';
+import 'package:myshop/features/owner/presentation/subscription_screen.dart';
 import 'package:myshop/features/pos/bloc/cart_bloc.dart';
 import 'package:myshop/features/pos/bloc/cart_event.dart';
 import 'package:myshop/features/shell/bloc/outlet_scope_cubit.dart';
@@ -67,8 +69,47 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     );
   }
 
+  List<ServerAction> _lastServerActions =
+      ServerActionQueue.instance.actions.value;
+
+  @override
+  void initState() {
+    super.initState();
+    ServerActionQueue.instance.actions.addListener(_onServerActions);
+  }
+
+  /// A request the server was deciding finished: reload so the lists show the
+  /// result. One the server refused: say why (the item keeps its tag too).
+  void _onServerActions() {
+    final before = _lastServerActions;
+    final now = ServerActionQueue.instance.actions.value;
+    _lastServerActions = now;
+    if (!mounted) return;
+    final finished = before.any(
+      (p) => !p.isFailed && !now.any((n) => n.id == p.id),
+    );
+    if (finished) {
+      context.read<OrdersBloc>().add(LoadOrdersEvent());
+      try {
+        context.read<OwnerBloc>().add(LoadExpensesEvent());
+      } catch (_) {}
+    }
+    for (final n in now.where((n) => n.isFailed)) {
+      final wasFailed = before.any((p) => p.id == n.id && p.isFailed);
+      if (wasFailed) continue;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text('Not done: ${n.lastError ?? 'the server refused'}'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
+    ServerActionQueue.instance.actions.removeListener(_onServerActions);
     _dashboardResetSignal.dispose();
     _ordersResetSignal.dispose();
     _ordersDrillDown.dispose();
@@ -83,7 +124,21 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       _initialScreenLogged = true;
       AppAnalytics.screenView(isOwner ? 'dashboard' : 'orders');
     }
-    final notice = authState is AuthenticatedState
+    // One banner: a blocked outlet takes the place of the plan notice.
+    final activeOutlet = context.watch<OutletScopeCubit?>()?.state.activeOutlet;
+    final notice = activeOutlet != null && activeOutlet.isBlocked
+        ? outletBlockedNotice(
+            activeOutlet.displayName,
+            isOwner: isOwner,
+            onViewDetails: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'subscription'),
+                builder: (_) => const SubscriptionScreen(),
+              ),
+            ),
+          )
+        : authState is AuthenticatedState
         ? resolveAccessNotice(authState.currentStore, isOwner: isOwner)
         : null;
 

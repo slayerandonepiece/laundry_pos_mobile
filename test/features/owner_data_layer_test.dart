@@ -521,16 +521,15 @@ void main() {
       'active': active,
     };
 
-    test(
-      'toggle with the row missing from the cache reads the server row first',
-      () async {
-        api.handler = (m, u, b) async => m == 'GET' ? [row()] : {};
+    test('toggle with the row missing from the cache refuses and sends nothing (local first reads the phone)', () async {
+      api.handler = (m, u, b) async => m == 'GET' ? [row()] : {};
 
-        await repo.toggleStaffActive('e9');
-
-        expect(api.of('PUT').single.body, {'active': false});
-      },
-    );
+      await expectLater(
+        repo.toggleStaffActive('e9'),
+        throwsA(isA<OwnerRefusedException>()),
+      );
+      expect(api.of('PUT'), isEmpty);
+    });
 
     test('toggle refuses when the employee cannot be found anywhere', () async {
       api.handler = (m, u, b) async => m == 'GET' ? [] : {};
@@ -564,9 +563,13 @@ void main() {
         expect(queued['payload'], {'employeeId': 'e9', 'active': false});
 
         connectivity.offline = false;
-        api.handler = (m, u, b) async => {};
+        api.handler = (m, u, b) async => m == 'GET' ? [row()] : {};
         expect(await repo.processPendingOwnerActions(), isTrue);
-        expect(api.of('PUT').single.body, {'active': false});
+        expect(api.of('PUT').single.body, {
+          'name': row()['name'],
+          'phone': row()['phone'],
+          'active': false,
+        });
       },
     );
 
@@ -784,37 +787,96 @@ void main() {
       );
     });
 
-    test('a 500 is reported, not queued', () async {
+    test('a 500 on send keeps the change queued and retries it', () async {
       api.handler = (_, _, _) async =>
           throw ApiException('down', statusCode: 500);
 
-      await expectLater(
-        repo.createExpense(
-          title: 'Soap',
-          category: 'Ops',
-          amount: 5,
-          due: '2026-09-30',
-        ),
-        throwsA(isA<ApiException>()),
+      await repo.createExpense(
+        title: 'Soap',
+        category: 'Ops',
+        amount: 5,
+        due: '2026-09-30',
       );
-      expect(OwnerRepository.lastWriteQueued, isFalse);
-      expect(cache.getPendingOwnerActionsQueue(), isEmpty);
+      expect(OwnerRepository.lastWriteQueued, isTrue);
+      await repo.processPendingOwnerActions();
+      expect(cache.getPendingOwnerActionsQueue(), hasLength(1));
+      expect(cache.getDeadLetterOwnerActionsQueue(), isEmpty);
     });
 
-    test('a 422 is reported, not queued', () async {
-      api.handler = (_, _, _) async =>
-          throw ApiException('bad', statusCode: 422);
+    test(
+      'profile saves with a bad owner name, email or phone are not queued',
+      () async {
+        Future<void> save({
+          String name = 'Nia',
+          String email = '',
+          String phone = '9000000000',
+        }) => repo.updateStoreProfile(
+          storeName: 's',
+          address: 'a',
+          phone: phone,
+          name: name,
+          email: email,
+        );
+        await expectLater(save(name: 'N'), throwsA(isA<ValidationException>()));
+        await expectLater(
+          save(email: 'nope'),
+          throwsA(isA<ValidationException>()),
+        );
+        await expectLater(
+          save(phone: '12345'),
+          throwsA(isA<ValidationException>()),
+        );
+        expect(cache.getPendingOwnerActionsQueue(), isEmpty);
+      },
+    );
+
+    test('staff with a bad phone or password never reach the API', () async {
+      await expectLater(
+        repo.createStaff(name: 'Sam', phone: 'sam', password: 'password123'),
+        throwsA(isA<ValidationException>()),
+      );
+      await expectLater(
+        repo.createStaff(name: 'Sam', phone: '9000000000', password: 'short'),
+        throwsA(isA<ValidationException>()),
+      );
+      await expectLater(
+        repo.updateStaff(employeeId: 'e9', name: 'Sam', phone: 'sam'),
+        throwsA(isA<ValidationException>()),
+      );
+      expect(api.of('POST'), isEmpty);
+      expect(api.of('PUT'), isEmpty);
+    });
+
+    test('a profile save the server would reject is not queued', () async {
       await expectLater(
         repo.updateStoreProfile(
           storeName: 's',
-          address: 'a',
-          phone: 'p',
-          name: 'n',
-          email: 'e',
+          address: '',
+          phone: '9000000000',
+          name: 'Nia',
+          email: '',
         ),
-        throwsA(isA<ApiException>()),
+        throwsA(isA<ValidationException>()),
       );
       expect(cache.getPendingOwnerActionsQueue(), isEmpty);
+    });
+
+    test('a 422 on send is parked after its retries, not lost', () async {
+      api.handler = (_, _, _) async =>
+          throw ApiException('bad', statusCode: 422);
+      await repo.updateStoreProfile(
+        storeName: 's',
+        address: 'a',
+        phone: '9000000000',
+        name: 'Nia',
+        email: 'nia@example.com',
+      );
+      expect(cache.getPendingOwnerActionsQueue(), hasLength(1));
+      for (var i = 0; i < 3; i++) {
+        await repo.processPendingOwnerActions();
+      }
+      expect(cache.getPendingOwnerActionsQueue(), isEmpty);
+      expect(cache.getDeadLetterOwnerActionsQueue(), hasLength(1));
     });
   });
 
@@ -923,7 +985,11 @@ void main() {
           throw ValidationException('That phone number is already in use');
 
       final s = await settle(
-        AddStaffEvent(name: 'Sam', phone: '900', password: 'password123'),
+        AddStaffEvent(
+          name: 'Sam',
+          phone: '9000000000',
+          password: 'password123',
+        ),
       );
 
       expect(s.error, 'That phone number is already in use');
@@ -970,7 +1036,7 @@ void main() {
         );
 
         expect(s.error, isNull);
-        expect(s.actionMessage, contains('Saved offline'));
+        expect(s.actionMessage, contains('Saved'));
       },
     );
 

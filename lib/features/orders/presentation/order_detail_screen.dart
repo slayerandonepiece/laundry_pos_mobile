@@ -5,6 +5,8 @@ import 'package:myshop/features/orders/presentation/share_update.dart';
 import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
+import 'package:myshop/shared/widgets/server_action_tag.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
@@ -21,6 +23,7 @@ import 'package:myshop/features/orders/presentation/dialogs/status_dialog.dart';
 import 'package:myshop/features/orders/presentation/invoice_actions_sheet.dart';
 import 'package:myshop/features/orders/presentation/invoice_viewer_screen.dart';
 import 'package:myshop/features/orders/presentation/order_activity_screen.dart';
+import 'package:myshop/shared/widgets/outlet_blocked.dart';
 import 'package:myshop/shared/widgets/app_button.dart';
 import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_inset.dart';
@@ -48,6 +51,42 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     // on open, so opening an order detail is always instant regardless of
     // connectivity.
     _order = widget.initialOrder;
+    _cancelPending = _hasPendingCancel;
+    ServerActionQueue.instance.actions.addListener(_onServerActions);
+  }
+
+  @override
+  void dispose() {
+    ServerActionQueue.instance.actions.removeListener(_onServerActions);
+    super.dispose();
+  }
+
+  bool _cancelPending = false;
+
+  bool get _hasPendingCancel {
+    final a = ServerActionQueue.instance.forTarget(_order.orderCode);
+    return a != null && !a.isFailed;
+  }
+
+  /// A cancel the server was deciding finished. If it said yes the order has
+  /// left the phone, so there is nothing left to show here.
+  void _onServerActions() {
+    final pending = _hasPendingCancel;
+    final finished = _cancelPending && !pending;
+    _cancelPending = pending;
+    if (!finished || !mounted) return;
+    final stillThere = context
+        .read<OrdersRepository>()
+        .getCachedOrdersList()
+        .any((o) => o.orderCode == _order.orderCode);
+    if (stillThere) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(
+        content: Text('Order cancelled'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    Navigator.of(context).maybePop();
   }
 
   @override
@@ -102,6 +141,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 : null) ??
             _order;
         final isDelivered = order.isDelivered;
+        final blocked = context.outletBlocked(order.outletId);
         final hasBalanceDue = order.balanceDue > 0;
         final isReady = order.status.toLowerCase() == 'ready';
 
@@ -409,30 +449,40 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         size: 19,
                         color: Colors.white,
                       ),
-                      onPressed: () =>
-                          CollectPaymentDialog.show(context, order: order),
+                      onPressed: blocked
+                          ? null
+                          : () => CollectPaymentDialog.show(
+                              context,
+                              order: order,
+                            ),
                     )
                   else
                     PrimaryButton(
                       label: 'Update status',
-                      onPressed: () => StatusDialog.show(context, order: order),
+                      onPressed: blocked
+                          ? null
+                          : () => StatusDialog.show(context, order: order),
                     ),
                   const SizedBox(height: 10),
-                  SecondaryButton(
-                    label: 'Share update',
-                    icon: const Icon(
-                      Icons.ios_share,
-                      size: 17,
-                      color: AppColors.primary,
+                  if (context.read<OrdersRepository>().isShareEnabledFor(
+                    order.status,
+                  )) ...[
+                    SecondaryButton(
+                      label: 'Share update',
+                      icon: const Icon(
+                        Icons.ios_share,
+                        size: 17,
+                        color: AppColors.primary,
+                      ),
+                      textColor: AppColors.primary,
+                      onPressed: () => shareOrderUpdate(
+                        context,
+                        context.read<OrdersRepository>(),
+                        order,
+                      ),
                     ),
-                    textColor: AppColors.primary,
-                    onPressed: () => shareOrderUpdate(
-                      context,
-                      context.read<OrdersRepository>(),
-                      order,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                  ],
 
                   // Inset message
                   AppInset(
@@ -462,31 +512,52 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   ),
                   if (isOwner) ...[
                     const SizedBox(height: 10),
-                    SecondaryButton(
-                      label: 'Cancel order',
-                      textColor: AppColors.danger,
-                      borderColor: AppColors.danger,
-                      onPressed: () =>
-                          CancelOrderDialog.show(context, order: order),
+                    ValueListenableBuilder<List<ServerAction>>(
+                      valueListenable: ServerActionQueue.instance.actions,
+                      builder: (context, _, _) {
+                        final waiting = ServerActionQueue.instance.forTarget(
+                          order.orderCode,
+                        );
+                        if (waiting != null && !waiting.isFailed) {
+                          return ServerActionTag(targetId: order.orderCode);
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ServerActionTag(targetId: order.orderCode),
+                            SecondaryButton(
+                              label: 'Cancel order',
+                              textColor: AppColors.danger,
+                              borderColor: AppColors.danger,
+                              onPressed: () =>
+                                  CancelOrderDialog.show(context, order: order),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ] else ...[
                   // Settled / Delivered Flow (Screen 9f)
-                  SecondaryButton(
-                    label: 'Share update',
-                    icon: const Icon(
-                      Icons.ios_share,
-                      size: 17,
-                      color: AppColors.primary,
+                  if (context.read<OrdersRepository>().isShareEnabledFor(
+                    order.status,
+                  )) ...[
+                    SecondaryButton(
+                      label: 'Share update',
+                      icon: const Icon(
+                        Icons.ios_share,
+                        size: 17,
+                        color: AppColors.primary,
+                      ),
+                      textColor: AppColors.primary,
+                      onPressed: () => shareOrderUpdate(
+                        context,
+                        context.read<OrdersRepository>(),
+                        order,
+                      ),
                     ),
-                    textColor: AppColors.primary,
-                    onPressed: () => shareOrderUpdate(
-                      context,
-                      context.read<OrdersRepository>(),
-                      order,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
+                  ],
                   if (order.balanceDue > 0) ...[
                     PrimaryButton(
                       label: 'Record payment',
@@ -495,9 +566,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         size: 19,
                         color: Colors.white,
                       ),
-                      onPressed: () {
-                        RecordPaymentDialog.show(context, order: order);
-                      },
+                      onPressed: blocked
+                          ? null
+                          : () {
+                              RecordPaymentDialog.show(context, order: order);
+                            },
                     ),
                     const SizedBox(height: 10),
                     AppInset(
