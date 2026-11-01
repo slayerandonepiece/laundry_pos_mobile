@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_manager.dart';
 
 class SyncStatusBar extends StatefulWidget {
@@ -19,6 +20,7 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
   bool _showSyncedBanner = false;
   SyncState _state = SyncManager.instance.value;
   Timer? _syncedTimer;
+  bool _busy = SyncEngine.busy.value;
 
   // "Syncing…" and "All data synced" come and go on their own, so they float
   // over the content from this bar's slot instead of pushing it down and back
@@ -30,6 +32,7 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
   void initState() {
     super.initState();
     SyncManager.instance.addListener(_handleSyncChange);
+    SyncEngine.busy.addListener(_handleBusyChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _portal.show();
     });
@@ -38,8 +41,56 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
   @override
   void dispose() {
     SyncManager.instance.removeListener(_handleSyncChange);
+    SyncEngine.busy.removeListener(_handleBusyChange);
     _syncedTimer?.cancel();
     super.dispose();
+  }
+
+  void _handleBusyChange() {
+    if (!mounted || _busy == SyncEngine.busy.value) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _busy = SyncEngine.busy.value);
+      });
+      return;
+    }
+    setState(() => _busy = SyncEngine.busy.value);
+  }
+
+  /// The tap target for a retry. While a sync run is in flight it is a loader
+  /// instead, so a second tap cannot start another request.
+  Widget _syncAction(String label, Color color) {
+    if (_busy) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: SizedBox(
+          width: 13,
+          height: 13,
+          child: CircularProgressIndicator(
+            key: const Key('sync_action_loader'),
+            strokeWidth: 2.0,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      );
+    }
+    return InkWell(
+      onTap: widget.onSyncNow,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            color: color,
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      ),
+    );
   }
 
   void _handleSyncChange() {
@@ -263,25 +314,7 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
                             ),
                           ),
                           if (widget.onSyncNow != null)
-                            InkWell(
-                              onTap: widget.onSyncNow,
-                              borderRadius: BorderRadius.circular(4),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  'Sync now',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                              ),
-                            ),
+                            _syncAction('Sync now', AppColors.primary),
                         ] else if (isSyncPaused) ...[
                           const Icon(
                             Icons.sync_problem_rounded,
@@ -301,25 +334,7 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
                             ),
                           ),
                           if (widget.onSyncNow != null)
-                            InkWell(
-                              onTap: widget.onSyncNow,
-                              borderRadius: BorderRadius.circular(4),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  'Retry',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.danger,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                              ),
-                            ),
+                            _syncAction('Retry', AppColors.danger),
                         ] else if (isError) ...[
                           const Icon(
                             Icons.error_outline_rounded,
@@ -339,25 +354,7 @@ class _SyncStatusBarState extends State<SyncStatusBar> {
                             ),
                           ),
                           if (widget.onSyncNow != null)
-                            InkWell(
-                              onTap: widget.onSyncNow,
-                              borderRadius: BorderRadius.circular(4),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  'Retry',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.danger,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                              ),
-                            ),
+                            _syncAction('Retry', AppColors.danger),
                         ] else ...[
                           const Icon(
                             Icons.check_circle_rounded,

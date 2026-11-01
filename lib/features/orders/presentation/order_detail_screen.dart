@@ -5,6 +5,8 @@ import 'package:myshop/features/orders/presentation/share_update.dart';
 import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
+import 'package:myshop/shared/widgets/server_action_tag.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
 import 'package:myshop/core/utils/date_formatter.dart';
@@ -49,6 +51,42 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     // on open, so opening an order detail is always instant regardless of
     // connectivity.
     _order = widget.initialOrder;
+    _cancelPending = _hasPendingCancel;
+    ServerActionQueue.instance.actions.addListener(_onServerActions);
+  }
+
+  @override
+  void dispose() {
+    ServerActionQueue.instance.actions.removeListener(_onServerActions);
+    super.dispose();
+  }
+
+  bool _cancelPending = false;
+
+  bool get _hasPendingCancel {
+    final a = ServerActionQueue.instance.forTarget(_order.orderCode);
+    return a != null && !a.isFailed;
+  }
+
+  /// A cancel the server was deciding finished. If it said yes the order has
+  /// left the phone, so there is nothing left to show here.
+  void _onServerActions() {
+    final pending = _hasPendingCancel;
+    final finished = _cancelPending && !pending;
+    _cancelPending = pending;
+    if (!finished || !mounted) return;
+    final stillThere = context
+        .read<OrdersRepository>()
+        .getCachedOrdersList()
+        .any((o) => o.orderCode == _order.orderCode);
+    if (stillThere) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(
+        content: Text('Order cancelled'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    Navigator.of(context).maybePop();
   }
 
   @override
@@ -474,12 +512,29 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   ),
                   if (isOwner) ...[
                     const SizedBox(height: 10),
-                    SecondaryButton(
-                      label: 'Cancel order',
-                      textColor: AppColors.danger,
-                      borderColor: AppColors.danger,
-                      onPressed: () =>
-                          CancelOrderDialog.show(context, order: order),
+                    ValueListenableBuilder<List<ServerAction>>(
+                      valueListenable: ServerActionQueue.instance.actions,
+                      builder: (context, _, _) {
+                        final waiting = ServerActionQueue.instance.forTarget(
+                          order.orderCode,
+                        );
+                        if (waiting != null && !waiting.isFailed) {
+                          return ServerActionTag(targetId: order.orderCode);
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ServerActionTag(targetId: order.orderCode),
+                            SecondaryButton(
+                              label: 'Cancel order',
+                              textColor: AppColors.danger,
+                              borderColor: AppColors.danger,
+                              onPressed: () =>
+                                  CancelOrderDialog.show(context, order: order),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ] else ...[

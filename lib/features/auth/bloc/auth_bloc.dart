@@ -43,6 +43,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoadingState(isInitialCheck: true));
     try {
+      // Open from the saved session straight away; the server confirms it in
+      // the background (blocked, signed out elsewhere, changed plan...).
+      final saved = event.fromSavedSession
+          ? await authRepository.cachedSession()
+          : null;
+      if (saved != null) {
+        _resolveAuthResult(saved, emit, isFreshLogin: false);
+        add(RefreshAuthStatusEvent());
+        return;
+      }
       final result = await authRepository.checkSession();
       if (result == null) {
         emit(UnauthenticatedState());

@@ -68,11 +68,18 @@ class _LogoutDialogState extends State<LogoutDialog> {
     _localCache = widget.localCache ?? LocalCacheService();
     _authBloc = widget.authBloc ?? context.read<AuthBloc>();
 
+    _pendingCount = _unsyncedCount();
+  }
+
+  /// Everything still waiting to reach the server: this store's order
+  /// changes plus owner changes and server requests (all wiped on logout).
+  int _unsyncedCount() {
     final currentStoreId = _localCache.getActiveStoreId();
-    final queue = _localCache.getPendingSyncQueue();
-    _pendingCount = queue
+    final orders = _localCache.getPendingSyncQueue();
+    final storeOrders = orders
         .where((a) => a['storeId'] == null || a['storeId'] == currentStoreId)
         .length;
+    return storeOrders + _localCache.getTotalPendingCount() - orders.length;
   }
 
   Future<void> _handleLogoutAndSync() async {
@@ -94,11 +101,7 @@ class _LogoutDialogState extends State<LogoutDialog> {
       // — the backend isn't reliably idempotent for that, so it lands twice.
       await SyncEngine.instance.retryNow();
 
-      final currentStoreId = _localCache.getActiveStoreId();
-      final remaining = _localCache
-          .getPendingSyncQueue()
-          .where((a) => a['storeId'] == null || a['storeId'] == currentStoreId)
-          .length;
+      final remaining = _unsyncedCount();
 
       if (remaining > 0) {
         if (!mounted) return;

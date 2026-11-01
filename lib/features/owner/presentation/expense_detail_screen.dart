@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/sync/connectivity_service.dart';
 import '../../../core/theme/text_styles.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../shared/widgets/app_button.dart';
@@ -18,6 +17,8 @@ import '../bloc/owner_state.dart';
 import '../data/models/expense_model.dart';
 import 'edit_expense_screen.dart';
 import 'mark_paid_dialog.dart';
+import '../../../core/sync/server_action_queue.dart';
+import '../../../shared/widgets/server_action_tag.dart';
 
 class ExpenseDetailScreen extends StatefulWidget {
   final Expense expense;
@@ -35,6 +36,17 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
   void initState() {
     super.initState();
     _expense = widget.expense;
+    ServerActionQueue.instance.actions.addListener(_onQueueChanged);
+  }
+
+  @override
+  void dispose() {
+    ServerActionQueue.instance.actions.removeListener(_onQueueChanged);
+    super.dispose();
+  }
+
+  void _onQueueChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _handleMarkPaid() => showMarkPaidDialog(context, _expense);
@@ -87,9 +99,11 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final outletScope = context.watch<OutletScopeCubit?>()?.state;
-    final isOffline = ConnectivityService.instance.isOffline;
     final isUnsynced = _expense.isUnsynced;
-    final cannotChange = isOffline || isUnsynced;
+    // Waiting on the server for an earlier request about this bill.
+    final waiting =
+        ServerActionQueue.instance.forTarget(_expense.id)?.isFailed == false;
+    final cannotChange = isUnsynced || waiting;
 
     final String attributionText;
     if (_expense.outletId == null || _expense.outletId!.isEmpty) {
@@ -164,8 +178,10 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
                         ),
                         if (_expense.monthly) ...[
                           const SizedBox(width: 8),
-                          const StatusPill(
-                            label: 'Monthly',
+                          StatusPill(
+                            label: _expense.fixed
+                                ? 'Monthly'
+                                : 'Monthly · varies',
                             variant: PillVariant.inProgress,
                           ),
                         ],
@@ -245,13 +261,14 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
                   ),
                 ],
               ),
+              ServerActionTag(targetId: _expense.id),
               if (cannotChange) ...[
                 const SizedBox(height: 10),
                 Center(
                   child: Text(
                     isUnsynced
                         ? 'Still syncing — available once saved'
-                        : 'Needs a connection',
+                        : 'Waiting for the server…',
                     style: const TextStyle(
                       fontFamily: AppTextStyles.fontBody,
                       fontSize: 13,

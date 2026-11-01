@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:in_app_update_flutter/in_app_update_flutter.dart';
 import 'package:firebase_analytics/observer.dart';
+import 'package:myshop/core/network/server_warmup.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
 import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/analytics/app_analytics.dart';
 import 'package:myshop/core/constants/app_environment.dart';
@@ -529,13 +531,15 @@ class _MyShopAppState extends State<MyShopApp> with WidgetsBindingObserver {
     UpdateAdvisory.responses.addListener(_applyUpdateAdvisory);
 
     ConnectivityService.instance.start();
+    ServerWarmup.ping();
+    ServerActionQueue.instance.reload();
     _appResumeSync = AppResumeSync();
 
     _authBloc = AuthBloc(
       authRepository: widget.authRepository,
       localCache: widget.localCache,
       onOutletsRefreshed: () => _outletScopeCubit.hydrate(),
-    )..add(CheckAuthStatusEvent());
+    )..add(CheckAuthStatusEvent(fromSavedSession: true));
     OutletBillingGuard.refresh = () async {
       await widget.authRepository.refreshOutletContext();
       if (mounted) _outletScopeCubit.hydrate();

@@ -67,8 +67,7 @@ class ProfileScreen extends StatelessWidget {
     }
 
     // Step 2: Unsynced local changes guard
-    final pendingQueue = cache.getPendingSyncQueue();
-    if (pendingQueue.isNotEmpty) {
+    if (cache.getTotalPendingCount() > 0) {
       final syncSuccess = await _showPendingSyncDialog(context, sync, cache);
       if (syncSuccess != true) {
         return;

@@ -1,3 +1,10 @@
+/// The server's rule for any stored phone: 8–15 digits once non-digits are
+/// stripped. Checked on the phone first so a bad number is never queued.
+bool isServerValidPhone(String value) {
+  final n = value.replaceAll(RegExp(r'\D'), '').length;
+  return n >= 8 && n <= 15;
+}
+
 /// Normalises a pasted/typed Indian mobile number to its 10 local digits:
 /// strips non-digits, then drops a leading `91` country code (12 digits) or
 /// a trunk `0` (11 digits). Anything else is returned as bare digits —

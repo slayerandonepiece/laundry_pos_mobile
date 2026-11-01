@@ -9,6 +9,7 @@ import 'package:myshop/features/shell/data/outlet_billing_guard.dart';
 import 'package:myshop/core/network/api_exceptions.dart';
 import 'package:myshop/core/network/dio_interceptors.dart';
 import 'package:myshop/core/storage/local_cache.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/sync/sync_manager.dart';
 import 'package:myshop/core/utils/idempotency.dart';
@@ -580,9 +581,10 @@ class OrdersRepository {
     return true;
   }
 
-  /// Owner-only. Cancels an order that has not been delivered; the server
-  /// decides (Delivered is final) and needs the connection, so this is never
-  /// queued. The order leaves the phone once the server confirms.
+  /// Owner-only. Asks the server to cancel an order that has not been
+  /// delivered. The server decides (Delivered is final), so the request goes
+  /// in the server-action queue: the order shows "Cancelling…" and only leaves
+  /// the phone once the server confirms.
   Future<void> cancelOrder(String orderCode, String reason) async {
     final cachedJson = _cachedOrderWithPending(orderCode);
     if (cachedJson != null) {
@@ -600,10 +602,31 @@ class OrdersRepository {
     if (trimmed.length < 3 || trimmed.length > 500) {
       throw const OrderRuleException('Reason must be 3 to 500 characters.');
     }
-    await _apiClient.post(
-      ApiEndpoints.orderCancel(orderCode),
-      body: {'reason': trimmed},
-    );
+    try {
+      await ServerActionQueue.instance.enqueue(
+        type: 'cancel_order',
+        targetId: orderCode,
+        label: 'Cancelling…',
+        summary: 'Cancel order $orderCode',
+        payload: {'code': orderCode, 'reason': trimmed},
+      );
+    } on StateError catch (e) {
+      throw OrderRuleException(e.message);
+    }
+  }
+
+  /// Sends the cancel to the server. Called by the server-action queue, never
+  /// by a screen, so a slow connection does not hold anyone up.
+  Future<void> cancelOrderNow(String orderCode, String reason) async {
+    try {
+      await _apiClient.post(
+        ApiEndpoints.orderCancel(orderCode),
+        body: {'reason': reason},
+      );
+    } on ApiException catch (e) {
+      // 404: an earlier attempt that timed out already went through.
+      if (e.statusCode != 404) rethrow;
+    }
     final ctx = _captureContext();
     final list = _readOrdersIn(ctx);
     if (list != null) {

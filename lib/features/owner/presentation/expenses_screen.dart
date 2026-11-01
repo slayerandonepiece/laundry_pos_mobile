@@ -26,6 +26,8 @@ import 'package:myshop/shared/widgets/sync_status_bar.dart';
 import 'expense_detail_screen.dart';
 import 'mark_paid_dialog.dart';
 
+import 'package:myshop/shared/widgets/server_action_tag.dart';
+
 export 'edit_expense_screen.dart';
 export 'expense_detail_screen.dart';
 
@@ -863,6 +865,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                                               color: AppColors.mutedText,
                                             ),
                                           ),
+                                          ServerActionTag(targetId: expense.id),
                                           if (expense.isPaid &&
                                               expense.paid != null &&
                                               expense.paid!.isNotEmpty) ...[

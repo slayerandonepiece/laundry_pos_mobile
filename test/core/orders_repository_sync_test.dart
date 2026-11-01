@@ -158,6 +158,23 @@ void main() {
     });
   });
 
+  test(
+    'a cancel that already went through (404 on retry) counts as done',
+    () async {
+      api.onPost = (_, _, _) async =>
+          throw ApiException('gone', statusCode: 404);
+      await repo.cancelOrderNow('EL-1', 'late');
+    },
+  );
+
+  test('a cancel the server refuses (409) still fails', () async {
+    api.onPost = (_, _, _) async => throw ApiException('no', statusCode: 409);
+    await expectLater(
+      repo.cancelOrderNow('EL-1', 'late'),
+      throwsA(isA<ApiException>()),
+    );
+  });
+
   test('direct queue replay does not leave a Fetching banner', () async {
     await env.cache.setPendingSyncQueue([_action('a')]);
     api.onPost = (url, body, headers) async => {

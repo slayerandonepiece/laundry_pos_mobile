@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/network/network_activity.dart';
 import '../../../core/theme/text_styles.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_text_field.dart';
@@ -244,6 +245,19 @@ class _LoginScreenState extends State<LoginScreen>
                             onPressed: (isNotEmpty && !isLoading)
                                 ? _submit
                                 : null,
+                          ),
+                          ValueListenableBuilder<bool>(
+                            valueListenable: NetworkActivity.instance.slow,
+                            builder: (context, slow, _) => slow && isLoading
+                                ? const Padding(
+                                    padding: EdgeInsets.only(top: 12),
+                                    child: Text(
+                                      'Slow connection — this can take up to a minute. Keep the app open.',
+                                      textAlign: TextAlign.center,
+                                      style: AppTextStyles.hint,
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
                           ),
                         ],
                       ),

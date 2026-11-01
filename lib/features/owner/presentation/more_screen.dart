@@ -5,6 +5,8 @@ import 'package:myshop/features/profile/presentation/sync_data_screen.dart';
 import 'package:myshop/shared/widgets/app_version_text.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
+import 'package:myshop/features/owner/presentation/pending_requests_screen.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/features/auth/bloc/auth_bloc.dart';
 import 'package:myshop/features/auth/bloc/auth_state.dart';
@@ -293,6 +295,45 @@ class MoreScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) => const StoreProfileScreen(),
+                          ),
+                        ),
+                      ),
+                      const Divider(color: AppColors.border, height: 1),
+                      ValueListenableBuilder<List<ServerAction>>(
+                        valueListenable: ServerActionQueue.instance.actions,
+                        builder: (context, actions, _) => _buildMenuItem(
+                          context,
+                          icon: Icons.hourglass_top_outlined,
+                          title: 'Pending requests',
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (actions.isNotEmpty)
+                                Text(
+                                  '${actions.length}',
+                                  key: const Key('pending_requests_count'),
+                                  style: AppTextStyles.hint.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: actions.any((a) => a.isFailed)
+                                        ? AppColors.danger
+                                        : AppColors.mutedText,
+                                  ),
+                                ),
+                              const Icon(
+                                Icons.chevron_right,
+                                color: AppColors.faintText,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              settings: const RouteSettings(
+                                name: 'pending_requests',
+                              ),
+                              builder: (_) => const PendingRequestsScreen(),
+                            ),
                           ),
                         ),
                       ),

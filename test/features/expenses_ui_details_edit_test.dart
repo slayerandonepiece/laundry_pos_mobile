@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myshop/core/sync/server_action_queue.dart';
 import 'package:myshop/core/storage/local_cache.dart';
 import 'package:myshop/core/sync/connectivity_service.dart';
 import 'package:myshop/core/utils/currency_formatter.dart';
@@ -213,7 +214,7 @@ void main() {
     });
 
     testWidgets(
-      'offline disables Edit and Delete buttons and shows "Needs a connection" text',
+      'offline still allows Edit and Delete: they queue for the server',
       (tester) async {
         mockConnectivity.mockOffline = true;
         final cache = _FakeLocalCache(allowedOutlets: sampleOutlets);
@@ -240,7 +241,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Both buttons exist but are disabled
+        // Both buttons stay usable offline: the request is queued
         final editButton = tester.widget<SecondaryButton>(
           find.widgetWithText(SecondaryButton, 'Edit'),
         );
@@ -248,9 +249,62 @@ void main() {
           find.widgetWithText(SecondaryButton, 'Delete'),
         );
 
-        expect(editButton.onPressed, isNull);
-        expect(deleteButton.onPressed, isNull);
-        expect(find.text('Needs a connection'), findsOneWidget);
+        expect(editButton.onPressed, isNotNull);
+        expect(deleteButton.onPressed, isNotNull);
+        expect(find.text('Needs a connection'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a request waiting on the server disables Edit and Delete and shows its tag',
+      (tester) async {
+        final cache = _FakeLocalCache(allowedOutlets: sampleOutlets);
+        final outletCubit = OutletScopeCubit(localCache: cache)
+          ..adoptFromLogin(isOwner: true);
+        final ownerBloc = _TrackingOwnerBloc();
+        addTearDown(outletCubit.close);
+        addTearDown(ownerBloc.close);
+        addTearDown(() => ServerActionQueue.instance.actions.value = const []);
+
+        final expense = Expense(
+          id: 'exp-det-wait',
+          title: 'Floor Cleaner',
+          category: 'Supplies',
+          amount: 3000,
+          due: '2026-10-05',
+        );
+        ServerActionQueue.instance.actions.value = [
+          ServerAction(
+            id: 'sa_1',
+            type: 'delete_expense',
+            targetId: 'exp-det-wait',
+            label: 'Deleting…',
+            summary: 'Delete "Floor Cleaner"',
+            payload: const {},
+            status: ServerAction.queued,
+            createdAt: DateTime(2026, 10, 5),
+          ),
+        ];
+
+        await tester.pumpWidget(
+          buildWrapper(
+            child: ExpenseDetailScreen(expense: expense),
+            ownerBloc: ownerBloc,
+            outletScopeCubit: outletCubit,
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          tester
+              .widget<SecondaryButton>(
+                find.widgetWithText(SecondaryButton, 'Edit'),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(find.text('Deleting…'), findsOneWidget);
+        expect(find.text('Waiting for the server…'), findsOneWidget);
       },
     );
 
@@ -676,6 +730,9 @@ void main() {
     testWidgets(
       'ExpensesScreen list displays attribution subtext for both org-wide and outlet-specific bills',
       (tester) async {
+        final n = DateTime.now();
+        final thisMonthDue =
+            '${n.year}-${n.month.toString().padLeft(2, '0')}-01';
         final cache = _FakeLocalCache(allowedOutlets: sampleOutlets);
         final outletCubit = OutletScopeCubit(localCache: cache)
           ..adoptFromLogin(isOwner: true);
@@ -687,7 +744,7 @@ void main() {
                 title: 'Hanger Supplies',
                 category: 'Supplies',
                 amount: 350000,
-                due: '2026-10-01',
+                due: thisMonthDue,
                 outletId: 'o1',
               ),
               Expense(
@@ -695,7 +752,7 @@ void main() {
                 title: 'Business License',
                 category: 'Operations',
                 amount: 1000000,
-                due: '2026-10-01',
+                due: thisMonthDue,
                 outletId: null, // Org wide
               ),
             ],

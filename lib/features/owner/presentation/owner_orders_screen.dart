@@ -21,6 +21,7 @@ import 'package:myshop/shared/widgets/app_card.dart';
 import 'package:myshop/shared/widgets/app_dropdown.dart';
 import 'package:myshop/shared/widgets/empty_state.dart';
 import 'package:myshop/shared/widgets/filter_chip.dart';
+import 'package:myshop/shared/widgets/server_action_tag.dart';
 import 'package:myshop/shared/widgets/filter_dropdown_row.dart';
 import 'package:myshop/shared/widgets/outlet_title_switcher.dart';
 import 'package:myshop/shared/widgets/period_filter.dart';
@@ -1010,6 +1011,7 @@ class _OwnerOrderCard extends StatelessWidget {
                   '${outletLabel != null ? ' · $outletLabel' : ''}',
                   style: AppTextStyles.hint,
                 ),
+                ServerActionTag(targetId: order.orderCode),
               ],
             ),
           ),

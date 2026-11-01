@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:myshop/core/constants/app_colors.dart';
 import 'package:myshop/core/theme/text_styles.dart';
 import 'package:myshop/core/utils/idempotency.dart';
+import 'package:myshop/core/utils/phone_normalizer.dart';
 import 'package:myshop/features/owner/bloc/owner_bloc.dart';
 import 'package:myshop/features/owner/bloc/owner_event.dart';
 import 'package:myshop/features/owner/bloc/owner_state.dart';
@@ -511,14 +512,17 @@ class _AddStaffScreenState extends State<AddStaffScreen> {
     final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (name.isEmpty || phone.isEmpty || password.length < 8) {
+    if (name.isEmpty ||
+        !isServerValidPhone(phone) ||
+        password.length < 8 ||
+        password.length > 128) {
       setState(() {
         if (name.isEmpty) {
           _errorMessage = 'Full name is required';
-        } else if (phone.isEmpty) {
-          _errorMessage = 'Phone number is required';
+        } else if (!isServerValidPhone(phone)) {
+          _errorMessage = 'Enter a valid phone number (8–15 digits)';
         } else {
-          _errorMessage = 'Password must be at least 8 characters';
+          _errorMessage = 'Password must be 8–128 characters';
         }
       });
       return;
@@ -702,12 +706,12 @@ class _EditStaffScreenState extends State<EditStaffScreen> {
     final phone = _phoneController.text.trim();
     final password = _passwordController.text;
 
-    if (name.isEmpty || phone.isEmpty) {
+    if (name.isEmpty || !isServerValidPhone(phone)) {
       setState(() {
         if (name.isEmpty) {
           _errorMessage = 'Full name is required';
         } else {
-          _errorMessage = 'Phone number is required';
+          _errorMessage = 'Enter a valid phone number (8–15 digits)';
         }
       });
       return;

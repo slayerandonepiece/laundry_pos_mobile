@@ -38,8 +38,7 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
   /// overwrite what a newer one already showed.
   String? _latestDashboardKey;
 
-  static const _queuedMessage =
-      'Saved offline — will sync when you\'re back online';
+  static const _queuedMessage = 'Saved — syncing in the background';
 
   /// [online] normally; the "saved offline" wording when the repository only
   /// queued the write. Read straight after the write.
@@ -304,7 +303,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         orgWide: event.orgWide,
       );
       final message = _writeMessage('Expense recorded successfully');
-      final updated = await ownerRepository.listExpenses();
+      final updated =
+          ownerRepository.getCachedExpensesSync() ??
+          await ownerRepository.listExpenses();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.expenses),
@@ -342,8 +343,10 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         outletId: event.outletId,
         paidDate: event.paidDate,
       );
-      final message = _writeMessage('Expense updated');
-      final updated = await ownerRepository.listExpenses();
+      final message = _writeMessage('Update request sent');
+      final updated =
+          ownerRepository.getCachedExpensesSync() ??
+          await ownerRepository.listExpenses();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.expenses),
@@ -373,8 +376,10 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     );
     try {
       await ownerRepository.deleteExpense(event.expenseId);
-      final message = _writeMessage('Expense deleted');
-      final updated = await ownerRepository.listExpenses();
+      final message = _writeMessage('Delete request sent');
+      final updated =
+          ownerRepository.getCachedExpensesSync() ??
+          await ownerRepository.listExpenses();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.expenses),
@@ -409,7 +414,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
         amount: event.amount,
       );
       final message = _writeMessage('Expense marked paid');
-      final updated = await ownerRepository.listExpenses();
+      final updated =
+          ownerRepository.getCachedExpensesSync() ??
+          await ownerRepository.listExpenses();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.expenses),
@@ -524,7 +531,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     try {
       await ownerRepository.toggleStaffActive(event.employeeId);
       final queued = OwnerRepository.lastWriteQueued;
-      final updated = await ownerRepository.listStaff();
+      final updated =
+          ownerRepository.getCachedStaffSync() ??
+          await ownerRepository.listStaff();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.staff),
@@ -643,7 +652,9 @@ class OwnerBloc extends Bloc<OwnerEvent, OwnerState> {
     try {
       await ownerRepository.togglePaymentMethod(event.id, event.active);
       final queued = OwnerRepository.lastWriteQueued;
-      final updated = await ownerRepository.listPaymentMethods();
+      final updated =
+          ownerRepository.getCachedPaymentMethodsSync() ??
+          await ownerRepository.listPaymentMethods();
       emit(
         state.copyWith(
           loading: _removeLoading(OwnerSection.paymentMethods),

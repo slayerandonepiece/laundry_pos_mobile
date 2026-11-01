@@ -8,6 +8,7 @@ import '../storage/local_cache.dart';
 import '../storage/secure_storage.dart';
 import 'api_exceptions.dart';
 import 'dio_interceptors.dart';
+import 'network_activity.dart';
 
 /// Lightweight representation of a raw API response (used for binary downloads like PDFs).
 class RawApiResponse {
@@ -33,6 +34,10 @@ class ApiClient {
   void Function(String? reason, String? paidThroughDate)? onForbidden;
   void Function()? onInvalidOutlet;
 
+  // Generous on purpose: weak mobile links are slow, and the database can
+  // take ~25s to wake. Nothing user-facing waits on these (the slow-request
+  // banner shows instead); they only stop a request hanging forever.
+  static const Duration _connectTimeout = Duration(seconds: 30);
   static const Duration _requestTimeout = Duration(seconds: 30);
 
   ApiClient({
@@ -48,7 +53,7 @@ class ApiClient {
            dio ??
            Dio(
              BaseOptions(
-               connectTimeout: _requestTimeout,
+               connectTimeout: _connectTimeout,
                receiveTimeout: _requestTimeout,
                sendTimeout: _requestTimeout,
                responseType: ResponseType.json,
@@ -62,6 +67,10 @@ class ApiClient {
   Dio get dio => _dio;
 
   void _setupInterceptors() {
+    if (!_dio.interceptors.any((i) => i is SlowRequestInterceptor)) {
+      _dio.interceptors.add(SlowRequestInterceptor());
+    }
+
     final hasAuth = _dio.interceptors.any((i) => i is AuthInterceptor);
     if (!hasAuth) {
       _dio.interceptors.add(

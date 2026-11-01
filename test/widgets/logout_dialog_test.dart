@@ -284,6 +284,9 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(fakeAuthBloc.logoutEventReceived, isTrue);
+        // The failed sync scheduled a retry; a widget test may not end with a
+        // pending timer.
+        SyncEngine.instance.cancelRetry();
       },
     );
 
